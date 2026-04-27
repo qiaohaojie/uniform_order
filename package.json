@@ -1,0 +1,20 @@
+{
+  "name": "uniform-order",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "start:web": "pnpm --filter web start",
+    "check-types": "pnpm -r check-types",
+    "check-types:web": "pnpm --filter web check-types"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "heroui-pro",
+      "@heroui-pro/react",
+      "@tailwindcss/oxide",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}
