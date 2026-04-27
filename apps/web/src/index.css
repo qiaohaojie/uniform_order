@@ -1,3 +1,34 @@
 @import "tailwindcss";
 @import "@heroui/styles/css";
 @import "@heroui-pro/react/css";
+
+@theme {
+  --color-navy: #0E2A47;
+  --color-navy-deep: #081A2D;
+  --color-navy-soft: #1B3A5F;
+  --color-parchment: #FAF6EE;
+  --color-paper: #FDFBF6;
+  --color-ink: #15212F;
+  --color-ink-dim: #56657A;
+  --color-rule: #E5DFD2;
+  --color-gold: #B08A3E;
+  --color-sage: #5C7A55;
+  --color-alert: #B23A2A;
+  --color-success: #2F6B3D;
+
+  --font-serif: var(--font-newsreader);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-parchment);
+}
+
+* { box-sizing: border-box; }
+
+.tnum { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }

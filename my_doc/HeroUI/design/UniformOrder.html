@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UniformOrder — End-to-end design</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #1B2738; }
+  body { font-family: 'Inter', sans-serif; }
+  * { box-sizing: border-box; }
+  button.btn:hover:not(:disabled) { filter: brightness(0.96); }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="primitives.jsx"></script>
+<script type="text/babel" src="parent.jsx"></script>
+<script type="text/babel" src="operator.jsx"></script>
+<script type="text/babel" src="superadmin.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "tenant": "nsbh",
+    "multiSchool": true,
+    "showCanvasGuides": false
+  }/*EDITMODE-END*/;
+  function App() {
+    const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+    const tenant = t.tenant;
+    return (
+      <div data-screen-label="UniformOrder Canvas">
+        <DesignCanvas>
+          {/* ── Story 1 · Parent · Mobile flow ──────────────────────────── */}
+          <DCSection id="parent-flow" title="Parent · ordering flow"
+            subtitle={`Mobile-first. ${t.multiSchool ? "Parent has kids in two schools — picker shows first." : "Single-school parent — picker is skipped, lands on catalog."}`}>
+            {t.multiSchool && (
+              <DCArtboard id="p1" label="01 · School picker (multi-school parent)" width={PHONE_W} height={PHONE_H}>
+                <ScreenSchoolPicker />
+              </DCArtboard>
+            )}
+            <DCArtboard id="p2" label={`02 · Catalog · ${TENANTS[tenant].short} branded`} width={PHONE_W} height={PHONE_H}>
+              <ScreenCatalog tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="p3" label="03 · Item detail · size picker + size guide" width={PHONE_W} height={PHONE_H}>
+              <ScreenItemDetail tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="p4" label="04 · Cart · Riley's full order ($363)" width={PHONE_W} height={PHONE_H}>
+              <ScreenCart tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="p5" label="05 · Checkout · Stripe + pickup vs ship" width={PHONE_W} height={PHONE_H}>
+              <ScreenCheckout tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="p6" label="06 · Order placed" width={PHONE_W} height={PHONE_H}>
+              <ScreenOrderPlaced tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="p7" label="07 · Orders · history & re-order" width={PHONE_W} height={PHONE_H}>
+              <ScreenOrders />
+            </DCArtboard>
+          </DCSection>
+          {/* ── Story 2 · School operator · Tablet/desktop ───────────────── */}
+          <DCSection id="operator" title="School operator · Uniform shop admin"
+            subtitle="Tablet-friendly (1280-wide) with a counter-PC sidebar. The shop manager runs catalog, orders, and bulk uploads from here.">
+            <DCArtboard id="o1" label="01 · Dashboard · sales & alerts" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenAdminDashboard tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="o2" label="02 · Order queue · new → packed → ready → collected" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenAdminOrders tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="o3" label="03 · Catalog · single-item CRUD list" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenAdminCatalog tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="o4" label="04 · Bulk upload · CSV preview with inline errors" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenAdminUpload tenantId={tenant} />
+            </DCArtboard>
+            <DCArtboard id="o5" label="05 · Pick slip · printable for the packer" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenAdminPickSlip tenantId={tenant} />
+            </DCArtboard>
+          </DCSection>
+          {/* ── Story 3 · Platform super-admin ───────────────────────────── */}
+          <DCSection id="platform" title="Platform · UniformOrder super-admin"
+            subtitle="Multi-tenant. Provision a new school, see every tenant on the platform, billing.">
+            <DCArtboard id="s1" label="01 · Tenant list · all schools on platform" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenPlatformTenants />
+            </DCArtboard>
+            <DCArtboard id="s2" label="02 · Provision new tenant · branding step" width={ADMIN_W} height={ADMIN_H}>
+              <ScreenProvisionTenant />
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+        <TweaksPanel title="Tweaks">
+          <TweakSection label="Tenant" />
+          <TweakRadio label="Active school"
+            value={t.tenant}
+            options={[{value:'nsbh',label:'NSBH (maroon)'},{value:'rgsh',label:'RGHS (green)'}]}
+            onChange={(v) => setTweak('tenant', v)} />
+          <TweakSection label="Parent persona" />
+          <TweakToggle label="Multi-school parent" value={t.multiSchool} onChange={(v) => setTweak('multiSchool', v)} />
+          <div style={{ fontSize: 11, color: '#7B8492', padding: '0 12px 10px', lineHeight: 1.5 }}>
+            When off, George only has Riley → school picker is skipped and the catalog is the first screen.
+          </div>
+        </TweaksPanel>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
