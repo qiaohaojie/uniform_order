@@ -496,24 +496,58 @@ There are **four** HeroUI MCP servers; each pairs with a skill (skill names diff
 
 There is also one cross-cutting skill: `heroui-pro-design-taste` (design principles shared across all four). Skill installation happens automatically in **A9**.
 
-**Default action: do nothing in the project.** All four servers should already be configured at user scope in `~/.claude.json` from a prior `heroui-pro login` (Step P1).
+**Default action: do nothing in the project.** All four servers must be configured at **user scope**, which means the **top-level `mcpServers` block** in `~/.claude.json` — *not* nested under `projects.<path>.mcpServers`. Project-nested entries only register when Claude Code's CWD matches that exact path; from any other repo they're invisible to `/mcp`. (`$HOME` may not be `/Users/<user>` — on this machine it's `/Volumes/T7/georgeqiao`. Use `~` or `$HOME`, never hard-code `/Users/...`.)
 
-**Automated check** the agent runs to confirm user-scope MCP servers are present:
+**Automated check** the agent runs to confirm placement is correct (a plain `grep` for the keys is not enough — it can't distinguish top-level from nested):
 
 ```bash
-grep -o '"heroui[a-z-]*"' ~/.claude.json 2>/dev/null | sort -u
+python3 - <<'PY'
+import json, os
+data = json.load(open(os.path.expanduser("~/.claude.json")))
+top = sorted(k for k in data.get("mcpServers", {}) if k.startswith("heroui"))
+nested = {p: sorted(k for k in (cfg.get("mcpServers") or {}) if k.startswith("heroui"))
+          for p, cfg in data.get("projects", {}).items()}
+nested = {p: ks for p, ks in nested.items() if ks}
+print("top-level:", top)
+print("project-nested:", nested or "(none)")
+PY
 ```
 
-Expected output (web-only run needs at least the first two; full setup has all four):
+Expected for a healthy install (web-only needs the first two at top-level; full setup has all four):
 ```
-"heroui-native"
-"heroui-native-pro"
-"heroui-pro"
-"heroui-react"
+top-level: ['heroui-native', 'heroui-native-pro', 'heroui-pro', 'heroui-react']
+project-nested: (none)
 ```
 
-- All four (or both web ones for web-only) present → MCPs are wired. The user must restart Claude Code to see them in `/mcp`. Note this in the final report.
-- Missing → user did not run `pnpm dlx heroui-pro login` (or did but it failed). **Stop** and ask them to re-run login.
+- All four (or both web ones) at top-level and nothing nested → MCPs are wired. The user must restart Claude Code to see them in `/mcp`. Note this in the final report.
+- Entries show up under `project-nested` (a previous setup placed them inside one project's block) → **move them to top-level.** Mechanical fix:
+  ```bash
+  cp ~/.claude.json ~/.claude.json.bak.$(date +%Y%m%d_%H%M%S)
+  python3 - <<'PY'
+  import json, os
+  from pathlib import Path
+  p = Path(os.path.expanduser("~/.claude.json"))
+  data = json.loads(p.read_text())
+  top = data.setdefault("mcpServers", {})
+  for proj in data.get("projects", {}).values():
+      mcp = proj.get("mcpServers") or {}
+      for k in list(mcp):
+          if k.startswith("heroui"):
+              if k not in top:
+                  top[k] = mcp.pop(k)
+              else:
+                  del mcp[k]   # already at top-level — drop the duplicate
+  p.write_text(json.dumps(data, indent=2) + "\n")
+  PY
+  ```
+  Re-run the check; expect `project-nested: (none)` after.
+- Missing entirely → ask the user. If they want the agent to add them, insert these into the top-level `mcpServers` object (Pro entries' token is the Personal Token from the Secrets section at the top of this file):
+  ```json
+  "heroui-react":      { "type": "stdio", "command": "npx", "args": ["-y", "@heroui/react-mcp@latest"] },
+  "heroui-native":     { "type": "stdio", "command": "npx", "args": ["-y", "@heroui/native-mcp@latest"] },
+  "heroui-pro":        { "type": "http", "url": "https://mcp.heroui.pro/mcp",        "headers": { "x-heroui-personal-token": "<TOKEN>" } },
+  "heroui-native-pro": { "type": "http", "url": "https://native-mcp.heroui.pro/mcp", "headers": { "x-heroui-personal-token": "<TOKEN>" } }
+  ```
 
 **Only if the user wants project-scope MCP** (e.g., to pin OSS versions or override user scope for one repo), add **only the OSS servers** to `.mcp.json` at the repo root:
 
@@ -721,7 +755,7 @@ The route table should drop back to `/` and `/_not-found` only. If anything else
 - [ ] A3: web HeroUI packages installed; Pro postinstall printed `Installed HeroUI React Pro ✓`
 - [ ] A4: `apps/web/src/index.css` first three lines are `tailwindcss`, `@heroui/styles/css`, `@heroui-pro/react/css` (with `/css` subpath under Turbopack)
 - [ ] A5: native packages + peers + CSS imports + provider (only if native in scope)
-- [ ] A6: user-scope MCPs verified via grep on `~/.claude.json`
+- [ ] A6: HeroUI MCPs confirmed at top-level `mcpServers` in `~/.claude.json` (Python check returns `project-nested: (none)`)
 - [ ] A7: `check-types` and `build` pass; built CSS shows non-zero counts for `--snow`, `--eclipse`, `--default-`, `oklch(`
 - [ ] A8: scratch route created (NOT `_scratch`); pre-existing dev server detected and reused-or-killed; browser canary returns non-empty values for `--snow` and `--eclipse` (oklch or lab format both fine); always-visible Pro component (`EmptyState`/`Kpi`) rendered with its title text picked up by `read_page`
 - [ ] A9: skills installed via curl with embedded token
@@ -790,7 +824,7 @@ Native typically doesn't have shadcn (shadcn is web-only), so the native install
 
 ## B4 — Verify HeroUI MCP servers are reachable
 
-Same as **A6** — including the automated `grep ~/.claude.json` check. Do **not** disable the shadcn MCP — both shadcn and HeroUI MCPs must remain available in Scenario B.
+Same as **A6** — including the automated top-level-vs-nested Python check on `~/.claude.json`. Do **not** disable the shadcn MCP — both shadcn and HeroUI MCPs must remain available in Scenario B.
 
 ## B5 — Document the policy
 
