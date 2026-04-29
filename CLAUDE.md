@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `uniform-order` is a pnpm monorepo whose only current package is `apps/web`: a Next.js 16 / React 19 demo of a multi-tenant school-uniform ordering app. There is no backend — all data lives in `apps/web/src/lib/data.ts` and the cart persists to `localStorage`. Two demo tenants (`nsbh`, `rgsh`) and one demo parent (`PARENT`) are hard-coded.
 
+## Current paper-based order PDF form
+
+`my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` is the current paper-based order form. It should be digitized into an online order, which is this project is building.
+
+## Design System
+
+`my_doc/UI_prototypes/project/Design System.html` is the design system.
+
+## UI Prototypes
+
+`my_doc/UI_prototypes/project/` contains the original HTML/JSX prototypes exported from Claude Design (parent flow, operator flow, superadmin flow, design system). The folder's `README.md` is explicit: read the prototype source — don't render or screenshot it — and recreate the visuals; do not blindly copy the prototype's internal structure into the React app.
+
 ## Commands
 
 Run from the repo root (workspace = `apps/*`):
