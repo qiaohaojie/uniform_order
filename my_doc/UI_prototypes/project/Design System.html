@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UniformOrder — Design System</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #FAF6EE; }
+  body { font-family: 'Inter', sans-serif; color: #15212F; }
+  * { box-sizing: border-box; }
+  button.btn:hover:not(:disabled) { filter: brightness(0.96); }
+  .ds-grid { display: grid; gap: 14px; }
+  .ds-card { background: #fff; border: 1px solid #E5DFD2; border-radius: 10px; padding: 22px; }
+  .ds-label { font-size: 10.5px; font-weight: 700; color: #56657A; letter-spacing: 0.6px; text-transform: uppercase; }
+  .ds-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #56657A; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-system/tokens.jsx"></script>
+<script type="text/babel" src="design-system/components.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const Swatch = ({ name, value, ink = '#fff' }) => (
+  <div style={{ background: '#fff', border: `1px solid ${RULE}`, borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{ background: value, height: 80, display: 'flex', alignItems: 'flex-end', padding: 10, color: ink, fontFamily: SERIF, fontSize: 13, fontWeight: 600 }}>{name}</div>
+    <div style={{ padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: INK_DIM }}>{value}</div>
+  </div>
+);
+
+const H = ({ kicker, title, sub }) => (
+  <div style={{ marginBottom: 18 }}>
+    {kicker && <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: 1.4, textTransform: 'uppercase' }}>{kicker}</div>}
+    <h2 style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 500, margin: '4px 0 4px', letterSpacing: -0.3 }}>{title}</h2>
+    {sub && <div style={{ fontSize: 13, color: INK_DIM, lineHeight: 1.5 }}>{sub}</div>}
+    <div style={{ height: 1, background: RULE, marginTop: 12 }} />
+  </div>
+);
+
+function App() {
+  return (
+    <div style={{ maxWidth: 1180, margin: '0 auto', padding: '48px 32px 80px' }}>
+      {/* Masthead */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 36, paddingBottom: 24, borderBottom: `1px solid ${RULE}` }}>
+        <div>
+          <PlatformMark size={32} color={NAVY} />
+          <h1 style={{ fontFamily: SERIF, fontSize: 44, fontWeight: 500, margin: '20px 0 6px', letterSpacing: -0.6 }}>Design System</h1>
+          <div style={{ fontSize: 13.5, color: INK_DIM, maxWidth: 560, lineHeight: 1.55 }}>
+            The visual vocabulary behind UniformOrder — institutional navy &amp; serif, parchment surfaces, double-ruled hierarchy. Multi-tenant: each school re-skins via logo + accent only.
+          </div>
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: INK_DIM, textAlign: 'right' }}>
+          v1.0 · 30 Apr 2026<br/>design-system/tokens.jsx<br/>design-system/components.jsx
+        </div>
+      </div>
+
+      {/* Color */}
+      <H kicker="01" title="Color" sub="Navy is the platform. Accent is per-tenant — only logo + accent change between schools." />
+      <div className="ds-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 14 }}>
+        <Swatch name="Navy" value={NAVY} />
+        <Swatch name="Navy deep" value={NAVY_DEEP} />
+        <Swatch name="Navy soft" value={NAVY_SOFT} />
+        <Swatch name="Ink" value={INK} />
+      </div>
+      <div className="ds-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 14 }}>
+        <Swatch name="Parchment" value={PARCHMENT} ink={INK} />
+        <Swatch name="Paper" value={PAPER} ink={INK} />
+        <Swatch name="Rule" value={RULE} ink={INK} />
+        <Swatch name="Ink dim" value={INK_DIM} />
+      </div>
+      <div className="ds-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 32 }}>
+        <Swatch name="Gold" value={GOLD} />
+        <Swatch name="Sage" value={SAGE} />
+        <Swatch name="Success" value={SUCCESS} />
+        <Swatch name="Alert" value={ALERT} />
+      </div>
+
+      <div className="ds-label" style={{ marginBottom: 10 }}>Tenant accents</div>
+      <div className="ds-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginBottom: 40 }}>
+        {Object.values(TENANTS).map(t => (
+          <div key={t.id} className="ds-card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Crest tenant={t} size={56} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600 }}>{t.name}</div>
+              <div className="ds-mono" style={{ marginTop: 2 }}>{t.id} · {t.accent}</div>
+            </div>
+            <div style={{ width: 56, height: 56, borderRadius: 28, background: t.accent }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Type */}
+      <H kicker="02" title="Typography" sub="Newsreader for headings (warm serif), Inter for UI, JetBrains Mono for codes & order IDs." />
+      <div className="ds-card" style={{ marginBottom: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, padding: '14px 0', borderBottom: `1px solid ${RULE}` }}>
+          <div style={{ width: 80 }} className="ds-label">Display</div>
+          <div style={{ flex: 1, fontFamily: SERIF, fontSize: 44, fontWeight: 500, letterSpacing: -0.6, lineHeight: 1.1 }}>Good morning, George.</div>
+          <div className="ds-mono">Newsreader · 44 / 500</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, padding: '14px 0', borderBottom: `1px solid ${RULE}` }}>
+          <div style={{ width: 80 }} className="ds-label">H1</div>
+          <div style={{ flex: 1, fontFamily: SERIF, fontSize: 28, fontWeight: 500, letterSpacing: -0.3 }}>Winter Uniform</div>
+          <div className="ds-mono">Newsreader · 28 / 500</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, padding: '14px 0', borderBottom: `1px solid ${RULE}` }}>
+          <div style={{ width: 80 }} className="ds-label">H2</div>
+          <div style={{ flex: 1, fontFamily: SERIF, fontSize: 22, fontWeight: 500 }}>Jumper — Wool Blend, Crested</div>
+          <div className="ds-mono">Newsreader · 22 / 500</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, padding: '14px 0', borderBottom: `1px solid ${RULE}` }}>
+          <div style={{ width: 80 }} className="ds-label">Body</div>
+          <div style={{ flex: 1, fontFamily: SANS, fontSize: 14 }}>Embroidered school crest. Poly/cotton blend, machine wash cold.</div>
+          <div className="ds-mono">Inter · 14 / 400</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, padding: '14px 0', borderBottom: `1px solid ${RULE}` }}>
+          <div style={{ width: 80 }} className="ds-label">Label</div>
+          <div style={{ flex: 1, fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Delivery method</div>
+          <div className="ds-mono">Inter · 11 / 700 · 1px tracked</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, padding: '14px 0' }}>
+          <div style={{ width: 80 }} className="ds-label">Mono</div>
+          <div style={{ flex: 1, fontFamily: MONO, fontSize: 14, fontWeight: 600 }}>NSBH-04298</div>
+          <div className="ds-mono">JetBrains Mono · 14 / 600</div>
+        </div>
+      </div>
+
+      {/* Buttons */}
+      <H kicker="03" title="Buttons" sub="Three variants, three sizes. Primary picks up the active tenant accent." />
+      <div className="ds-card" style={{ marginBottom: 14 }}>
+        <div className="ds-label" style={{ marginBottom: 12 }}>Variants · Navy (platform default)</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Btn variant="primary">Pay $363.00</Btn>
+          <Btn variant="secondary">Download template</Btn>
+          <Btn variant="ghost">Cancel</Btn>
+          <Btn variant="danger">Remove</Btn>
+          <Btn variant="primary" disabled>Disabled</Btn>
+        </div>
+      </div>
+      <div className="ds-card" style={{ marginBottom: 14 }}>
+        <div className="ds-label" style={{ marginBottom: 12 }}>Sizes</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Btn size="sm">Small · 34px</Btn>
+          <Btn size="md">Medium · 44px</Btn>
+          <Btn size="lg">Large · 52px</Btn>
+        </div>
+      </div>
+      <div className="ds-card" style={{ marginBottom: 40 }}>
+        <div className="ds-label" style={{ marginBottom: 12 }}>Tenant accent · primary picks up the active school</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Btn variant="primary" accent={TENANTS.nsbh.accent}>NSBH · Add to cart</Btn>
+          <Btn variant="primary" accent={TENANTS.rgsh.accent}>RGHS · Add to cart</Btn>
+          <Btn variant="primary" accent="#0F4C5C">Manly Beach · Add to cart</Btn>
+        </div>
+      </div>
+
+      {/* Chips */}
+      <H kicker="04" title="Chips &amp; status" sub="Used for order status, categories, plan tier, and inline tags." />
+      <div className="ds-card" style={{ marginBottom: 40 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Chip tone="neutral">Summer</Chip>
+          <Chip tone="navy">Active</Chip>
+          <Chip tone="success">Payment received</Chip>
+          <Chip tone="warn">Packing</Chip>
+          <Chip tone="info">Ship</Chip>
+          <Chip tone="danger">Fix needed</Chip>
+          <Chip tone="gold">Trial · 12d left</Chip>
+        </div>
+      </div>
+
+      {/* Crest + iconography */}
+      <H kicker="05" title="Crest &amp; garment vectors"
+         sub="Tenant logo placeholder (auto-shaded from accent) and flat garment silhouettes when real photography isn't available." />
+      <div className="ds-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 14 }}>
+        <div className="ds-card">
+          <div className="ds-label" style={{ marginBottom: 12 }}>Crest · 4 sizes × 2 tenants</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
+            {[28, 40, 56, 72].map(s => <Crest key={s} tenant={TENANTS.nsbh} size={s} />)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginTop: 12 }}>
+            {[28, 40, 56, 72].map(s => <Crest key={s} tenant={TENANTS.rgsh} size={s} />)}
+          </div>
+        </div>
+        <div className="ds-card">
+          <div className="ds-label" style={{ marginBottom: 12 }}>Platform mark</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <PlatformMark size={28} color={NAVY} />
+            <PlatformMark size={36} color={NAVY} />
+            <div style={{ background: NAVY_DEEP, padding: '12px 16px', borderRadius: 6, display: 'inline-flex', alignSelf: 'flex-start' }}>
+              <PlatformMark size={28} color="#fff" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="ds-card" style={{ marginBottom: 40 }}>
+        <div className="ds-label" style={{ marginBottom: 12 }}>Garment vectors · used in cart, catalog cards, and pick slips</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6 }}>
+          {['shirt-ss','jumper','trousers','cap','sock-white','backpack','blazer','tie','belt','jacket','tracks','polo','hoodie','sportsbag','calc','mathset'].map(k => (
+            <div key={k} style={{ background: PARCHMENT, borderRadius: 6, overflow: 'hidden' }}>
+              <GarmentVector kind={k} accent={NAVY_SOFT} size={100} />
+              <div style={{ padding: '4px 6px', fontFamily: MONO, fontSize: 9.5, color: INK_DIM, textAlign: 'center' }}>{k}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Surfaces */}
+      <H kicker="06" title="Surfaces &amp; rules"
+         sub="Cards on parchment. Double rules for institutional hierarchy on receipts and pick slips. Section titles use a gold kicker." />
+      <div className="ds-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 40 }}>
+        <div className="ds-card">
+          <SectionTitle kicker="Step 2 of 6" title="Branding"
+            sub="Each school has its own logo + accent color. Platform stays navy + serif underneath." />
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Btn variant="primary">Continue</Btn>
+            <Btn variant="ghost">Save draft</Btn>
+          </div>
+        </div>
+        <div className="ds-card" style={{ background: PAPER }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div className="ds-label">Order</div>
+            <Crest tenant={TENANTS.nsbh} size={36} />
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600, marginTop: 4, marginBottom: 12 }}>NSBH-04298</div>
+          <DoubleRule />
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 13 }}>
+            <span style={{ color: INK_DIM }}>Total paid</span>
+            <span style={{ fontWeight: 700, fontFeatureSettings: '"tnum"' }}>$363.00</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Spacing & radii */}
+      <H kicker="07" title="Spacing, radii &amp; data-viz" sub="Spark line for at-a-glance trends on the operator dashboard." />
+      <div className="ds-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 40 }}>
+        <div className="ds-card">
+          <div className="ds-label" style={{ marginBottom: 14 }}>Spacing scale (px)</div>
+          {[4, 8, 12, 16, 22, 28].map(n => (
+            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0' }}>
+              <div className="ds-mono" style={{ width: 32 }}>{n}</div>
+              <div style={{ height: 8, width: n * 4, background: NAVY }} />
+            </div>
+          ))}
+        </div>
+        <div className="ds-card">
+          <div className="ds-label" style={{ marginBottom: 14 }}>Radii &amp; spark</div>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+            {[4, 6, 10, 14, 999].map(r => (
+              <div key={r} style={{ width: 56, height: 56, background: PARCHMENT, border: `1px solid ${RULE}`,
+                borderRadius: r, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: MONO, fontSize: 11, color: INK_DIM }}>{r === 999 ? '∞' : r}</div>
+            ))}
+          </div>
+          <div style={{ background: PARCHMENT, padding: 14, borderRadius: 6 }}>
+            <div className="ds-label" style={{ marginBottom: 6 }}>Revenue · 30d</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+              <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600 }}>$18,420</div>
+              <Spark data={SALES.spark} w={120} h={32} color={NAVY} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 56, padding: '18px 0 0', borderTop: `1px solid ${RULE}`,
+        fontSize: 11.5, color: INK_DIM, display: 'flex', justifyContent: 'space-between' }}>
+        <span>UniformOrder · multi-tenant school uniform commerce</span>
+        <span className="ds-mono">~/design-system</span>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
