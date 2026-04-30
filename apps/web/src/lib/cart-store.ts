@@ -34,6 +34,7 @@ export function useCart(): {
   remove: (idx: number) => void;
   add: (line: CartLine) => void;
   reset: () => void;
+  clearCart: () => void;
 } {
   const [lines, setLines] = useState<CartLine[]>(SAMPLE_CART);
   const [hydrated, setHydrated] = useState(false);
@@ -70,5 +71,6 @@ export function useCart(): {
         return [...prev, line];
       }),
     reset: () => setLines(SAMPLE_CART),
+    clearCart: () => setLines([]),
   };
 }

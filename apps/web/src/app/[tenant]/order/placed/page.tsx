@@ -8,8 +8,6 @@ import { Btn } from "@/components/btn";
 import { CheckIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
 
-const ORDER_ID = "NSBH-04298";
-
 export default async function OrderPlacedPage({ params, searchParams }: PageProps<"/[tenant]/order/placed">) {
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
@@ -17,6 +15,7 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
   const sp = await searchParams;
   const total = typeof sp.total === "string" ? sp.total : "363.00";
   const delivery: "pickup" | "ship" = sp.delivery === "ship" ? "ship" : "pickup";
+  const orderId = typeof sp.orderId === "string" ? sp.orderId : `${tid.toUpperCase()}-XXXXX`;
 
   return (
     <MobileShell bg="var(--color-parchment)">
@@ -49,7 +48,7 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
               <div className="text-[11px] tracking-[0.4px] uppercase font-bold" style={{ color: "var(--color-ink-dim)" }}>
                 Order
               </div>
-              <div className="font-mono text-[15px] font-semibold mt-0.5">{ORDER_ID}</div>
+              <div className="font-mono text-[15px] font-semibold mt-0.5">{orderId}</div>
             </div>
             <Crest tenant={tenant} size={40} />
           </div>
