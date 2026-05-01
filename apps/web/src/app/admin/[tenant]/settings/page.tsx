@@ -28,7 +28,7 @@ export default async function AdminSettingsPage({ params }: PageProps<"/admin/[t
             className="bg-white rounded-xl border p-6"
             style={{ borderColor: "var(--color-rule)" }}
           >
-            <h2 className="font-serif text-[18px] font-medium mb-4" style={{ color: "var(--color-ink)" }}>
+            <h2 className="type-h2 mb-4" style={{ color: "var(--color-ink)" }}>
               Shop details
             </h2>
             <div className="flex flex-col gap-4">
@@ -92,7 +92,7 @@ export default async function AdminSettingsPage({ params }: PageProps<"/admin/[t
             className="bg-white rounded-xl border p-6"
             style={{ borderColor: "var(--color-rule)" }}
           >
-            <h2 className="font-serif text-[18px] font-medium mb-4" style={{ color: "var(--color-ink)" }}>
+            <h2 className="type-h2 mb-4" style={{ color: "var(--color-ink)" }}>
               Fulfilment
             </h2>
             <div className="flex flex-col gap-4">
@@ -140,7 +140,7 @@ export default async function AdminSettingsPage({ params }: PageProps<"/admin/[t
             className="bg-white rounded-xl border p-6"
             style={{ borderColor: "var(--color-rule)" }}
           >
-            <h2 className="font-serif text-[18px] font-medium mb-1" style={{ color: "var(--color-ink)" }}>
+            <h2 className="type-h2 mb-1" style={{ color: "var(--color-ink)" }}>
               Stripe Connect
             </h2>
             <p className="text-[12.5px] mb-4" style={{ color: "var(--color-ink-dim)" }}>
@@ -181,7 +181,7 @@ export default async function AdminSettingsPage({ params }: PageProps<"/admin/[t
             className="bg-white rounded-xl border p-6"
             style={{ borderColor: "var(--color-rule)" }}
           >
-            <h2 className="font-serif text-[18px] font-medium mb-4" style={{ color: "var(--color-ink)" }}>
+            <h2 className="type-h2 mb-4" style={{ color: "var(--color-ink)" }}>
               Email notifications
             </h2>
             {[

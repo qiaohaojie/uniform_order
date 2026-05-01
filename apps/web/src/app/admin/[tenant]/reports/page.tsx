@@ -74,7 +74,7 @@ export default async function AdminReportsPage({ params }: PageProps<"/admin/[te
             style={{ borderColor: "var(--color-rule)" }}
           >
             <div className="flex justify-between items-baseline mb-5">
-              <h3 className="font-serif text-[17px] font-medium m-0" style={{ color: "var(--color-ink)" }}>
+              <h3 className="type-h2 m-0" style={{ color: "var(--color-ink)" }}>
                 Monthly revenue
               </h3>
               <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Nov 2025 – Apr 2026</span>
@@ -112,7 +112,7 @@ export default async function AdminReportsPage({ params }: PageProps<"/admin/[te
             className="bg-white rounded-[10px] border p-[18px]"
             style={{ borderColor: "var(--color-rule)" }}
           >
-            <h3 className="font-serif text-[17px] font-medium m-0 mb-4" style={{ color: "var(--color-ink)" }}>
+            <h3 className="type-h2 m-0 mb-4" style={{ color: "var(--color-ink)" }}>
               Revenue by category
             </h3>
             {[
@@ -144,7 +144,7 @@ export default async function AdminReportsPage({ params }: PageProps<"/admin/[te
           className="mt-3.5 bg-white rounded-[10px] border p-[18px]"
           style={{ borderColor: "var(--color-rule)" }}
         >
-          <h3 className="font-serif text-[17px] font-medium m-0 mb-4" style={{ color: "var(--color-ink)" }}>
+          <h3 className="type-h2 m-0 mb-4" style={{ color: "var(--color-ink)" }}>
             GST summary (BAS-ready)
           </h3>
           <table className="w-full border-collapse text-[13px]">

@@ -3,23 +3,7 @@ import Link from "next/link";
 import type { Tenant } from "@/lib/data";
 import type { SalesData, AdminOrder } from "@/lib/admin-data";
 import { Chip } from "@/components/chip";
-
-function Spark({ data, w = 80, h = 28, color }: { data: number[]; w?: number; h?: number; color: string }) {
-  if (!data.length) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / range) * h;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
-      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+import { Spark } from "@/components/spark";
 
 function StatusBadge({ status }: { status: AdminOrder["status"] }) {
   const map: Record<AdminOrder["status"], { tone: "warn" | "info" | "success" | "neutral"; label: string }> = {
