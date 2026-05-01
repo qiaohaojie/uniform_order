@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TENANTS, type TenantId } from "@/lib/data";
-import { getOrderById } from "@/lib/admin-data";
+import { getOrderById } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { Chip } from "@/components/chip";
 import { DoubleRule } from "@/components/double-rule";
 import { Crest } from "@/components/crest";
+import { OrderDetailActions } from "./order-detail-actions";
 
 function Barcode({ orderId }: { orderId: string }) {
   const widths = [3, 1, 2, 1, 1, 3, 1, 2, 3, 1, 1, 2, 3, 2, 1, 1, 3, 1, 2, 1, 1, 3, 2, 1];
@@ -40,7 +41,9 @@ export default async function OrderDetailPage({
   const { tenant: tid, orderId } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];
-  const order = getOrderById(orderId);
+
+  // Fetch from live DB
+  const order = await getOrderById(orderId);
   if (!order) notFound();
 
   const statusMap: Record<string, { tone: "info" | "warn" | "success" | "neutral"; label: string }> = {
@@ -50,6 +53,15 @@ export default async function OrderDetailPage({
     collected: { tone: "neutral", label: "Collected" },
   };
   const statusInfo = statusMap[order.status];
+  const total = parseFloat(order.total);
+  const gst = parseFloat(order.gst);
+  const placedAt = order.createdAt
+    ? new Date(order.createdAt).toLocaleDateString("en-AU", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "—";
 
   return (
     <>
@@ -66,6 +78,7 @@ export default async function OrderDetailPage({
               ← Back to orders
             </Link>
             <button
+              onClick={() => window.print()}
               className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
               style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
             >
@@ -74,6 +87,14 @@ export default async function OrderDetailPage({
               </svg>
               Print pick slip
             </button>
+            <OrderDetailActions
+              orderId={order.id}
+              currentStatus={order.status}
+              accent={tenant.accent}
+              parentEmail={order.parentEmail}
+              parentName={order.parentName}
+              studentName={order.studentName}
+            />
           </div>
         }
       />
@@ -105,7 +126,7 @@ export default async function OrderDetailPage({
                   </div>
                 </div>
                 <div className="text-[11.5px] mt-1" style={{ color: "var(--color-ink-dim)" }}>
-                  Placed {order.placedAt}
+                  Placed {placedAt}
                 </div>
               </div>
               <Chip tone={statusInfo.tone}>{statusInfo.label}</Chip>
@@ -116,45 +137,36 @@ export default async function OrderDetailPage({
             {/* Details grid */}
             <div className="grid grid-cols-3 gap-6 mt-4 mb-5">
               <div>
-                <div
-                  className="type-label mb-1"
-                  style={{ color: "var(--color-ink-dim)" }}
-                >
+                <div className="type-label mb-1" style={{ color: "var(--color-ink-dim)" }}>
                   Student
                 </div>
                 <div className="font-serif text-[16px] font-medium" style={{ color: "var(--color-ink)" }}>
-                  {order.kid}
+                  {order.studentName}
                 </div>
                 <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-                  {order.year} · Roll {order.rollClass}
+                  {order.studentYear} · Roll {order.studentRoll}
                 </div>
               </div>
               <div>
-                <div
-                  className="type-label mb-1"
-                  style={{ color: "var(--color-ink-dim)" }}
-                >
+                <div className="type-label mb-1" style={{ color: "var(--color-ink-dim)" }}>
                   Parent
                 </div>
                 <div className="font-serif text-[16px] font-medium" style={{ color: "var(--color-ink)" }}>
-                  {order.parent}
+                  {order.parentName}
                 </div>
                 <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-                  {order.mobile}
+                  {order.parentMobile}
                 </div>
               </div>
               <div>
-                <div
-                  className="type-label mb-1"
-                  style={{ color: "var(--color-ink-dim)" }}
-                >
+                <div className="type-label mb-1" style={{ color: "var(--color-ink-dim)" }}>
                   Fulfilment
                 </div>
                 <div className="font-serif text-[16px] font-medium" style={{ color: "var(--color-ink)" }}>
                   {order.delivery === "pickup" ? "Pickup at office" : "Ship to home"}
                 </div>
                 <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-                  {order.delivery === "pickup" ? "Notify when ready" : order.email}
+                  {order.delivery === "pickup" ? "Notify when ready" : order.parentEmail}
                 </div>
               </div>
             </div>
@@ -170,14 +182,13 @@ export default async function OrderDetailPage({
                 >
                   <th className="text-left py-2 font-bold border-b w-8" style={{ borderColor: "var(--color-rule)" }}>✓</th>
                   <th className="text-left py-2 font-bold border-b" style={{ borderColor: "var(--color-rule)" }}>Item</th>
-                  <th className="text-left py-2 font-bold border-b w-[130px]" style={{ borderColor: "var(--color-rule)" }}>Variant</th>
-                  <th className="text-center py-2 font-bold border-b w-[60px]" style={{ borderColor: "var(--color-rule)" }}>Size</th>
+                  <th className="text-left py-2 font-bold border-b w-[150px]" style={{ borderColor: "var(--color-rule)" }}>Variant</th>
                   <th className="text-center py-2 font-bold border-b w-[50px]" style={{ borderColor: "var(--color-rule)" }}>Qty</th>
-                  <th className="text-right py-2 font-bold border-b w-[80px]" style={{ borderColor: "var(--color-rule)" }}>Amount</th>
+                  <th className="text-right py-2 font-bold border-b w-[90px]" style={{ borderColor: "var(--color-rule)" }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {order.items.map((line, i) => (
+                {order.lines.map((line, i) => (
                   <tr
                     key={i}
                     className="border-b"
@@ -190,61 +201,44 @@ export default async function OrderDetailPage({
                       />
                     </td>
                     <td className="py-3 font-medium" style={{ color: "var(--color-ink)" }}>
-                      {line.name}
+                      {line.itemName}
                     </td>
                     <td className="py-3 text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
                       {line.variantLabel}
                     </td>
                     <td className="py-3 text-center font-bold font-mono" style={{ color: "var(--color-ink)" }}>
-                      {line.size}
-                    </td>
-                    <td className="py-3 text-center font-bold font-mono" style={{ color: "var(--color-ink)" }}>
                       {line.qty}
                     </td>
                     <td className="py-3 text-right font-semibold tnum" style={{ color: "var(--color-ink)" }}>
-                      ${(line.price * line.qty).toFixed(2)}
+                      ${parseFloat(line.lineTotal).toFixed(2)}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={5} className="pt-3.5 text-right font-serif text-[16px] font-semibold" style={{ color: "var(--color-ink)" }}>
+                  <td colSpan={4} className="pt-3.5 text-right font-serif text-[16px] font-semibold" style={{ color: "var(--color-ink)" }}>
                     Total (incl. GST)
                   </td>
                   <td className="pt-3.5 text-right font-serif text-[22px] font-semibold tnum" style={{ color: "var(--color-ink)" }}>
-                    ${order.total.toFixed(2)}
+                    ${total.toFixed(2)}
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={5} className="text-right text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+                  <td colSpan={4} className="text-right text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
                     GST included
                   </td>
                   <td className="text-right text-[11px] tnum" style={{ color: "var(--color-ink-dim)" }}>
-                    ${(order.total / 11).toFixed(2)}
+                    ${gst.toFixed(2)}
                   </td>
                 </tr>
               </tfoot>
             </table>
 
-            {/* Notes */}
-            {order.notes && (
-              <div
-                className="mt-6 p-3.5 rounded text-[11px] leading-[1.6]"
-                style={{
-                  background: "var(--color-parchment)",
-                  color: "var(--color-ink-dim)",
-                  fontFamily: "var(--font-sans)",
-                }}
-              >
-                <b style={{ color: "var(--color-ink)" }}>Packer notes</b> · {order.notes}
-              </div>
-            )}
-
             {/* Footer */}
             <div className="mt-6 flex items-center justify-between">
               <div className="text-[11px] font-mono" style={{ color: "var(--color-ink-dim)" }}>
-                Paid via Stripe · {order.stripeRef} · {order.email}
+                {order.stripeRef ? `Paid via Stripe · ${order.stripeRef}` : "Payment pending"} · {order.parentEmail}
               </div>
               <Barcode orderId={order.id} />
             </div>

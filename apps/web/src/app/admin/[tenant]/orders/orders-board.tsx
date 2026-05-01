@@ -1,9 +1,29 @@
 "use client";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { Tenant } from "@/lib/data";
-import type { AdminOrder, OrderStatus } from "@/lib/admin-data";
-import { useOrders } from "@/lib/order-store";
 import { Chip } from "@/components/chip";
+
+type OrderStatus = "new" | "packing" | "ready" | "collected";
+
+interface DbOrder {
+  id: string;
+  tenantId: string;
+  parentName: string;
+  parentEmail: string;
+  parentMobile: string;
+  studentName: string;
+  studentYear: string;
+  studentRoll: string;
+  delivery: "pickup" | "ship";
+  deliveryFee: string;
+  subtotal: string;
+  gst: string;
+  total: string;
+  stripeRef: string | null;
+  status: OrderStatus;
+  createdAt: string;
+}
 
 const COLUMNS: { id: OrderStatus; label: string; tone: string }[] = [
   { id: "new", label: "New", tone: "#3B82F6" },
@@ -17,7 +37,7 @@ function OrderCard({
   accent,
   onAdvance,
 }: {
-  order: AdminOrder;
+  order: DbOrder;
   accent: string;
   onAdvance: (id: string, status: OrderStatus) => void;
 }) {
@@ -34,6 +54,7 @@ function OrderCard({
     collected: "",
   };
   const next = nextStatus[order.status];
+  const total = parseFloat(order.total);
 
   return (
     <div
@@ -49,18 +70,20 @@ function OrderCard({
         </Chip>
       </div>
       <div className="font-serif text-[14px] font-medium leading-[1.2] mb-0.5" style={{ color: "var(--color-ink)" }}>
-        {order.kid}
+        {order.studentName}
       </div>
       <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-        {order.parent} · {order.year}
+        {order.parentName} · {order.studentYear}
       </div>
       <div
         className="mt-2 pt-2 flex justify-between text-[11px]"
         style={{ borderTop: "1px dashed var(--color-rule)" }}
       >
-        <span style={{ color: "var(--color-ink-dim)" }}>{order.items.length} items</span>
+        <span style={{ color: "var(--color-ink-dim)" }}>
+          {new Date(order.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+        </span>
         <span className="font-bold tnum" style={{ color: "var(--color-ink)" }}>
-          ${order.total.toFixed(0)}
+          ${total.toFixed(0)}
         </span>
       </div>
       {next && (
@@ -76,10 +99,7 @@ function OrderCard({
             onClick={() => onAdvance(order.id, next)}
             className="flex-1 h-7 text-[11.5px] font-semibold rounded text-white flex items-center justify-center"
             style={{
-              background:
-                order.status === "ready"
-                  ? "var(--color-success)"
-                  : accent,
+              background: order.status === "ready" ? "var(--color-success)" : accent,
             }}
           >
             {nextLabel[order.status]}
@@ -88,6 +108,13 @@ function OrderCard({
       )}
       {order.status === "ready" && (
         <button
+          onClick={() => {
+            const subject = encodeURIComponent(`Your uniform order ${order.id} is ready`);
+            const body = encodeURIComponent(
+              `Hi ${order.parentName},\n\nYour uniform order ${order.id} for ${order.studentName} is ready for collection.\n\nPlease collect during shop hours.\n\nThank you.`
+            );
+            window.open(`mailto:${order.parentEmail}?subject=${subject}&body=${body}`);
+          }}
           className="mt-1.5 w-full h-7 text-[11.5px] font-semibold rounded border flex items-center justify-center"
           style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)", background: "#fff" }}
         >
@@ -107,24 +134,86 @@ function OrderCard({
   );
 }
 
-export function OrdersBoard({ tenantId, tenant }: { tenantId: string; tenant: Tenant }) {
-  const { orders: allOrders, updateStatus } = useOrders();
-  const orders = allOrders.filter((o) => o.tenantId === tenantId);
+export function OrdersBoard({
+  tenantId,
+  tenant,
+  searchQuery,
+}: {
+  tenantId: string;
+  tenant: Tenant;
+  searchQuery: string;
+}) {
+  const [allOrders, setAllOrders] = useState<DbOrder[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleAdvance = (id: string, status: OrderStatus) => {
-    updateStatus(id, status);
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/orders?tenantId=${tenantId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllOrders(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch orders:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  const handleAdvance = async (id: string, status: OrderStatus) => {
+    // Optimistic update
+    setAllOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status } : o))
+    );
+    try {
+      await fetch(`/api/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+    } catch (err) {
+      console.error("Failed to update order status:", err);
+      fetchOrders(); // Revert on error
+    }
   };
 
+  // Filter by search query
+  const q = searchQuery.toLowerCase().trim();
+  const filtered = q
+    ? allOrders.filter(
+        (o) =>
+          o.id.toLowerCase().includes(q) ||
+          o.parentName.toLowerCase().includes(q) ||
+          o.studentName.toLowerCase().includes(q) ||
+          o.studentYear.toLowerCase().includes(q) ||
+          o.studentRoll.toLowerCase().includes(q)
+      )
+    : allOrders;
+
   const counts = COLUMNS.reduce(
-    (acc, col) => ({ ...acc, [col.id]: orders.filter((o) => o.status === col.id).length }),
+    (acc, col) => ({ ...acc, [col.id]: filtered.filter((o) => o.status === col.id).length }),
     {} as Record<OrderStatus, number>
   );
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
+          Loading orders…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 p-6 overflow-hidden">
       <div className="h-full grid gap-3.5" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
         {COLUMNS.map((col) => {
-          const colOrders = orders.filter((o) => o.status === col.id);
+          const colOrders = filtered.filter((o) => o.status === col.id);
           return (
             <div
               key={col.id}
