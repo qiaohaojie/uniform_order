@@ -29,3 +29,6 @@ pnpm-debug.log*
 .idea/
 .vscode/
 my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
+
+# git worktrees
+.worktrees/
