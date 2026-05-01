@@ -16,7 +16,8 @@ export default async function AdminUploadPage({ params }: { params: Promise<{ te
         right={
           <div className="flex items-center gap-2">
             <a
-              href="#"
+              href="/catalog-template.csv"
+              download="catalog-template.csv"
               className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
               style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
             >

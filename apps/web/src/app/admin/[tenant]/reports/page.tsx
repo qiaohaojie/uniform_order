@@ -2,6 +2,15 @@ import { notFound } from "next/navigation";
 import { TENANTS, type TenantId } from "@/lib/data";
 import { SALES_DATA } from "@/lib/admin-data";
 import { AdminTopbar } from "@/components/admin-shell";
+import { ExportCsvButton, type CsvRow } from "@/components/export-csv-button";
+
+// GST summary rows — in a real app these would come from the DB
+const GST_ROWS: CsvRow[] = [
+  { period: "Apr 2026", gross: 1480, gst: 134.55, net: 1345.45, fees: 43.05, payout: 1302.40 },
+  { period: "Mar 2026", gross: 3240, gst: 294.55, net: 2945.45, fees: 94.17, payout: 2851.28 },
+  { period: "Feb 2026", gross: 2780, gst: 252.73, net: 2527.27, fees: 80.82, payout: 2446.45 },
+  { period: "Jan 2026", gross: 3960, gst: 360.00, net: 3600.00, fees: 115.02, payout: 3484.98 },
+];
 
 export default async function AdminReportsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
@@ -28,17 +37,10 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
               <option>Last 12 months</option>
               <option>This term</option>
             </select>
-            <button
-              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
-              style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                <path d="M21 15 V19 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 V15" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Export CSV
-            </button>
+            <ExportCsvButton
+              rows={GST_ROWS}
+              filename={`${tid}-gst-report.csv`}
+            />
           </div>
         }
       />
@@ -158,13 +160,8 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
               </tr>
             </thead>
             <tbody>
-              {[
-                { period: "Apr 2026", gross: 1480, gst: 134.55, net: 1345.45, fees: 43.05, payout: 1302.40 },
-                { period: "Mar 2026", gross: 3240, gst: 294.55, net: 2945.45, fees: 94.17, payout: 2851.28 },
-                { period: "Feb 2026", gross: 2780, gst: 252.73, net: 2527.27, fees: 80.82, payout: 2446.45 },
-                { period: "Jan 2026", gross: 3960, gst: 360.00, net: 3600.00, fees: 115.02, payout: 3484.98 },
-              ].map((r, i) => (
-                <tr key={r.period} className="border-b" style={{ borderColor: i < 3 ? "var(--color-rule)" : "transparent" }}>
+              {GST_ROWS.map((r, i) => (
+                <tr key={r.period} className="border-b" style={{ borderColor: i < GST_ROWS.length - 1 ? "var(--color-rule)" : "transparent" }}>
                   <td className="py-2.5 font-medium" style={{ color: "var(--color-ink)" }}>{r.period}</td>
                   <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.gross.toLocaleString()}</td>
                   <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.gst.toFixed(2)}</td>
