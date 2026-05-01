@@ -91,7 +91,7 @@ export default async function OrderDetailPage({
                   <Crest tenant={tenant} size={44} />
                   <div>
                     <div
-                      className="font-serif text-[22px] font-medium leading-tight"
+                      className="type-h2 leading-tight"
                       style={{ color: "var(--color-ink)" }}
                     >
                       Pick Slip
@@ -117,7 +117,7 @@ export default async function OrderDetailPage({
             <div className="grid grid-cols-3 gap-6 mt-4 mb-5">
               <div>
                 <div
-                  className="text-[10px] font-bold tracking-[0.6px] uppercase mb-1"
+                  className="type-label mb-1"
                   style={{ color: "var(--color-ink-dim)" }}
                 >
                   Student
@@ -131,7 +131,7 @@ export default async function OrderDetailPage({
               </div>
               <div>
                 <div
-                  className="text-[10px] font-bold tracking-[0.6px] uppercase mb-1"
+                  className="type-label mb-1"
                   style={{ color: "var(--color-ink-dim)" }}
                 >
                   Parent
@@ -145,7 +145,7 @@ export default async function OrderDetailPage({
               </div>
               <div>
                 <div
-                  className="text-[10px] font-bold tracking-[0.6px] uppercase mb-1"
+                  className="type-label mb-1"
                   style={{ color: "var(--color-ink-dim)" }}
                 >
                   Fulfilment
