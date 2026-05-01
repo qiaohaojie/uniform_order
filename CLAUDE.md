@@ -2,45 +2,94 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this is
-
-`uniform-order` is a pnpm monorepo whose only current package is `apps/web`: a Next.js 16 / React 19 demo of a multi-tenant school-uniform ordering app. There is no backend — all data lives in `apps/web/src/lib/data.ts` and the cart persists to `localStorage`. Two demo tenants (`imhs`, `rgsh`) and one demo parent (`PARENT`) are hard-coded.
-
-## Current paper-based order PDF form
-
-`my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` is the current paper-based order form. It should be digitized into an online order, which is this project is building.
-
-## Design System
-
-`my_doc/UI_prototypes/project/Design System.html` is the design system.
-
-## UI Prototypes
-
-`my_doc/UI_prototypes/project/` contains the original HTML/JSX prototypes exported from Claude Design (parent flow, operator flow, superadmin flow, design system). The folder's `README.md` is explicit: read the prototype source — don't render or screenshot it — and recreate the visuals; do not blindly copy the prototype's internal structure into the React app.
-
 ## Commands
 
-Run from the repo root (workspace = `apps/*`):
+All commands run from the repo root via pnpm workspaces.
 
-- `pnpm install` — installs deps. The root `package.json` declares `pnpm.onlyBuiltDependencies` (`heroui-pro`, `@heroui-pro/react`, `@tailwindcss/oxide`, `sharp`, `unrs-resolver`); without that allowlist pnpm blocks their postinstall scripts and HeroUI Pro / Tailwind v4 will silently produce no styles.
-- `pnpm dev:web` — Next dev server (`apps/web`, default port 3000).
-- `pnpm build:web` / `pnpm start:web` — production build / start.
-- `pnpm check-types` — recursive `tsc --noEmit` across the workspace. `pnpm check-types:web` for just the web app.
+```bash
+pnpm dev:web          # Start Next.js dev server (apps/web)
+pnpm build:web        # Production build
+pnpm check-types      # TypeScript check across all packages
+pnpm check-types:web  # TypeScript check for apps/web only
+```
 
-There is no test runner, no ESLint, and no formatter wired up. "Done" is verified by `check-types` + a manual run of the dev server.
+There is no test suite or linter configured. Type-checking (`check-types`) is the primary correctness gate.
 
-## HeroUI v3 conventions (load-bearing)
+To run a single Next.js route in isolation, use the dev server and navigate to the route directly.
 
-The project uses **two** HeroUI packages side by side: `@heroui/react` (OSS base components) and `@heroui-pro/react` (Pro components). Both CSS bundles are imported in `src/index.css`. Rules:
+## Architecture
 
-- Tailwind **v4 only** — v3 silently produces no HeroUI styles.
-- **No Provider.** v3 components work without wrapping the tree.
-- Use `onPress`, not `onClick`, on HeroUI interactive elements.
-- Compound component patterns (e.g. `Sheet.Trigger` / `Sheet.Content`) — never guess the structure; consult the MCP.
-- Two MCP servers cover docs: `heroui-react` for base components, `heroui-pro` for Pro. The `heroui-react`, `heroui-react-pro`, and `heroui-pro-design-taste` skills are installed locally — invoke them before authoring HeroUI UI.
+### Monorepo structure
 
-The full install rationale lives in `my_doc/HeroUI/heroui-install.md`. Treat its "Decision" callouts as already-made.
+pnpm workspace with one app: `apps/web` (Next.js). The root `package.json` only contains workspace scripts.
 
-## Design source of truth
+### Two portals, one codebase
 
-`my_doc/UI_prototypes/project/` contains the original HTML/JSX prototypes exported from Claude Design (parent flow, operator flow, superadmin flow, design system). The folder's `README.md` is explicit: read the prototype source — don't render or screenshot it — and recreate the visuals; do not blindly copy the prototype's internal structure into the React app. `my_doc/HeroUI/design/` has supporting `data.jsx` / `primitives.jsx` references.
+**Parent portal** — `apps/web/src/app/[tenant]/`  
+Mobile-first shopping flow: catalog → item detail → cart → checkout → order confirmation. Wrapped in `MobileShell` (max-width 430px, centered on desktop).
+
+**Admin portal** — `apps/web/src/app/admin/[tenant]/`  
+Desktop sidebar layout via `AdminShell`. Sections: Dashboard, Orders (Kanban board), Catalog, Bulk Upload, Reports, Settings.
+
+`apps/web/src/app/page.tsx` is the parent home / school picker. It auto-redirects when there is only one child in `PARENT.kids`.
+
+### Multi-tenancy
+
+Every route is scoped to a `[tenant]` slug (`imhs` or `rgsh`). The layout files (`app/[tenant]/layout.tsx`, `app/admin/[tenant]/layout.tsx`) validate the slug against `TENANTS` in `lib/data.ts` and call `notFound()` on mismatch.
+
+Tenant accent colour (e.g. `#7A1F2B` for IMHS) is threaded through props into components rather than read from CSS — components apply it via inline `style` on borders, backgrounds, and text.
+
+### Data layer (all mock, no backend)
+
+`lib/data.ts` — Static catalog (`CATALOG`), tenant definitions (`TENANTS`), parent/child definitions (`PARENT`), and past orders (`PAST_ORDERS`). This is the source of truth for the catalog.
+
+`lib/admin-data.ts` — Mock admin orders (`ADMIN_ORDERS`) and sales analytics (`SALES_DATA`).
+
+`lib/cart-store.ts` — `useCart()` hook. Persists to `localStorage` (key `uo:cart:v1`). Seeds from `SAMPLE_CART` on first visit.
+
+`lib/order-store.ts` — `useOrders()` hook. Persists to `localStorage` (key `uo:orders:v1`). `placeOrder()` creates a new `AdminOrder` in state; `updateStatus()` advances order status on the Kanban board.
+
+**Known data gap (see `docs/FEATURE_AUDIT.md`):** Newly placed orders (written to localStorage via `useOrders`) are not visible in the admin order detail (`getOrderById` reads static `ADMIN_ORDERS`), the dashboard recent-orders feed, or the parent orders history page (which reads `PAST_ORDERS`). Connecting these requires threading `useOrders` through those pages.
+
+### Server / client split pattern
+
+Next.js App Router server components do data fetching and pass props down. Pages with interactivity are split into a server `page.tsx` + a `"use client"` companion (`*-screen.tsx` or `*-client.tsx`). Example: `app/[tenant]/checkout/page.tsx` is a thin server wrapper; `checkout-screen.tsx` owns all state.
+
+### Design system
+
+Tailwind CSS v4 (`@import "tailwindcss"`) with custom design tokens defined in `src/index.css` under `@theme`:
+
+| Token | Value |
+|---|---|
+| `--color-navy-deep` | `#081A2D` (admin sidebar) |
+| `--color-parchment` | `#FAF6EE` (page background) |
+| `--color-paper` | `#FDFBF6` (card background) |
+| `--color-rule` | `#E5DFD2` (borders) |
+| `--color-gold` | `#B08A3E` (accents) |
+| `--font-serif` | Newsreader (headings) |
+| `--font-sans` | Inter (body) |
+
+Add `.tnum` class (`font-feature-settings: "tnum"`) on any price or numeric display.
+
+HeroUI v3 (`@heroui/react`) and HeroUI Pro (`@heroui-pro/react`) are installed but the current UI is built primarily with bespoke Tailwind components. Use HeroUI components when adding new interactive elements.
+
+`GarmentVector` in `components/garment.tsx` renders flat-vector SVG product illustrations keyed by item ID — no images are used.
+
+### Design references
+
+**Paper form:** `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` — the original paper order form this project digitizes.
+
+**Design system:** `my_doc/UI_prototypes/project/Design System.html` — canonical tokens, typography, and component styles.
+
+**UI prototypes:** `my_doc/UI_prototypes/project/` contains HTML/JSX prototypes exported from Claude Design covering three flows:
+- `parent.jsx` — parent shopping flow
+- `operator.jsx` — admin/operator flow
+- `superadmin.jsx` — platform super-admin flow
+
+Read the prototype source directly; do not render or screenshot it. Match the visual output in React — do not copy the prototype's internal structure into the app. `my_doc/HeroUI/design/data.jsx` and `primitives.jsx` are supporting references used by the prototypes.
+
+### TypeScript
+
+Path alias `@/*` maps to `apps/web/src/*`. Use `@/lib/data`, `@/components/...` etc.
+
+`LayoutProps<"/[tenant]">` and `PageProps<"/[tenant]">` are Next.js 16 generated types from `next-env.d.ts`; `params` must be `await`ed in async server components.
