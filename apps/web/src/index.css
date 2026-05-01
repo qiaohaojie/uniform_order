@@ -73,3 +73,35 @@ html, body {
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ─── Print styles ──────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide the admin sidebar, topbar, and action buttons */
+  nav,
+  aside,
+  [data-admin-sidebar],
+  [data-admin-topbar],
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Remove background colours and shadows for clean print output */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Expand the pick slip card to fill the page */
+  .print\:full-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  /* Ensure page breaks don't split table rows */
+  tr {
+    page-break-inside: avoid;
+  }
+}
