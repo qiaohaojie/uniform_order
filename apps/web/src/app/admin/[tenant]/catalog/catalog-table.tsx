@@ -1,7 +1,9 @@
 "use client";
-import { useState } from "react";
-import type { CatalogItem, ItemCategory, Tenant } from "@/lib/data";
+import { useState, useEffect } from "react";
+import type { ItemCategory, Tenant } from "@/lib/data";
 import { Chip } from "@/components/chip";
+
+const CATEGORIES: ItemCategory[] = ["Summer", "Winter", "Sports", "Formal", "Bags", "Stationery"];
 
 const CATEGORY_TONE: Record<ItemCategory, "info" | "success" | "warn" | "neutral"> = {
   Summer: "warn",
@@ -12,23 +14,274 @@ const CATEGORY_TONE: Record<ItemCategory, "info" | "success" | "warn" | "neutral
   Stationery: "neutral",
 };
 
+interface DbVariant {
+  id: string;
+  itemId: string;
+  label: string;
+  price: string;
+  active: boolean;
+}
+
+interface DbItem {
+  id: string;
+  tenantId: string;
+  name: string;
+  category: string;
+  description: string | null;
+  active: boolean;
+  sortOrder: number;
+  variants: DbVariant[];
+}
+
+function AddProductModal({
+  tenantId,
+  accent,
+  onClose,
+  onAdded,
+}: {
+  tenantId: string;
+  accent: string;
+  onClose: () => void;
+  onAdded: (item: DbItem) => void;
+}) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<ItemCategory>("Summer");
+  const [description, setDescription] = useState("");
+  const [variants, setVariants] = useState([{ label: "", price: "" }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const addVariant = () => setVariants((v) => [...v, { label: "", price: "" }]);
+  const removeVariant = (i: number) => setVariants((v) => v.filter((_, idx) => idx !== i));
+  const updateVariant = (i: number, field: "label" | "price", val: string) =>
+    setVariants((v) => v.map((vv, idx) => (idx === i ? { ...vv, [field]: val } : vv)));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) { setError("Product name is required."); return; }
+    if (variants.some((v) => !v.label.trim() || !v.price.trim())) {
+      setError("All variant fields are required."); return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          name: name.trim(),
+          category,
+          description: description.trim() || undefined,
+          variants: variants.map((v) => ({
+            label: v.label.trim(),
+            price: parseFloat(v.price),
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? "Failed to add product.");
+        return;
+      }
+      const { id } = await res.json();
+      // Build a local DbItem to add to the table immediately
+      const newItem: DbItem = {
+        id,
+        tenantId,
+        name: name.trim(),
+        category,
+        description: description.trim() || null,
+        active: true,
+        sortOrder: 999,
+        variants: variants.map((v, i) => ({
+          id: `temp-${i}`,
+          itemId: id,
+          label: v.label.trim(),
+          price: v.price,
+          active: true,
+        })),
+      };
+      onAdded(newItem);
+      onClose();
+    } catch (err) {
+      setError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
+      <div
+        className="bg-white rounded-xl border shadow-xl w-full max-w-lg mx-4 overflow-hidden"
+        style={{ borderColor: "var(--color-rule)" }}
+      >
+        {/* Modal header */}
+        <div
+          className="px-6 py-4 flex items-center justify-between"
+          style={{ borderBottom: "1px solid var(--color-rule)" }}
+        >
+          <h2 className="font-serif text-[18px] font-semibold" style={{ color: "var(--color-ink)" }}>
+            Add product
+          </h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full text-[16px]"
+            style={{ color: "var(--color-ink-dim)", background: "var(--color-parchment)" }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Modal body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="text-[12.5px] px-3 py-2 rounded" style={{ background: "#FEF2F2", color: "#B91C1C" }}>
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="type-label block mb-1" style={{ color: "var(--color-ink-dim)" }}>
+              Product name *
+            </label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Navy Shorts"
+              className="w-full h-9 border rounded-md px-3 text-[13px] outline-none"
+              style={{ borderColor: "var(--color-rule)", fontFamily: "var(--font-sans)", color: "var(--color-ink)" }}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="type-label block mb-1" style={{ color: "var(--color-ink-dim)" }}>
+                Category *
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as ItemCategory)}
+                className="w-full h-9 border rounded-md px-3 text-[13px] outline-none bg-white"
+                style={{ borderColor: "var(--color-rule)", fontFamily: "var(--font-sans)", color: "var(--color-ink)" }}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="type-label block mb-1" style={{ color: "var(--color-ink-dim)" }}>
+                Description
+              </label>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional"
+                className="w-full h-9 border rounded-md px-3 text-[13px] outline-none"
+                style={{ borderColor: "var(--color-rule)", fontFamily: "var(--font-sans)", color: "var(--color-ink)" }}
+              />
+            </div>
+          </div>
+
+          {/* Variants */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="type-label" style={{ color: "var(--color-ink-dim)" }}>
+                Variants (size / price) *
+              </label>
+              <button
+                type="button"
+                onClick={addVariant}
+                className="text-[11.5px] font-semibold"
+                style={{ color: accent }}
+              >
+                + Add variant
+              </button>
+            </div>
+            <div className="space-y-2">
+              {variants.map((v, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input
+                    value={v.label}
+                    onChange={(e) => updateVariant(i, "label", e.target.value)}
+                    placeholder="Label (e.g. Size 10–16)"
+                    className="flex-1 h-8 border rounded-md px-2.5 text-[12.5px] outline-none"
+                    style={{ borderColor: "var(--color-rule)", fontFamily: "var(--font-sans)" }}
+                  />
+                  <div className="relative w-24">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px]" style={{ color: "var(--color-ink-dim)" }}>$</span>
+                    <input
+                      value={v.price}
+                      onChange={(e) => updateVariant(i, "price", e.target.value)}
+                      placeholder="0.00"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full h-8 border rounded-md pl-6 pr-2 text-[12.5px] outline-none"
+                      style={{ borderColor: "var(--color-rule)", fontFamily: "var(--font-sans)" }}
+                    />
+                  </div>
+                  {variants.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeVariant(i)}
+                      className="w-7 h-7 flex items-center justify-center rounded text-[13px]"
+                      style={{ color: "#B23A2A", background: "#FEF2F2" }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 h-9 text-[13px] font-semibold rounded-md border"
+              style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 h-9 text-[13px] font-semibold rounded-md text-white disabled:opacity-60"
+              style={{ background: accent }}
+            >
+              {saving ? "Saving…" : "Add product"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function CatalogTable({
-  items: initialItems,
-  categories,
+  tenantId,
+  initialItems,
   tenant,
 }: {
-  items: CatalogItem[];
-  categories: ItemCategory[];
+  tenantId: string;
+  initialItems: DbItem[];
   tenant: Tenant;
 }) {
-  const [items, setItems] = useState<CatalogItem[]>(initialItems);
+  const [items, setItems] = useState<DbItem[]>(initialItems);
   const [activeCategory, setActiveCategory] = useState<ItemCategory | "All">("All");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
 
   const filtered = items.filter((it) => {
-    const matchCat = activeCategory === "All" || it.cat === activeCategory;
+    const matchCat = activeCategory === "All" || it.category === activeCategory;
     const matchSearch =
       !search ||
       it.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -36,14 +289,53 @@ export function CatalogTable({
     return matchCat && matchSearch;
   });
 
-  const handleDelete = (id: string) => {
-    if (confirm("Remove this product from the catalog?")) {
-      setItems((prev) => prev.filter((it) => it.id !== id));
+  const handleEdit = (id: string, currentName: string) => {
+    setEditingId(id);
+    setEditingName(currentName);
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    const trimmed = editingName.trim();
+    if (!trimmed) return;
+    // Optimistic update
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, name: trimmed } : it)));
+    setEditingId(null);
+    try {
+      await fetch(`/api/catalog/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+    } catch (err) {
+      console.error("Failed to update item:", err);
     }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Remove this product from the catalog?")) return;
+    setItems((prev) => prev.filter((it) => it.id !== id));
+    try {
+      await fetch(`/api/catalog/${id}`, { method: "DELETE" });
+    } catch (err) {
+      console.error("Failed to delete item:", err);
+    }
+  };
+
+  const handleAdded = (newItem: DbItem) => {
+    setItems((prev) => [...prev, newItem]);
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-6">
+      {showAddModal && (
+        <AddProductModal
+          tenantId={tenantId}
+          accent={tenant.accent}
+          onClose={() => setShowAddModal(false)}
+          onAdded={handleAdded}
+        />
+      )}
+
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4">
         <div
@@ -61,8 +353,8 @@ export function CatalogTable({
             style={{ fontFamily: "var(--font-sans)", color: "var(--color-ink)" }}
           />
         </div>
-        <div className="flex gap-1.5">
-          {(["All", ...categories] as const).map((c) => (
+        <div className="flex gap-1.5 flex-1">
+          {(["All", ...CATEGORIES] as const).map((c) => (
             <button
               key={c}
               onClick={() => setActiveCategory(c as ItemCategory | "All")}
@@ -77,6 +369,16 @@ export function CatalogTable({
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="h-9 px-4 text-[12.5px] font-semibold rounded-md text-white flex items-center gap-1.5 flex-shrink-0"
+          style={{ background: tenant.accent }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Add product
+        </button>
       </div>
 
       {/* Table */}
@@ -104,10 +406,12 @@ export function CatalogTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((it, idx) => {
-                const minP = Math.min(...it.variants.map((v) => v.price));
-                const maxP = Math.max(...it.variants.map((v) => v.price));
+              {filtered.map((it) => {
+                const prices = it.variants.map((v) => parseFloat(v.price));
+                const minP = Math.min(...prices);
+                const maxP = Math.max(...prices);
                 const isEditing = editingId === it.id;
+                const cat = it.category as ItemCategory;
                 return (
                   <tr
                     key={it.id}
@@ -118,21 +422,18 @@ export function CatalogTable({
                     }}
                   >
                     <td className="py-2.5 px-3 font-mono text-[11.5px] font-semibold" style={{ color: "var(--color-ink)" }}>
-                      {it.id}
+                      {it.id.length > 20 ? it.id.slice(0, 20) + "…" : it.id}
                     </td>
                     <td className="py-2.5 px-3 font-medium" style={{ color: "var(--color-ink)" }}>
                       {isEditing ? (
                         <input
-                          defaultValue={it.name}
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
                           className="border rounded px-2 py-1 text-[12.5px] w-full"
                           style={{ borderColor: tenant.accent, outline: "none" }}
-                          onBlur={(e) => {
-                            setItems((prev) =>
-                              prev.map((p) =>
-                                p.id === it.id ? { ...p, name: e.target.value } : p
-                              )
-                            );
-                            setEditingId(null);
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEdit(it.id);
+                            if (e.key === "Escape") setEditingId(null);
                           }}
                           autoFocus
                         />
@@ -141,35 +442,53 @@ export function CatalogTable({
                       )}
                     </td>
                     <td className="py-2.5 px-3">
-                      <Chip tone={CATEGORY_TONE[it.cat]} size="sm">
-                        {it.cat}
+                      <Chip tone={CATEGORY_TONE[cat] ?? "neutral"} size="sm">
+                        {it.category}
                       </Chip>
                     </td>
                     <td className="py-2.5 px-3 text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
                       {it.variants.map((v) => v.label).join(", ")}
                     </td>
                     <td className="py-2.5 px-3 text-right font-semibold tnum" style={{ color: "var(--color-ink)" }}>
-                      {minP === maxP ? `$${minP}` : `$${minP} – $${maxP}`}
+                      {prices.length === 0 ? "—" : minP === maxP ? `$${minP}` : `$${minP} – $${maxP}`}
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setEditingId(isEditing ? null : it.id)}
-                          className="h-7 px-2.5 text-[11.5px] font-semibold rounded border"
-                          style={{
-                            borderColor: isEditing ? tenant.accent : "var(--color-rule)",
-                            color: isEditing ? tenant.accent : "var(--color-ink)",
-                          }}
-                        >
-                          {isEditing ? "Save" : "Edit"}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(it.id)}
-                          className="h-7 px-2.5 text-[11.5px] font-semibold rounded border"
-                          style={{ borderColor: "#E5BDB4", color: "#B23A2A" }}
-                        >
-                          Remove
-                        </button>
+                        {isEditing ? (
+                          <>
+                            <button
+                              onClick={() => handleSaveEdit(it.id)}
+                              className="h-7 px-2.5 text-[11.5px] font-semibold rounded border"
+                              style={{ borderColor: tenant.accent, color: tenant.accent }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="h-7 px-2.5 text-[11.5px] font-semibold rounded border"
+                              style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleEdit(it.id, it.name)}
+                              className="h-7 px-2.5 text-[11.5px] font-semibold rounded border"
+                              style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(it.id)}
+                              className="h-7 px-2.5 text-[11.5px] font-semibold rounded border"
+                              style={{ borderColor: "#E5BDB4", color: "#B23A2A" }}
+                            >
+                              Remove
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -189,10 +508,8 @@ export function CatalogTable({
           className="px-4 py-2.5 flex items-center justify-between text-[11.5px] flex-shrink-0"
           style={{ borderTop: "1px solid var(--color-rule)", color: "var(--color-ink-dim)" }}
         >
-          <span>{filtered.length} products</span>
-          <span>
-            {items.reduce((s, it) => s + it.variants.length, 0)} variants total
-          </span>
+          <span>{filtered.length} products shown</span>
+          <span>{items.reduce((s, it) => s + it.variants.length, 0)} variants total</span>
         </div>
       </div>
     </div>

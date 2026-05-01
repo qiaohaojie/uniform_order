@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { TENANTS, CATALOG, CATEGORIES, type TenantId } from "@/lib/data";
+import Link from "next/link";
+import { TENANTS, type TenantId } from "@/lib/data";
+import { getCatalogByTenant } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { CatalogTable } from "./catalog-table";
 
@@ -8,6 +10,9 @@ export default async function AdminCatalogPage({ params }: { params: Promise<{ t
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];
 
+  // Fetch live catalog from Neon DB
+  const items = await getCatalogByTenant(tid);
+
   return (
     <>
       <AdminTopbar
@@ -15,7 +20,8 @@ export default async function AdminCatalogPage({ params }: { params: Promise<{ t
         title="Catalog"
         right={
           <div className="flex items-center gap-2">
-            <button
+            <Link
+              href={`/admin/${tid}/upload`}
               className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
               style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
             >
@@ -25,20 +31,11 @@ export default async function AdminCatalogPage({ params }: { params: Promise<{ t
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
               Bulk upload CSV
-            </button>
-            <button
-              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white flex items-center gap-1.5"
-              style={{ background: tenant.accent }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round">
-                <path d="M12 5 V19 M5 12 H19" />
-              </svg>
-              Add product
-            </button>
+            </Link>
           </div>
         }
       />
-      <CatalogTable items={CATALOG} categories={CATEGORIES} tenant={tenant} />
+      <CatalogTable tenantId={tid} initialItems={items} tenant={tenant} />
     </>
   );
 }

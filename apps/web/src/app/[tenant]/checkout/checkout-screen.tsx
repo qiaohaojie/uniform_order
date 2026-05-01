@@ -8,7 +8,7 @@ import { cartTotal } from "@/lib/data";
 import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/components/icons";
-import { readStudentDetails, writeStudentDetails, useOrders, type StudentDetails } from "@/lib/order-store";
+import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
 
 type Delivery = "pickup" | "ship";
 
@@ -17,7 +17,6 @@ const YEAR_OPTIONS = ["Year 7", "Year 8", "Year 9", "Year 10", "Year 11", "Year 
 export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
   const router = useRouter();
   const { lines, clearCart } = useCart();
-  const { placeOrder } = useOrders();
   const [delivery, setDelivery] = useState<Delivery>("pickup");
   const [paying, setPaying] = useState(false);
   const [student, setStudent] = useState<StudentDetails>({
@@ -53,13 +52,52 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
     return Object.keys(errs).length === 0;
   };
 
-  const onPay = () => {
+  const onPay = async () => {
     if (!validate()) return;
     writeStudentDetails(student);
     setPaying(true);
-    const orderId = placeOrder(tenant.id, lines, student, delivery, total);
-    clearCart();
-    setTimeout(() => router.push(`/${tenant.id}/order/placed?total=${total.toFixed(2)}&delivery=${delivery}&orderId=${orderId}`), 600);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          parentName: student.parentName,
+          parentEmail: student.email,
+          parentMobile: student.mobile,
+          studentName: student.studentName,
+          studentYear: student.year,
+          studentRoll: student.rollClass,
+          delivery,
+          deliveryFee: delivery === "ship" ? 9.5 : 0,
+          subtotal,
+          gst,
+          total,
+          stripePaymentIntentId: null,
+          lines: lines.map((l) => ({
+            itemId: l.itemId,
+            itemName: l.name,
+            variantLabel: l.variantLabel,
+            qty: l.qty,
+            unitPrice: l.price,
+            lineTotal: l.price * l.qty,
+          })),
+        }),
+      });
+      if (res.ok) {
+        const { orderId } = await res.json();
+        clearCart();
+        router.push(`/${tenant.id}/order/placed?total=${total.toFixed(2)}&delivery=${delivery}&orderId=${orderId}`);
+      } else {
+        const data = await res.json();
+        alert(data.error ?? "Failed to place order. Please try again.");
+        setPaying(false);
+      }
+    } catch (err) {
+      console.error("Order submission error:", err);
+      alert("Network error. Please try again.");
+      setPaying(false);
+    }
   };
 
   return (
