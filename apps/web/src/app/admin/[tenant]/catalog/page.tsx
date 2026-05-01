@@ -3,7 +3,7 @@ import { TENANTS, CATALOG, CATEGORIES, type TenantId } from "@/lib/data";
 import { AdminTopbar } from "@/components/admin-shell";
 import { CatalogTable } from "./catalog-table";
 
-export default async function AdminCatalogPage({ params }: PageProps<"/admin/[tenant]/catalog">) {
+export default async function AdminCatalogPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];

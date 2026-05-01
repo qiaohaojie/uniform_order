@@ -36,7 +36,7 @@ function Barcode({ orderId }: { orderId: string }) {
 
 export default async function OrderDetailPage({
   params,
-}: PageProps<"/admin/[tenant]/orders/[orderId]">) {
+}: { params: Promise<{ tenant: string; orderId: string }> }) {
   const { tenant: tid, orderId } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];

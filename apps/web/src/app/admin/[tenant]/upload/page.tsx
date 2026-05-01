@@ -3,7 +3,7 @@ import { TENANTS, type TenantId } from "@/lib/data";
 import { AdminTopbar } from "@/components/admin-shell";
 import { UploadClient } from "./upload-client";
 
-export default async function AdminUploadPage({ params }: PageProps<"/admin/[tenant]/upload">) {
+export default async function AdminUploadPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];

@@ -4,7 +4,7 @@ import { SALES_DATA, getOrdersByTenant } from "@/lib/admin-data";
 import { AdminTopbar } from "@/components/admin-shell";
 import { AdminDashboardClient } from "./dashboard-client";
 
-export default async function AdminDashboardPage({ params }: PageProps<"/admin/[tenant]/dashboard">) {
+export default async function AdminDashboardPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];
