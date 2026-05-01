@@ -37,6 +37,7 @@ export function AdminShell({ tenantId, children }: { tenantId: string; children:
     <div className="min-h-screen flex" style={{ background: "var(--color-parchment)", fontFamily: "var(--font-sans)" }}>
       {/* Sidebar */}
       <div
+        data-no-print
         className="w-[240px] flex-shrink-0 flex flex-col"
         style={{ background: "var(--color-navy-deep)", color: "#E8E0CF" }}
       >
@@ -145,6 +146,7 @@ export function AdminTopbar({
 }) {
   return (
     <div
+      data-no-print
       className="h-[68px] px-7 flex items-center gap-4 flex-shrink-0 bg-white"
       style={{ borderBottom: "1px solid var(--color-rule)" }}
     >
