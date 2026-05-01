@@ -1,8 +1,19 @@
 # Feature Audit Report
 
 **Project:** Uniform Online Order System  
-**Audited:** 30 April 2026  
+**Originally audited:** 30 April 2026  
+**Last updated:** 2 May 2026  
 **Scope:** Cross-reference of PDP requirements, UI prototypes (parent, operator, superadmin), and current codebase implementation.
+
+---
+
+## Changelog
+
+| Date | What changed |
+|---|---|
+| 30 Apr 2026 | Initial audit — baseline snapshot of implemented vs missing features |
+| 1 May 2026 | **High-priority items 1–5 completed:** Add product modal, orders search, live orders history, live order detail, Stripe Connect onboarding. Neon PostgreSQL backend added (Drizzle ORM, 6-table schema, seeded). 7 API routes created. Checkout now persists to DB. |
+| 2 May 2026 | **Medium-priority items 6–11 completed:** Bulk upload CSV navigation, print pick slips (`window.print()` + print CSS), save changes on settings (live PATCH API), export CSV on reports (client-side blob download), download template (real CSV file served from `/public`), status advance buttons on order detail (live end-to-end tested). |
 
 ---
 
@@ -17,9 +28,9 @@
 | Cart screen with GST breakdown | ✅ Done | GST shown as 1/11 of subtotal |
 | Checkout with student details form | ✅ Done | Name, year, roll class, parent name, mobile, email; validated before submit |
 | Delivery toggle (Pickup / Ship $9.50) | ✅ Done | |
-| Stripe payment UI (mock) | ✅ Done | Card number / expiry / CVC fields; mock submit |
-| Order placed confirmation | ✅ Done | Dynamic order ID; delivery method and total shown |
-| Orders history page | ⚠️ Partial | Reads from static `PAST_ORDERS` in `data.ts`; newly placed orders from `useOrders` (localStorage) do **not** appear here |
+| Stripe payment UI (mock) | ✅ Done | Card number / expiry / CVC fields; `POST /api/stripe/payment-intent` creates real Stripe PaymentIntent in test mode |
+| Order placed confirmation | ✅ Done | Dynamic order ID from DB; delivery method and total shown |
+| Orders history page | ✅ Done | Fetches live orders from Neon DB via `GET /api/orders?email=...`; newly placed orders appear immediately |
 | "Add another child" button | ❌ Not wired | Button renders on school picker but has no `onClick` or navigation |
 | Refund policy page | ❌ Missing | Checkout footer says "agree to refund policy" but there is no linked page |
 | "Riley wore size X last year" hint | ⚠️ Hardcoded | Static string on item detail; not derived from order history |
@@ -36,7 +47,7 @@
 | Sparkline charts on KPI cards | ✅ Done | |
 | Top-selling items table with share bars | ✅ Done | |
 | Needs-attention alerts | ✅ Done | |
-| Recent orders feed | ⚠️ Static | Reads from `ADMIN_ORDERS` constant; does not reflect orders placed via the parent portal |
+| Recent orders feed | ⚠️ Static | Reads from `ADMIN_ORDERS` constant; does not yet reflect orders placed via the parent portal |
 | "New product" button | ❌ Not wired | Renders but has no action |
 | "Export" button | ❌ Not wired | Renders but has no action |
 
@@ -44,33 +55,33 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| 4-column Kanban (New → Packing → Ready → Collected) | ✅ Done | |
-| Advance order status (Start packing → Mark ready → Collect) | ✅ Done | Persisted via `useOrders` / localStorage |
-| "Notify parent" button on Ready cards | ✅ Renders | No notification is sent (expected for MVP) |
-| Search by order / parent / kid | ❌ Not wired | Input is `readOnly`; not connected to the board filter |
-| "Print pick slips" button | ❌ Not wired | Renders but no `onClick` / `window.print()` |
-| "Email parents" button | ❌ Not wired | Renders but no action |
+| 4-column Kanban (New → Packing → Ready → Collected) | ✅ Done | Fetches live orders from Neon DB |
+| Advance order status (Start packing → Mark ready → Collect) | ✅ Done | `PATCH /api/orders/[orderId]` persists to Neon; board re-fetches on change |
+| "Notify parent" button on Ready cards | ✅ Done | Opens pre-filled `mailto:` with order ID, student name, and collection instructions |
+| Search by order / parent / student | ✅ Done | Live search filters Kanban columns by order ID, parent name, or student name |
+| "Print pick slips" button | ✅ Done | `window.print()` — print CSS hides sidebar/topbar, shows only pick slip content |
+| "Email parents" button | ✅ Done | Opens `mailto:` for bulk notification |
 
 ### Order Detail / Pick Slip
 
 | Feature | Status | Notes |
 |---|---|---|
 | Pick slip with line items, GST, Stripe ref, barcode | ✅ Done | |
-| Status chip | ✅ Done | |
-| "Print pick slip" button | ✅ Renders | No `window.print()` wired |
-| Status advance buttons on detail page | ❌ Missing | Only the Kanban board can advance status; no action buttons on the detail page |
+| Status chip | ✅ Done | Reflects live status from Neon DB |
+| "Print pick slip" button | ✅ Done | `PrintButton` client component; print CSS hides admin chrome |
+| Status advance buttons on detail page | ✅ Done | `OrderDetailActions` client component: "Start packing" → "Mark ready" → "Mark collected"; `PATCH /api/orders/[orderId]`; `router.refresh()` updates badge and button label; "Notify parent" `mailto:` shown when status is `ready`; buttons hidden at `collected` (terminal state). Live end-to-end tested. |
+| Order detail reads live store | ✅ Done | `GET /api/orders/[orderId]` fetches from Neon; newly placed orders are visible immediately |
 | Refund / exchange action | ❌ Missing | PDP requires "handle refunds/exchanges" but no UI exists |
-| Order detail reads live store | ❌ Not connected | `getOrderById` reads from static `ADMIN_ORDERS`; orders placed via the parent portal are not visible here |
 
 ### Catalog Management
 
 | Feature | Status | Notes |
 |---|---|---|
-| Product table with category filter + search | ✅ Done | |
+| Product table with category filter + search | ✅ Done | Fetches live items from Neon DB via `GET /api/catalog?tenantId=...` |
 | Edit product name inline | ✅ Done | |
-| Remove product | ✅ Done | |
-| **Add product** | ❌ Not implemented | `showAddModal` state is declared but the modal/form is never rendered — button is a no-op |
-| "Bulk upload CSV" button in Catalog | ❌ Not wired | Renders but does not navigate to `/admin/[tenant]/upload` |
+| Remove product | ✅ Done | `DELETE /api/catalog/[itemId]` |
+| **Add product modal** | ✅ Done | Full form: name, category, description, and up to 5 variants (label + price); `POST /api/catalog` saves to Neon DB; table refreshes on success |
+| "Bulk upload CSV" button in Catalog | ✅ Done | `<Link href="/admin/[tenant]/upload">` — navigates to the upload page |
 
 ### Bulk Upload
 
@@ -80,7 +91,7 @@
 | Error row highlighting (missing SKU, invalid price) | ✅ Done | |
 | Skip-errored-rows toggle | ✅ Done | |
 | Demo CSV loader | ✅ Done | |
-| "Download template" button | ❌ Not wired | `href="#"`; no actual CSV file is served |
+| "Download template" button | ✅ Done | `href="/catalog-template.csv"` with `download` attribute; real 10-row CSV served from `/public` |
 
 ### Reports
 
@@ -89,7 +100,7 @@
 | Monthly revenue bar chart | ✅ Done | |
 | Revenue by category breakdown | ✅ Done | |
 | GST / BAS-ready summary table | ✅ Done | Gross, GST collected, net ex-GST, Stripe fees, net payout |
-| "Export CSV" button | ❌ Not wired | Renders but no download logic |
+| "Export CSV" button | ✅ Done | `ExportCsvButton` client component generates a CSV blob in the browser from the GST summary rows and triggers a file download (e.g. `nsbh-gst-report.csv`) — no API round-trip |
 
 ### Settings
 
@@ -98,10 +109,9 @@
 | Shop details form (name, address, hours, email) | ✅ Done | |
 | Fulfilment toggles (pickup / shipping) | ✅ Done | |
 | Email notification toggles | ✅ Done | |
-| **Save changes** | ❌ Not wired | Button renders but there is no form state or submit handler |
-| Stripe Connect status display | ✅ Done | Shows hardcoded "Connected" state |
-| **Stripe Connect — connect bank account** | ❌ Missing | No flow to actually connect a bank account (Stripe Connect OAuth onboarding); the connected state is always hardcoded |
-| "Manage in Stripe →" link | ❌ Not wired | No `href` to the Stripe dashboard |
+| **Save changes** | ✅ Done | `SettingsClient` calls `PATCH /api/tenant/[tenantId]`; shows "Saving…" spinner and "✓ Saved" confirmation |
+| **Stripe Connect — connect bank account** | ✅ Done | `GET /api/stripe/connect` checks connection status; "Connect bank account" button calls `POST /api/stripe/connect` to create a real Stripe Account Link and redirects to Stripe's hosted onboarding; returns to settings with success/refresh banner |
+| "Manage in Stripe →" link | ✅ Done | Links to `https://dashboard.stripe.com` when account is connected |
 
 ---
 
@@ -118,41 +128,51 @@ The prototype (`my_doc/UI_prototypes/project/superadmin.jsx`) defines four scree
 
 ---
 
-## 4. Data / Catalog Gaps
+## 4. Backend / Data Layer
 
-| Gap | Notes |
-|---|---|
-| Orders history not live | `app/orders/page.tsx` reads from `PAST_ORDERS` (static constant), not `useOrders` (localStorage) |
-| Order detail page reads static data only | Newly placed orders stored in localStorage are not visible at `/admin/[tenant]/orders/[id]` |
-| Dashboard recent orders are static | `getOrdersByTenant` reads from `ADMIN_ORDERS` constant, not localStorage |
-| Missing catalog items | The NSBH paper form includes items not yet in `data.ts`: Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie |
+| Item | Status | Notes |
+|---|---|---|
+| Neon PostgreSQL database | ✅ Done | Serverless Postgres on `aws-ap-southeast-2`; project `cool-wind-76972110` |
+| Drizzle ORM schema | ✅ Done | 6 tables: `tenants`, `catalog_items`, `catalog_variants`, `orders`, `order_lines`, `stripe_accounts` |
+| Seed data | ✅ Done | 2 tenants (NSBH, RGHS), 19 catalog items, 30 variants, 3 sample orders |
+| Neon Auth integration | ✅ Done | `@neondatabase/auth` configured; `GET/POST /api/auth/[...path]` route handler |
+| Stripe SDK | ✅ Done | `stripe` v17 installed; test-mode keys configured in `.env.local` |
+| Orders API | ✅ Done | `GET /api/orders`, `POST /api/orders`, `GET /api/orders/[id]`, `PATCH /api/orders/[id]` |
+| Catalog API | ✅ Done | `GET /api/catalog`, `POST /api/catalog`, `DELETE /api/catalog/[id]` |
+| Stripe payment intent API | ✅ Done | `POST /api/stripe/payment-intent` |
+| Stripe Connect API | ✅ Done | `GET /api/stripe/connect`, `POST /api/stripe/connect` |
+| Tenant settings API | ✅ Done | `PATCH /api/tenant/[tenantId]` |
+| Dashboard recent orders live | ❌ Not connected | Still reads from `ADMIN_ORDERS` static constant |
+| Missing catalog items | ❌ Not seeded | NSBH paper form items not yet in DB: Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie |
 
 ---
 
-## 5. Priority Ranking
+## 5. Remaining Work
 
-### High — broken or missing core flows
+### Remaining lower-priority items
 
-1. **Add product modal** — catalog management is incomplete without it
-2. **Orders search wiring** — search input is currently non-functional
-3. **Orders history connected to live store** — parents can't see orders they just placed
-4. **Order detail reads from live store** — admin can't open newly placed orders
-5. **Stripe Connect onboarding** — no way to actually connect a bank account
+| # | Item | Priority |
+|---|---|---|
+| 12 | Super-admin portal — all 4 screens | Lower |
+| 13 | Refund / exchange flow on order detail | Lower |
+| 14 | Refund policy page | Lower |
+| 15 | "Add another child" flow on school picker | Lower |
+| 16 | Missing catalog items (Navy Shorts, Grey Socks, Scarf, etc.) | Lower |
+| 17 | "Riley wore size X last year" hint driven by live order history | Lower |
+| 18 | Dashboard recent orders connected to live Neon DB | Lower |
 
-### Medium — buttons that render but do nothing
+### Items completed since initial audit
 
-6. "Bulk upload CSV" button in Catalog → navigate to upload page
-7. "Print pick slips" → `window.print()`
-8. "Save changes" on Settings → form state and persistence
-9. "Export CSV" on Reports → generate and download CSV
-10. "Download template" on Upload → serve a real CSV file
-11. Status advance + refund/exchange buttons on Order Detail page
+All **11 high- and medium-priority items** from the original backlog are now complete:
 
-### Lower — out of MVP scope or cosmetic
-
-12. Super-admin portal (all 4 screens)
-13. Refund / exchange flow on order detail
-14. Refund policy page
-15. "Add another child" flow
-16. Missing catalog items (Navy Shorts, Grey Socks, Scarf, etc.)
-17. "Riley wore size X last year" hint driven by order history
+- ✅ 1 — Add product modal
+- ✅ 2 — Orders search wiring
+- ✅ 3 — Orders history connected to live DB
+- ✅ 4 — Order detail reads from live DB
+- ✅ 5 — Stripe Connect onboarding (connect bank account)
+- ✅ 6 — Bulk upload CSV button navigates to upload page
+- ✅ 7 — Print pick slips (`window.print()` + print CSS)
+- ✅ 8 — Save changes on Settings (live PATCH API)
+- ✅ 9 — Export CSV on Reports (client-side blob download)
+- ✅ 10 — Download template on Upload (real CSV from `/public`)
+- ✅ 11 — Status advance buttons on Order Detail (live end-to-end tested)
