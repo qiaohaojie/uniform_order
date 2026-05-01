@@ -3,7 +3,7 @@ import { TENANTS, type TenantId } from "@/lib/data";
 import { SALES_DATA } from "@/lib/admin-data";
 import { AdminTopbar } from "@/components/admin-shell";
 
-export default async function AdminReportsPage({ params }: PageProps<"/admin/[tenant]/reports">) {
+export default async function AdminReportsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];

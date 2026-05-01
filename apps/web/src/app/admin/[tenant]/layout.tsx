@@ -5,7 +5,7 @@ import { AdminShell } from "@/components/admin-shell";
 export default async function AdminTenantLayout({
   params,
   children,
-}: LayoutProps<"/admin/[tenant]">) {
+}: { params: Promise<{ tenant: string }>; children: React.ReactNode }) {
   const { tenant } = await params;
   if (!(tenant in TENANTS)) notFound();
   return <AdminShell tenantId={tenant}>{children}</AdminShell>;
