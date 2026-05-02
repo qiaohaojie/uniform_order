@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TENANTS, type TenantId } from "@/lib/data";
+import { readStudentDetails } from "@/lib/order-store";
 import { Crest } from "@/components/crest";
 import { Chip } from "@/components/chip";
 
@@ -78,15 +79,32 @@ function StatusTrack({ accent, status }: { accent: string; status: string }) {
 export function OrdersListClient() {
   const [orders, setOrders] = useState<DbOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [parentEmail, setParentEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch orders for all known tenants
     const fetchAll = async () => {
+      const saved = readStudentDetails();
+      const email = saved?.email.trim();
+      setParentEmail(email || null);
+      if (!email) {
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const tenantIds = Object.keys(TENANTS);
         const results = await Promise.all(
           tenantIds.map((tid) =>
-            fetch(`/api/orders?tenantId=${tid}`).then((r) => r.json())
+            fetch(
+              `/api/orders?tenantId=${encodeURIComponent(tid)}&email=${encodeURIComponent(email)}`
+            ).then(async (r) => {
+              if (!r.ok) {
+                const data = await r.json().catch(() => null);
+                throw new Error(data?.error ?? "Failed to fetch orders.");
+              }
+              return r.json();
+            })
           )
         );
         const all: DbOrder[] = results.flat();
@@ -115,10 +133,12 @@ export function OrdersListClient() {
       <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
         <div className="text-[32px] mb-3">🛍️</div>
         <div className="font-serif text-[17px] font-semibold mb-1" style={{ color: "var(--color-ink)" }}>
-          No orders yet
+          {parentEmail ? "No orders yet" : "No checkout email found"}
         </div>
         <div className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
-          Your orders will appear here after you place them.
+          {parentEmail
+            ? "Your orders will appear here after you place them."
+            : "Place an order first, then your order history will appear here."}
         </div>
       </div>
     );

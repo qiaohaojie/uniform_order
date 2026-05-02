@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines } from "@/db";
-import { getOrdersByTenant } from "@/db/queries";
-import { nanoid } from "nanoid";
+import { getOrdersByTenant, getOrdersByTenantAndParentEmail } from "@/db/queries";
 
 // GET /api/orders?tenantId=nsbh&email=...
 export async function GET(req: NextRequest) {
@@ -14,12 +13,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rows = await getOrdersByTenant(tenantId);
-    // Optionally filter by parent email
-    const filtered = email
-      ? rows.filter((o) => o.parentEmail === email)
-      : rows;
-    return NextResponse.json(filtered);
+    const rows = email
+      ? await getOrdersByTenantAndParentEmail(tenantId, email)
+      : await getOrdersByTenant(tenantId);
+    return NextResponse.json(rows);
   } catch (err) {
     console.error("GET /api/orders error:", err);
     return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
@@ -46,6 +43,23 @@ export async function POST(req: NextRequest) {
       stripePaymentIntentId,
       lines,
     } = body;
+
+    if (
+      !tenantId ||
+      !parentName ||
+      !parentEmail ||
+      !parentMobile ||
+      !studentName ||
+      !studentYear ||
+      !studentRoll ||
+      typeof subtotal !== "number" ||
+      typeof gst !== "number" ||
+      typeof total !== "number" ||
+      !Array.isArray(lines) ||
+      lines.length === 0
+    ) {
+      return NextResponse.json({ error: "Missing required order fields" }, { status: 400 });
+    }
 
     // Generate order ID: TENANT-XXXXX
     const prefix = tenantId.toUpperCase();

@@ -33,6 +33,7 @@ export function SettingsClient({
   const [shopHours, setShopHours] = useState(tenant.shopHours ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [stripeLoading, setStripeLoading] = useState(true);
@@ -69,16 +70,23 @@ export function SettingsClient({
 
   const handleSave = async () => {
     setSaving(true);
+    setSaved(false);
+    setSaveError("");
     try {
-      await fetch(`/api/tenant/${tenantId}`, {
+      const res = await fetch(`/api/tenant/${tenantId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, shopEmail, address, shopHours }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to save settings.");
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       console.error("Failed to save settings:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save settings.");
     } finally {
       setSaving(false);
     }
@@ -189,6 +197,11 @@ export function SettingsClient({
               {saved && (
                 <span className="text-[12.5px] font-semibold" style={{ color: "var(--color-success)" }}>
                   ✓ Saved
+                </span>
+              )}
+              {saveError && (
+                <span className="text-[12.5px] font-semibold" style={{ color: "#B23A2A" }}>
+                  {saveError}
                 </span>
               )}
             </div>

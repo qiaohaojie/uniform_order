@@ -19,6 +19,7 @@ const nextLabel: Record<OrderStatus, string> = {
 
 export function OrderDetailActions({
   orderId,
+  tenantId,
   currentStatus,
   accent,
   parentEmail,
@@ -26,6 +27,7 @@ export function OrderDetailActions({
   studentName,
 }: {
   orderId: string;
+  tenantId: string;
   currentStatus: OrderStatus;
   accent: string;
   parentEmail: string;
@@ -34,20 +36,27 @@ export function OrderDetailActions({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const next = nextStatus[currentStatus];
 
   const handleAdvance = async () => {
     if (!next) return;
     setLoading(true);
+    setError("");
     try {
-      await fetch(`/api/orders/${orderId}`, {
+      const res = await fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
+        body: JSON.stringify({ status: next, tenantId }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to advance status.");
+      }
       router.refresh();
     } catch (err) {
       console.error("Failed to advance status:", err);
+      setError(err instanceof Error ? err.message : "Failed to advance status.");
     } finally {
       setLoading(false);
     }
@@ -63,6 +72,11 @@ export function OrderDetailActions({
 
   return (
     <>
+      {error && (
+        <span className="text-[12px] font-semibold" style={{ color: "#B23A2A" }}>
+          {error}
+        </span>
+      )}
       {currentStatus === "ready" && (
         <button
           onClick={handleNotify}

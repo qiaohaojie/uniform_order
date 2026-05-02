@@ -45,7 +45,7 @@ export default async function OrderDetailPage({
 
   // Fetch from live DB
   const order = await getOrderById(orderId);
-  if (!order) notFound();
+  if (!order || order.tenantId !== tid) notFound();
 
   const statusMap: Record<string, { tone: "info" | "warn" | "success" | "neutral"; label: string }> = {
     new: { tone: "info", label: "New" },
@@ -81,6 +81,7 @@ export default async function OrderDetailPage({
             <PrintButton label="Print pick slip" />
             <OrderDetailActions
               orderId={order.id}
+              tenantId={tid}
               currentStatus={order.status}
               accent={tenant.accent}
               parentEmail={order.parentEmail}

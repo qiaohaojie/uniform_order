@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById, updateOrderStatus } from "@/db/queries";
 
+const ORDER_STATUSES = ["new", "packing", "ready", "collected"] as const;
+type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+function isOrderStatus(status: unknown): status is OrderStatus {
+  return typeof status === "string" && ORDER_STATUSES.includes(status as OrderStatus);
+}
+
 // GET /api/orders/:orderId
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   const { orderId } = await params;
+  const tenantId = new URL(req.url).searchParams.get("tenantId");
   try {
     const order = await getOrderById(orderId);
-    if (!order) {
+    if (!order || (tenantId && order.tenantId !== tenantId)) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
     return NextResponse.json(order);
@@ -26,11 +34,19 @@ export async function PATCH(
 ) {
   const { orderId } = await params;
   try {
-    const { status } = await req.json();
-    if (!["new", "packing", "ready", "collected"].includes(status)) {
+    const { status, tenantId } = await req.json();
+    if (!isOrderStatus(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
-    await updateOrderStatus(orderId, status);
+    const order = await getOrderById(orderId);
+    if (!order || (tenantId && order.tenantId !== tenantId)) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const updated = await updateOrderStatus(orderId, status);
+    if (updated.length === 0) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PATCH /api/orders/[orderId] error:", err);

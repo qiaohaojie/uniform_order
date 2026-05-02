@@ -28,7 +28,10 @@ export async function PATCH(
   try {
     const body = await req.json();
     const { name, address, shopHours, shopEmail } = body;
-    await updateTenantSettings(tenantId, { name, address, shopHours, shopEmail });
+    const updated = await updateTenantSettings(tenantId, { name, address, shopHours, shopEmail });
+    if (updated.length === 0) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PATCH /api/tenant/[tenantId] error:", err);
