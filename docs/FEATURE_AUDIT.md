@@ -14,6 +14,7 @@
 | 30 Apr 2026 | Initial audit — baseline snapshot of implemented vs missing features |
 | 1 May 2026 | **High-priority items 1–5 completed:** Add product modal, orders search, live orders history, live order detail, Stripe Connect onboarding. Neon PostgreSQL backend added (Drizzle ORM, 6-table schema, seeded). 7 API routes created. Checkout now persists to DB. |
 | 2 May 2026 | **Medium-priority items 6–11 completed:** Bulk upload CSV navigation, print pick slips (`window.print()` + print CSS), save changes on settings (live PATCH API), export CSV on reports (client-side blob download), download template (real CSV file served from `/public`), status advance buttons on order detail (live end-to-end tested). |
+| 2 May 2026 | **Checkout/admin live-data completion:** Checkout now confirms Stripe Card Element payments before creating orders and stores the confirmed PaymentIntent ID. Dashboard recent orders, 30-day KPIs, top items, and reports now read tenant-scoped live Neon order data. |
 
 ---
 
@@ -28,7 +29,7 @@
 | Cart screen with GST breakdown | ✅ Done | GST shown as 1/11 of subtotal |
 | Checkout with student details form | ✅ Done | Name, year, roll class, parent name, mobile, email; validated before submit |
 | Delivery toggle (Pickup / Ship $9.50) | ✅ Done | |
-| Stripe payment UI (mock) | ✅ Done | Card number / expiry / CVC fields; `POST /api/stripe/payment-intent` creates real Stripe PaymentIntent in test mode |
+| Stripe payment UI (live) | ✅ Done | Live Stripe Card Element flow; `POST /api/stripe/payment-intent` + client confirmation before order creation; confirmed PaymentIntent ID is stored with the order |
 | Order placed confirmation | ✅ Done | Dynamic order ID from DB; delivery method and total shown |
 | Orders history page | ✅ Done | Fetches live orders from Neon DB via `GET /api/orders?email=...`; newly placed orders appear immediately |
 | "Add another child" button | ❌ Not wired | Button renders on school picker but has no `onClick` or navigation |
@@ -43,11 +44,11 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| Revenue / orders / avg-order / awaiting-pickup KPIs | ✅ Done | |
+| Revenue / orders / avg-order / awaiting-pickup KPIs | ✅ Done | 30-day KPI cards now computed from tenant-scoped live Neon orders |
 | Sparkline charts on KPI cards | ✅ Done | |
-| Top-selling items table with share bars | ✅ Done | |
+| Top-selling items table with share bars | ✅ Done | Built from tenant-scoped live Neon order-line aggregates |
 | Needs-attention alerts | ✅ Done | |
-| Recent orders feed | ⚠️ Static | Reads from `ADMIN_ORDERS` constant; does not yet reflect orders placed via the parent portal |
+| Recent orders feed | ✅ Done | Reads tenant-scoped live Neon orders; reflects parent-portal checkout activity |
 | "New product" button | ❌ Not wired | Renders but has no action |
 | "Export" button | ❌ Not wired | Renders but has no action |
 
@@ -97,9 +98,9 @@
 
 | Feature | Status | Notes |
 |---|---|---|
-| Monthly revenue bar chart | ✅ Done | |
-| Revenue by category breakdown | ✅ Done | |
-| GST / BAS-ready summary table | ✅ Done | Gross, GST collected, net ex-GST, Stripe fees, net payout |
+| Monthly revenue bar chart | ✅ Done | Uses tenant-scoped live Neon order totals by month |
+| Revenue by category breakdown | ✅ Done | Uses tenant-scoped live Neon order totals joined to catalog categories |
+| GST / BAS-ready summary table | ✅ Done | Monthly live totals from tenant-scoped Neon orders: gross, GST collected, net ex-GST, estimated Stripe fees, net payout |
 | "Export CSV" button | ✅ Done | `ExportCsvButton` client component generates a CSV blob in the browser from the GST summary rows and triggers a file download (e.g. `nsbh-gst-report.csv`) — no API round-trip |
 
 ### Settings
@@ -142,7 +143,7 @@ The prototype (`my_doc/UI_prototypes/project/superadmin.jsx`) defines four scree
 | Stripe payment intent API | ✅ Done | `POST /api/stripe/payment-intent` |
 | Stripe Connect API | ✅ Done | `GET /api/stripe/connect`, `POST /api/stripe/connect` |
 | Tenant settings API | ✅ Done | `PATCH /api/tenant/[tenantId]` |
-| Dashboard recent orders live | ❌ Not connected | Still reads from `ADMIN_ORDERS` static constant |
+| Dashboard recent orders live | ✅ Done | Dashboard and reports now read tenant-scoped Neon order data for recent orders, KPIs, top items, and monthly aggregates |
 | Missing catalog items | ❌ Not seeded | NSBH paper form items not yet in DB: Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie |
 
 ---
@@ -159,7 +160,6 @@ The prototype (`my_doc/UI_prototypes/project/superadmin.jsx`) defines four scree
 | 15 | "Add another child" flow on school picker | Lower |
 | 16 | Missing catalog items (Navy Shorts, Grey Socks, Scarf, etc.) | Lower |
 | 17 | "Riley wore size X last year" hint driven by live order history | Lower |
-| 18 | Dashboard recent orders connected to live Neon DB | Lower |
 
 ### Items completed since initial audit
 
