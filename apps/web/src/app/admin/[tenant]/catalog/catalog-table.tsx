@@ -63,6 +63,9 @@ function AddProductModal({
     if (variants.some((v) => !v.label.trim() || !v.price.trim())) {
       setError("All variant fields are required."); return;
     }
+    if (variants.some((v) => !Number.isFinite(Number(v.price)) || Number(v.price) < 0)) {
+      setError("Variant prices must be valid positive numbers."); return;
+    }
 
     setSaving(true);
     try {
@@ -279,6 +282,7 @@ export function CatalogTable({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [tableError, setTableError] = useState("");
 
   const filtered = items.filter((it) => {
     const matchCat = activeCategory === "All" || it.category === activeCategory;
@@ -297,31 +301,48 @@ export function CatalogTable({
   const handleSaveEdit = async (id: string) => {
     const trimmed = editingName.trim();
     if (!trimmed) return;
+    const previousItems = items;
+    setTableError("");
     // Optimistic update
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, name: trimmed } : it)));
     setEditingId(null);
     try {
-      await fetch(`/api/catalog/${id}`, {
+      const res = await fetch(`/api/catalog/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmed }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to update item.");
+      }
     } catch (err) {
       console.error("Failed to update item:", err);
+      setItems(previousItems);
+      setTableError(err instanceof Error ? err.message : "Failed to update item.");
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Remove this product from the catalog?")) return;
+    const previousItems = items;
+    setTableError("");
     setItems((prev) => prev.filter((it) => it.id !== id));
     try {
-      await fetch(`/api/catalog/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/catalog/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to delete item.");
+      }
     } catch (err) {
       console.error("Failed to delete item:", err);
+      setItems(previousItems);
+      setTableError(err instanceof Error ? err.message : "Failed to delete item.");
     }
   };
 
   const handleAdded = (newItem: DbItem) => {
+    setTableError("");
     setItems((prev) => [...prev, newItem]);
   };
 
@@ -334,6 +355,12 @@ export function CatalogTable({
           onClose={() => setShowAddModal(false)}
           onAdded={handleAdded}
         />
+      )}
+
+      {tableError && (
+        <div className="mb-3 text-[12.5px] px-3 py-2 rounded" style={{ background: "#FEF2F2", color: "#B91C1C" }}>
+          {tableError}
+        </div>
       )}
 
       {/* Filters */}

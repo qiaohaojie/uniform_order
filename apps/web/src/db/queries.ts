@@ -1,5 +1,5 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants } from "./index";
-import { eq, desc, ilike, or } from "drizzle-orm";
+import { and, eq, desc, or } from "drizzle-orm";
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
@@ -8,6 +8,14 @@ export async function getOrdersByTenant(tenantId: string) {
     .select()
     .from(orders)
     .where(eq(orders.tenantId, tenantId))
+    .orderBy(desc(orders.createdAt));
+}
+
+export async function getOrdersByTenantAndParentEmail(tenantId: string, email: string) {
+  return db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.tenantId, tenantId), eq(orders.parentEmail, email)))
     .orderBy(desc(orders.createdAt));
 }
 
@@ -42,7 +50,8 @@ export async function updateOrderStatus(
   return db
     .update(orders)
     .set({ status, updatedAt: new Date() })
-    .where(eq(orders.id, orderId));
+    .where(eq(orders.id, orderId))
+    .returning({ id: orders.id });
 }
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
@@ -53,6 +62,8 @@ export async function getCatalogByTenant(tenantId: string) {
     .from(catalogItems)
     .where(eq(catalogItems.tenantId, tenantId))
     .orderBy(catalogItems.sortOrder);
+
+  if (items.length === 0) return [];
 
   const variants = await db
     .select()
@@ -114,11 +125,15 @@ export async function updateCatalogItemName(itemId: string, name: string) {
   return db
     .update(catalogItems)
     .set({ name, updatedAt: new Date() })
-    .where(eq(catalogItems.id, itemId));
+    .where(eq(catalogItems.id, itemId))
+    .returning({ id: catalogItems.id });
 }
 
 export async function deleteCatalogItem(itemId: string) {
-  return db.delete(catalogItems).where(eq(catalogItems.id, itemId));
+  return db
+    .delete(catalogItems)
+    .where(eq(catalogItems.id, itemId))
+    .returning({ id: catalogItems.id });
 }
 
 // ─── Tenants ─────────────────────────────────────────────────────────────────
@@ -158,5 +173,6 @@ export async function updateTenantSettings(
   return db
     .update(tenants)
     .set({ ...data, updatedAt: new Date() })
-    .where(eq(tenants.id, tenantId));
+    .where(eq(tenants.id, tenantId))
+    .returning({ id: tenants.id });
 }

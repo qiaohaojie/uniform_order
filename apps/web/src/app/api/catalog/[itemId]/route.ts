@@ -9,10 +9,13 @@ export async function PATCH(
   const { itemId } = await params;
   try {
     const { name } = await req.json();
-    if (!name) {
+    if (typeof name !== "string" || !name.trim()) {
       return NextResponse.json({ error: "name required" }, { status: 400 });
     }
-    await updateCatalogItemName(itemId, name);
+    const updated = await updateCatalogItemName(itemId, name.trim());
+    if (updated.length === 0) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PATCH /api/catalog/[itemId] error:", err);
@@ -27,7 +30,10 @@ export async function DELETE(
 ) {
   const { itemId } = await params;
   try {
-    await deleteCatalogItem(itemId);
+    const deleted = await deleteCatalogItem(itemId);
+    if (deleted.length === 0) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/catalog/[itemId] error:", err);

@@ -31,6 +31,27 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (!Array.isArray(variants) || variants.length === 0) {
+      return NextResponse.json(
+        { error: "At least one variant is required" },
+        { status: 400 }
+      );
+    }
+    if (
+      variants.some(
+        (variant) =>
+          !variant ||
+          typeof variant.label !== "string" ||
+          !variant.label.trim() ||
+          !Number.isFinite(Number(variant.price)) ||
+          Number(variant.price) < 0
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Each variant requires a label and valid price" },
+        { status: 400 }
+      );
+    }
 
     // Generate a slug ID from the name
     const id = name
@@ -47,7 +68,10 @@ export async function POST(req: NextRequest) {
       name,
       category,
       description,
-      variants: variants ?? [],
+      variants: variants.map((variant) => ({
+        label: variant.label.trim(),
+        price: Number(variant.price),
+      })),
     });
 
     return NextResponse.json({ id: uniqueId }, { status: 201 });

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { getTenant, updateTenantStripe } from "@/db/queries";
 
 // POST /api/stripe/connect — start Stripe Connect onboarding
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripe();
     const { tenantId } = await req.json();
 
     if (!tenantId) {
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const stripe = getStripe();
     const tenant = await getTenant(tenantId);
     if (!tenant || !tenant.stripeAccountId) {
       return NextResponse.json({ connected: false });

@@ -148,11 +148,13 @@ export function OrdersBoard({
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await fetch(`/api/orders?tenantId=${tenantId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAllOrders(data);
+      const res = await fetch(`/api/orders?tenantId=${encodeURIComponent(tenantId)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to fetch orders.");
       }
+      const data = await res.json();
+      setAllOrders(data);
     } catch (err) {
       console.error("Failed to fetch orders:", err);
     } finally {
@@ -170,11 +172,15 @@ export function OrdersBoard({
       prev.map((o) => (o.id === id ? { ...o, status } : o))
     );
     try {
-      await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, tenantId }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to update order status.");
+      }
     } catch (err) {
       console.error("Failed to update order status:", err);
       fetchOrders(); // Revert on error
