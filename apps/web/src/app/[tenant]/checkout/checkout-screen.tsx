@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { loadStripe, type Stripe, type StripeCardElement, type StripeElements } from "@stripe/stripe-js";
 import type { Tenant } from "@/lib/data";
 import { cartTotal } from "@/lib/data";
 import { useCart } from "@/lib/cart-store";
@@ -13,21 +14,102 @@ import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/
 type Delivery = "pickup" | "ship";
 
 const YEAR_OPTIONS = ["Year 7", "Year 8", "Year 9", "Year 10", "Year 11", "Year 12"];
+const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+
+async function readApiError(res: Response, fallback: string) {
+  try {
+    const data = await res.json();
+    return typeof data.error === "string" ? data.error : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
   const router = useRouter();
   const { lines, clearCart } = useCart();
   const [delivery, setDelivery] = useState<Delivery>("pickup");
   const [paying, setPaying] = useState(false);
+  const [paymentReady, setPaymentReady] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const [paymentLocked, setPaymentLocked] = useState(false);
   const [student, setStudent] = useState<StudentDetails>({
     studentName: "", rollClass: "", year: "Year 9",
     parentName: "", mobile: "", email: "",
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof StudentDetails, string>>>({});
+  const cardMountRef = useRef<HTMLDivElement | null>(null);
+  const stripeRef = useRef<Stripe | null>(null);
+  const elementsRef = useRef<StripeElements | null>(null);
+  const cardRef = useRef<StripeCardElement | null>(null);
+  const paymentLockedRef = useRef(false);
 
   useEffect(() => {
     const saved = readStudentDetails();
     if (saved) setStudent(saved);
+  }, []);
+
+  useEffect(() => {
+    paymentLockedRef.current = paymentLocked;
+  }, [paymentLocked]);
+
+  useEffect(() => {
+    if (!stripePromise || !cardMountRef.current || cardRef.current) return;
+
+    let cancelled = false;
+
+    stripePromise.then((stripe) => {
+      if (cancelled) return;
+      if (!stripe) {
+        setPaymentReady(false);
+        setPaymentError("Payment form could not load. Please refresh the page or contact the shop.");
+        return;
+      }
+      if (!cardMountRef.current) return;
+
+      const elements = stripe.elements();
+      const card = elements.create("card", {
+        hidePostalCode: true,
+        style: {
+          base: {
+            color: "#1B1B1B",
+            fontFamily: "Inter, system-ui, sans-serif",
+            fontSize: "13px",
+            "::placeholder": { color: "#8A8274" },
+          },
+          invalid: { color: "#B23A2A" },
+        },
+      });
+
+      card.on("ready", () => {
+        if (paymentLockedRef.current) return;
+        setPaymentReady(true);
+        setPaymentError("");
+      });
+      card.on("change", (event) => {
+        if (paymentLockedRef.current) return;
+        setPaymentError(event.error?.message ?? "");
+      });
+      card.mount(cardMountRef.current);
+
+      stripeRef.current = stripe;
+      elementsRef.current = elements;
+      cardRef.current = card;
+    }).catch(() => {
+      if (cancelled) return;
+      setPaymentReady(false);
+      setPaymentError("Payment form could not load. Please refresh the page or contact the shop.");
+    });
+
+    return () => {
+      cancelled = true;
+      cardRef.current?.destroy();
+      cardRef.current = null;
+      elementsRef.current = null;
+      stripeRef.current = null;
+      setPaymentReady(false);
+    };
   }, []);
 
   const subtotal = cartTotal(lines);
@@ -53,49 +135,128 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
   };
 
   const onPay = async () => {
+    if (paymentLocked) return;
+    setPaymentError("");
     if (!validate()) return;
+    if (lines.length === 0) {
+      setPaymentError("Your cart is empty.");
+      return;
+    }
+    if (!stripePublishableKey || !stripePromise) {
+      setPaymentError("Payment is unavailable because Stripe is not configured.");
+      return;
+    }
+    if (!stripeRef.current || !cardRef.current || !paymentReady) {
+      setPaymentError("Payment form is still loading. Please try again in a moment.");
+      return;
+    }
+
     writeStudentDetails(student);
     setPaying(true);
+    let confirmedPaymentIntentId: string | null = null;
     try {
-      const res = await fetch("/api/orders", {
+      const paymentIntentRes = await fetch("/api/stripe/payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tenantId: tenant.id,
-          parentName: student.parentName,
-          parentEmail: student.email,
-          parentMobile: student.mobile,
-          studentName: student.studentName,
-          studentYear: student.year,
-          studentRoll: student.rollClass,
-          delivery,
-          deliveryFee: delivery === "ship" ? 9.5 : 0,
-          subtotal,
-          gst,
-          total,
-          stripePaymentIntentId: null,
-          lines: lines.map((l) => ({
-            itemId: l.itemId,
-            itemName: l.name,
-            variantLabel: l.variantLabel,
-            qty: l.qty,
-            unitPrice: l.price,
-            lineTotal: l.price * l.qty,
-          })),
+          amount: total,
+          currency: "aud",
+          metadata: {
+            parentEmail: student.email,
+            studentName: student.studentName,
+            studentYear: student.year,
+            delivery,
+          },
         }),
+      });
+
+      if (!paymentIntentRes.ok) {
+        setPaymentError(await readApiError(paymentIntentRes, "Failed to start payment. Please try again."));
+        setPaying(false);
+        return;
+      }
+
+      const { clientSecret } = await paymentIntentRes.json();
+      if (typeof clientSecret !== "string" || !clientSecret) {
+        setPaymentError("Payment could not be started. Please contact the shop.");
+        setPaying(false);
+        return;
+      }
+
+      const { error, paymentIntent } = await stripeRef.current.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardRef.current,
+          billing_details: {
+            name: student.parentName,
+            email: student.email,
+            phone: student.mobile,
+          },
+        },
+      });
+
+      if (error) {
+        setPaymentError(error.message ?? "Payment failed. Please check your card details and try again.");
+        setPaying(false);
+        return;
+      }
+
+      if (!paymentIntent || paymentIntent.status !== "succeeded") {
+        setPaymentError("Payment was not completed. Please check your card details and try again.");
+        setPaying(false);
+        return;
+      }
+      confirmedPaymentIntentId = paymentIntent.id;
+
+      const orderPayload = {
+        tenantId: tenant.id,
+        parentName: student.parentName,
+        parentEmail: student.email,
+        parentMobile: student.mobile,
+        studentName: student.studentName,
+        studentYear: student.year,
+        studentRoll: student.rollClass,
+        delivery,
+        deliveryFee: delivery === "ship" ? 9.5 : 0,
+        subtotal,
+        gst,
+        total,
+        stripePaymentIntentId: paymentIntent.id,
+        lines: lines.map((l) => ({
+          itemId: l.itemId,
+          itemName: l.name,
+          variantLabel: l.variantLabel,
+          qty: l.qty,
+          unitPrice: l.price,
+          lineTotal: l.price * l.qty,
+        })),
+      };
+
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderPayload),
       });
       if (res.ok) {
         const { orderId } = await res.json();
         clearCart();
         router.push(`/${tenant.id}/order/placed?total=${total.toFixed(2)}&delivery=${delivery}&orderId=${orderId}`);
       } else {
-        const data = await res.json();
-        alert(data.error ?? "Failed to place order. Please try again.");
+        const message = await readApiError(res, "Failed to place order.");
+        paymentLockedRef.current = true;
+        setPaymentLocked(true);
+        setPaymentError(`${message} Your payment was confirmed. Do not retry payment. Contact the shop with Stripe reference ${paymentIntent.id}.`);
         setPaying(false);
       }
     } catch (err) {
       console.error("Order submission error:", err);
-      alert("Network error. Please try again.");
+      if (confirmedPaymentIntentId) {
+        paymentLockedRef.current = true;
+        setPaymentLocked(true);
+        setPaymentError(`Network error while placing the order. Your payment was confirmed. Do not retry payment. Contact the shop with Stripe reference ${confirmedPaymentIntentId}.`);
+      } else {
+        setPaymentError("Network error. Please try again.");
+      }
       setPaying(false);
     }
   };
@@ -212,22 +373,25 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
               Secure payment · PCI-DSS
             </span>
           </div>
-          <div
-            className="h-11 rounded-md border px-3 flex items-center justify-between mb-2 text-[13px]"
-            style={{ borderColor: "var(--color-rule)" }}
-          >
-            <span className="tnum tracking-[1px]" style={{ color: "var(--color-ink)" }}>5240 1468 0020 4745</span>
-            <span className="flex gap-1">
-              <span className="w-6 h-3.5 rounded-[1px] opacity-85" style={{ background: "#EB001B" }} />
-              <span className="w-6 h-3.5 rounded-[1px] opacity-85 -ml-2" style={{ background: "#F79E1B" }} />
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="h-11 rounded-md border px-3 flex items-center text-[13px] tnum" style={{ borderColor: "var(--color-rule)" }}>09 / 29</div>
-            <div className="h-11 rounded-md border px-3 flex items-center text-[13px] tnum" style={{ borderColor: "var(--color-rule)" }}>•••</div>
-          </div>
+          {!stripePublishableKey ? (
+            <div className="rounded-md border px-3 py-2.5 text-[12px]" style={{ borderColor: "#B23A2A", color: "#B23A2A", background: "#FFF8F6" }}>
+              Payment is unavailable because Stripe is not configured.
+            </div>
+          ) : (
+            <div
+              className="min-h-11 rounded-md border px-3 py-3 text-[13px]"
+              style={{ borderColor: paymentError ? "#B23A2A" : "var(--color-rule)" }}
+            >
+              <div ref={cardMountRef} />
+            </div>
+          )}
+          {paymentError && (
+            <div className="mt-2 text-[11px]" style={{ color: "#B23A2A" }}>
+              {paymentError}
+            </div>
+          )}
           <div className="mt-2.5 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-            Saved as <b style={{ color: "var(--color-ink)" }}>•• 4745</b> · Mastercard
+            Card details are encrypted and processed by Stripe.
           </div>
         </div>
 
@@ -257,11 +421,11 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
           size="lg"
           fullWidth
           accent={tenant.accent}
-          disabled={paying || lines.length === 0}
+          disabled={paying || paymentLocked || lines.length === 0 || !stripePublishableKey || !paymentReady}
           onClick={onPay}
           leading={<LockIcon size={14} />}
         >
-          {paying ? "Processing…" : `Pay $${total.toFixed(2)} securely`}
+          {!stripePublishableKey ? "Payment unavailable" : paymentLocked ? "Payment confirmed" : paying ? "Processing…" : `Pay $${total.toFixed(2)} securely`}
         </Btn>
         <div className="text-center text-[10.5px] mt-2" style={{ color: "var(--color-ink-dim)" }}>
           By placing this order you agree to {tenant.short}&apos;s refund policy.
