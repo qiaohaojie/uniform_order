@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
 import type { Tenant } from "@/lib/data";
-import type { SalesData, AdminOrder } from "@/lib/admin-data";
+import type { LiveDashboardData, LiveOrderStatus } from "@/db/queries";
 import { Chip } from "@/components/chip";
 import { Spark } from "@/components/spark";
 
-function StatusBadge({ status }: { status: AdminOrder["status"] }) {
-  const map: Record<AdminOrder["status"], { tone: "warn" | "info" | "success" | "neutral"; label: string }> = {
+function StatusBadge({ status }: { status: LiveOrderStatus }) {
+  const map: Record<LiveOrderStatus, { tone: "warn" | "info" | "success" | "neutral"; label: string }> = {
     new: { tone: "info", label: "New" },
     packing: { tone: "warn", label: "Packing" },
     ready: { tone: "success", label: "Ready" },
@@ -18,18 +18,27 @@ function StatusBadge({ status }: { status: AdminOrder["status"] }) {
 
 export function AdminDashboardClient({
   tenant,
-  sales,
-  recentOrders,
+  dashboard,
 }: {
   tenant: Tenant;
-  sales: SalesData;
-  recentOrders: AdminOrder[];
+  dashboard: LiveDashboardData;
 }) {
   const stats = [
-    { label: "Revenue · 30d", value: `$${sales.revenue.toLocaleString()}`, delta: "+12.4%", tone: "pos" as const, spark: sales.spark },
-    { label: "Orders · 30d", value: String(sales.orders), delta: "+8.1%", tone: "pos" as const },
-    { label: "Avg order", value: `$${sales.avgOrder.toFixed(2)}`, delta: "+1.2%", tone: "pos" as const },
-    { label: "Awaiting pickup", value: String(sales.awaitingPickup), delta: "3 over 7d", tone: "warn" as const },
+    {
+      label: "Revenue · 30d",
+      value: `$${dashboard.revenue.toLocaleString()}`,
+      delta: "Live orders",
+      tone: "pos" as const,
+      spark: dashboard.spark,
+    },
+    { label: "Orders · 30d", value: String(dashboard.orders), delta: "Live orders", tone: "pos" as const },
+    { label: "Avg order", value: `$${dashboard.avgOrder.toFixed(2)}`, delta: "Last 30 days", tone: "pos" as const },
+    {
+      label: "Awaiting pickup",
+      value: String(dashboard.awaitingPickup),
+      delta: `${dashboard.readyOverSevenDays} over 7d`,
+      tone: "warn" as const,
+    },
   ];
 
   return (
@@ -110,13 +119,14 @@ export function AdminDashboardClient({
               </tr>
             </thead>
             <tbody>
-              {sales.topItems.map((r, i) => {
-                const pct = (r.revenue / sales.revenue) * 100;
+              {dashboard.topItems.map((r, i) => {
+                const pct = dashboard.revenue > 0 ? (r.revenue / dashboard.revenue) * 100 : 0;
+                const widthPct = Math.min(100, Math.max(0, pct));
                 return (
                   <tr
                     key={r.name}
                     className="border-b"
-                    style={{ borderColor: i < sales.topItems.length - 1 ? "var(--color-rule)" : "transparent" }}
+                    style={{ borderColor: i < dashboard.topItems.length - 1 ? "var(--color-rule)" : "transparent" }}
                   >
                     <td className="py-3 font-medium" style={{ color: "var(--color-ink)" }}>
                       {r.name}
@@ -135,20 +145,27 @@ export function AdminDashboardClient({
                         >
                           <div
                             className="h-1.5 rounded-full"
-                            style={{ width: `${pct}%`, background: tenant.accent }}
+                            style={{ width: `${widthPct}%`, background: tenant.accent }}
                           />
                         </div>
                         <span
                           className="text-[11px] w-8 text-right"
                           style={{ color: "var(--color-ink-dim)" }}
                         >
-                          {pct.toFixed(0)}%
+                          {widthPct.toFixed(0)}%
                         </span>
                       </div>
                     </td>
                   </tr>
                 );
               })}
+              {dashboard.topItems.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-4 text-center text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
+                    No live order lines yet.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -173,7 +190,7 @@ export function AdminDashboardClient({
                   <circle cx="12" cy="17" r="0.6" fill="#7A5418" stroke="none" />
                 </svg>
                 <div style={{ color: "var(--color-ink)" }}>
-                  <b>3 orders</b> ready for pickup over 7 days.{" "}
+                  <b>{dashboard.readyOverSevenDays} orders</b> ready for pickup over 7 days.{" "}
                   <Link href={`/admin/${tenant.id}/orders`} className="font-semibold underline" style={{ color: tenant.accent }}>
                     View orders →
                   </Link>
@@ -202,7 +219,7 @@ export function AdminDashboardClient({
                   <path d="M5 13 L10 18 L20 6" />
                 </svg>
                 <div style={{ color: "var(--color-ink)" }}>
-                  Stripe payouts on track. Next deposit <b>Wed 29 Apr · ${(sales.revenue * 0.26).toLocaleString()}</b>.
+                  Stripe payout estimate from live orders: <b>${(dashboard.revenue * 0.26).toLocaleString()}</b>.
                 </div>
               </div>
             </div>
@@ -226,11 +243,13 @@ export function AdminDashboardClient({
               </Link>
             </div>
             <div className="flex flex-col">
-              {recentOrders.map((o, i) => (
+              {dashboard.recentOrders.map((o, i) => (
                 <div
                   key={o.id}
                   className="flex items-center gap-3 py-2.5"
-                  style={{ borderBottom: i < recentOrders.length - 1 ? "1px solid var(--color-rule)" : "none" }}
+                  style={{
+                    borderBottom: i < dashboard.recentOrders.length - 1 ? "1px solid var(--color-rule)" : "none",
+                  }}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] font-semibold truncate" style={{ color: "var(--color-ink)" }}>
@@ -248,6 +267,11 @@ export function AdminDashboardClient({
                   </div>
                 </div>
               ))}
+              {dashboard.recentOrders.length === 0 && (
+                <div className="py-4 text-[12px] text-center" style={{ color: "var(--color-ink-dim)" }}>
+                  No live orders yet.
+                </div>
+              )}
             </div>
           </div>
         </div>

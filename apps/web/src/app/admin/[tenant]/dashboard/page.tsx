@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { TENANTS, type TenantId } from "@/lib/data";
-import { SALES_DATA, getOrdersByTenant } from "@/lib/admin-data";
+import { getLiveDashboardData } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { AdminDashboardClient } from "./dashboard-client";
 
@@ -8,9 +8,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
   const tenant = TENANTS[tid as TenantId];
-  const sales = SALES_DATA[tid as TenantId];
-  const orders = getOrdersByTenant(tid as TenantId);
-  const recentOrders = orders.slice(0, 5);
+  const dashboard = await getLiveDashboardData(tid);
 
   return (
     <>
@@ -42,7 +40,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         }
       />
-      <AdminDashboardClient tenant={tenant} sales={sales} recentOrders={recentOrders} />
+      <AdminDashboardClient tenant={tenant} dashboard={dashboard} />
     </>
   );
 }
