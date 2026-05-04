@@ -134,7 +134,7 @@ The prototype (`my_doc/UI_prototypes/project/superadmin.jsx`) defines four scree
 | Item | Status | Notes |
 |---|---|---|
 | Neon PostgreSQL database | ✅ Done | Serverless Postgres on `aws-ap-southeast-2`; project `cool-wind-76972110` |
-| Drizzle ORM schema | ✅ Done | 6 tables: `tenants`, `catalog_items`, `catalog_variants`, `orders`, `order_lines`, `stripe_accounts` |
+| Drizzle ORM schema | ✅ Done | 5 tables: `tenants`, `catalog_items`, `catalog_variants`, `orders`, `order_lines` — Stripe Connect fields (`stripe_account_id`, `stripe_payouts_enabled`, `stripe_charges_enabled`) are columns on `tenants`, not a separate table |
 | Seed data | ✅ Done | 2 tenants (NSBH, RGHS), 19 catalog items, 30 variants, 3 sample orders |
 | Neon Auth integration | ✅ Done | `@neondatabase/auth` configured; `GET/POST /api/auth/[...path]` route handler |
 | Stripe SDK | ✅ Done | `stripe` v17 installed; test-mode keys configured in `.env.local` |
