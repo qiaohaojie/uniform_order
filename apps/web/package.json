@@ -16,6 +16,8 @@
     "@neondatabase/auth": "0.3.0-beta",
     "@neondatabase/serverless": "^1.1.0",
     "@number-flow/react": "^0.6.0",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.8",
     "@stripe/connect-js": "^3.3.39",
     "@stripe/stripe-js": "^9.4.0",
     "drizzle-orm": "^0.45.2",
