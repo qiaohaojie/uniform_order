@@ -3,7 +3,7 @@
 
 import type { TenantId, CartLine } from "./data";
 
-export type OrderStatus = "new" | "packing" | "ready" | "collected";
+export type OrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected";
 export type DeliveryType = "pickup" | "ship";
 
 export interface AdminOrder {

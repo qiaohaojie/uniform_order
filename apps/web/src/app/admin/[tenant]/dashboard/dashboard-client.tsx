@@ -7,6 +7,7 @@ import { Spark } from "@/components/spark";
 
 function StatusBadge({ status }: { status: LiveOrderStatus }) {
   const map: Record<LiveOrderStatus, { tone: "warn" | "info" | "success" | "neutral"; label: string }> = {
+    pending_payment: { tone: "neutral", label: "Pending Payment" },
     new: { tone: "info", label: "New" },
     packing: { tone: "warn", label: "Packing" },
     ready: { tone: "success", label: "Ready" },
