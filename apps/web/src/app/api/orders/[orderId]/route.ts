@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById, getTenant, updateOrderStatus } from "@/db/queries";
+import { db, orders } from "@/db";
+import { and, eq, ne } from "drizzle-orm";
+import { sendOrderReadyEmail } from "@/lib/email";
 import {
   ensureParentEmailAccess,
   ensureTenantAccess,
@@ -79,6 +82,24 @@ export async function PATCH(
     }
     const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
     if (tenantAccessResponse) return tenantAccessResponse;
+
+    if (status === "ready") {
+      const flipped = await db
+        .update(orders)
+        .set({ status: "ready", updatedAt: new Date() })
+        .where(and(eq(orders.id, orderId), ne(orders.status, "ready")))
+        .returning({ id: orders.id });
+
+      if (flipped.length === 1) {
+        try {
+          await sendOrderReadyEmail(orderId);
+        } catch (err) {
+          console.error("Ready email failed for order", orderId, err);
+          // Do not fail the PATCH — admin update succeeded, email is best-effort
+        }
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     const updated = await updateOrderStatus(orderId, status);
     if (updated.length === 0) {
