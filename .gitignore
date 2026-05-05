@@ -32,3 +32,6 @@ my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
 
 # git worktrees
 .worktrees/
+
+# superpowers runtime state
+.superpowers/
