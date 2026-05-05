@@ -174,7 +174,6 @@ export async function POST(req: NextRequest) {
           stripePaymentIntentId: normalizedStripePaymentIntentId,
           stripeRef: normalizedStripePaymentIntentId,
           refundPolicyAcceptedAt: new Date(),
-          status: "new",
           userId: authResult.user.id,
         });
 

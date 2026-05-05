@@ -6,6 +6,20 @@ import { OrderConfirmationEmail } from "./templates/OrderConfirmation";
 import { OrderReadyEmail } from "./templates/OrderReady";
 import React from "react";
 
+type EmailStamp = { sentAt: string; messageId: string };
+type EmailsSent = {
+  confirmation?: EmailStamp;
+  ready?: EmailStamp;
+};
+
+function requireAppUrl(): string {
+  const url = process.env.NEXT_PUBLIC_APP_URL;
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_APP_URL is required to render email links");
+  }
+  return url;
+}
+
 /**
  * Helper to fetch order with its line items and tenant information.
  */
@@ -48,7 +62,7 @@ export async function sendOrderConfirmationEmail(orderId: string) {
   const { order, tenant, lines } = data;
 
   // Check if already sent (Idempotency)
-  const emailsSent = (order.emailsSent as Record<string, any>) || {};
+  const emailsSent = (order.emailsSent as EmailsSent) ?? {};
   if (emailsSent.confirmation) {
     return;
   }
@@ -65,42 +79,39 @@ export async function sendOrderConfirmationEmail(orderId: string) {
       variantLabel: line.variantLabel,
       qty: line.qty,
       unitPrice: Number(line.unitPrice),
+      lineTotal: Number(line.lineTotal),
     })),
     totalAmount: Number(order.total),
-    refundPolicyUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/${tenant.id}/refund-policy`,
+    refundPolicyUrl: `${requireAppUrl()}/${tenant.id}/refund-policy`,
   };
 
-  try {
-    const html = await render(React.createElement(OrderConfirmationEmail, props));
-    const text = await render(React.createElement(OrderConfirmationEmail, props), {
-      plainText: true,
-    });
+  const html = await render(React.createElement(OrderConfirmationEmail, props));
+  const text = await render(React.createElement(OrderConfirmationEmail, props), {
+    plainText: true,
+  });
 
-    const result = await sendEmail({
-      to: order.parentEmail,
-      subject: `Order Confirmation #${order.id} - ${tenant.name}`,
-      html,
-      text,
-    });
+  const result = await sendEmail({
+    to: order.parentEmail,
+    subject: `Order Confirmation #${order.id} - ${tenant.name}`,
+    html,
+    text,
+  });
 
-    if (result?.id) {
-      const stamp = {
-        sentAt: new Date().toISOString(),
-        messageId: result.id,
-      };
+  if (result?.id) {
+    const stamp = {
+      sentAt: new Date().toISOString(),
+      messageId: result.id,
+    };
 
-      await db
-        .update(orders)
-        .set({
-          emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{confirmation}', ${JSON.stringify(
-            stamp
-          )}::jsonb)`,
-          updatedAt: new Date(),
-        })
-        .where(eq(orders.id, orderId));
-    }
-  } catch (err) {
-    console.error(`[email] Failed to send confirmation email for ${orderId}:`, err);
+    await db
+      .update(orders)
+      .set({
+        emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{confirmation}', ${JSON.stringify(
+          stamp
+        )}::jsonb)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, orderId));
   }
 }
 
@@ -118,7 +129,7 @@ export async function sendOrderReadyEmail(orderId: string) {
   const { order, tenant } = data;
 
   // Check if already sent (Idempotency)
-  const emailsSent = (order.emailsSent as Record<string, any>) || {};
+  const emailsSent = (order.emailsSent as EmailsSent) ?? {};
   if (emailsSent.ready) {
     return;
   }
@@ -133,36 +144,32 @@ export async function sendOrderReadyEmail(orderId: string) {
     shopHours: tenant.shopHours || "Mon-Fri, 8:30am - 4:00pm",
   };
 
-  try {
-    const html = await render(React.createElement(OrderReadyEmail, props));
-    const text = await render(React.createElement(OrderReadyEmail, props), {
-      plainText: true,
-    });
+  const html = await render(React.createElement(OrderReadyEmail, props));
+  const text = await render(React.createElement(OrderReadyEmail, props), {
+    plainText: true,
+  });
 
-    const result = await sendEmail({
-      to: order.parentEmail,
-      subject: `Your order #${order.id} is ready for pickup!`,
-      html,
-      text,
-    });
+  const result = await sendEmail({
+    to: order.parentEmail,
+    subject: `Your order #${order.id} is ready for pickup!`,
+    html,
+    text,
+  });
 
-    if (result?.id) {
-      const stamp = {
-        sentAt: new Date().toISOString(),
-        messageId: result.id,
-      };
+  if (result?.id) {
+    const stamp = {
+      sentAt: new Date().toISOString(),
+      messageId: result.id,
+    };
 
-      await db
-        .update(orders)
-        .set({
-          emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{ready}', ${JSON.stringify(
-            stamp
-          )}::jsonb)`,
-          updatedAt: new Date(),
-        })
-        .where(eq(orders.id, orderId));
-    }
-  } catch (err) {
-    console.error(`[email] Failed to send ready email for ${orderId}:`, err);
+    await db
+      .update(orders)
+      .set({
+        emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{ready}', ${JSON.stringify(
+          stamp
+        )}::jsonb)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, orderId));
   }
 }
