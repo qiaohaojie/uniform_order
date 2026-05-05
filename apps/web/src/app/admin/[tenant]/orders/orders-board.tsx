@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { Tenant } from "@/lib/data";
 import { Chip } from "@/components/chip";
 
-type OrderStatus = "new" | "packing" | "ready" | "collected";
+type OrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected";
 
 interface DbOrder {
   id: string;
@@ -42,12 +42,14 @@ function OrderCard({
   onAdvance: (id: string, status: OrderStatus) => void;
 }) {
   const nextStatus: Record<OrderStatus, OrderStatus | null> = {
+    pending_payment: null,
     new: "packing",
     packing: "ready",
     ready: "collected",
     collected: null,
   };
   const nextLabel: Record<OrderStatus, string> = {
+    pending_payment: "",
     new: "Start packing",
     packing: "Mark ready",
     ready: "Collect",

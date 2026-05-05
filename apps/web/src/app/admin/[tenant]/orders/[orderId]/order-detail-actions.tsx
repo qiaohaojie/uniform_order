@@ -2,15 +2,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type OrderStatus = "new" | "packing" | "ready" | "collected";
+type OrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected";
 
 const nextStatus: Record<OrderStatus, OrderStatus | null> = {
+  pending_payment: null,
   new: "packing",
   packing: "ready",
   ready: "collected",
   collected: null,
 };
 const nextLabel: Record<OrderStatus, string> = {
+  pending_payment: "",
   new: "Start packing",
   packing: "Mark ready",
   ready: "Mark collected",

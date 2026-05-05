@@ -1,7 +1,7 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants } from "./index";
 import { and, eq, desc, or, gte, inArray, lt, sql } from "drizzle-orm";
 
-export type LiveOrderStatus = "new" | "packing" | "ready" | "collected";
+export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected";
 
 export type LiveRecentOrder = {
   id: string;
