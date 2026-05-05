@@ -10,7 +10,7 @@ import {
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
 
-const ORDER_STATUSES = ["new", "packing", "ready", "collected"] as const;
+const ORDER_STATUSES = ["pending_payment", "new", "packing", "ready", "collected"] as const;
 type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 function isOrderStatus(status: unknown): status is OrderStatus {
