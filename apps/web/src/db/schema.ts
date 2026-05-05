@@ -9,6 +9,7 @@ import {
   jsonb,
   uuid,
   pgEnum,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ─── Neon Auth schema reference ─────────────────────────────────────────────
@@ -83,38 +84,49 @@ export const catalogVariants = pgTable("catalog_variants", {
 });
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
-export const orders = pgTable("orders", {
-  id: text("id").primaryKey(), // e.g. "IMHS-04298"
-  tenantId: text("tenant_id")
-    .notNull()
-    .references(() => tenants.id),
-  // Parent details
-  parentName: text("parent_name").notNull(),
-  parentEmail: text("parent_email").notNull(),
-  parentMobile: text("parent_mobile").notNull(),
-  // Student details
-  studentName: text("student_name").notNull(),
-  studentYear: text("student_year").notNull(),
-  studentRoll: text("student_roll").notNull(),
-  // Delivery
-  delivery: deliveryMethodEnum("delivery").notNull().default("pickup"),
-  deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 })
-    .notNull()
-    .default("0"),
-  // Financials
-  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
-  gst: numeric("gst", { precision: 10, scale: 2 }).notNull(),
-  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
-  // Stripe
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
-  stripeRef: text("stripe_ref"),
-  // Status
-  status: orderStatusEnum("status").notNull().default("new"),
-  // Auth link (optional — if parent was signed in)
-  userId: text("user_id").references(() => neonAuthUsers.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export const orders = pgTable(
+  "orders",
+  {
+    id: text("id").primaryKey(), // e.g. "IMHS-04298"
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    // Parent details
+    parentName: text("parent_name").notNull(),
+    parentEmail: text("parent_email").notNull(),
+    parentMobile: text("parent_mobile").notNull(),
+    // Student details
+    studentName: text("student_name").notNull(),
+    studentYear: text("student_year").notNull(),
+    studentRoll: text("student_roll").notNull(),
+    // Delivery
+    delivery: deliveryMethodEnum("delivery").notNull().default("pickup"),
+    deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 })
+      .notNull()
+      .default("0"),
+    // Financials
+    subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
+    gst: numeric("gst", { precision: 10, scale: 2 }).notNull(),
+    total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+    // Stripe
+    // NOTE: unique index on a nullable column — multiple NULLs are allowed in PostgreSQL
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    stripeRef: text("stripe_ref"),
+    // Legal
+    refundPolicyAcceptedAt: timestamp("refund_policy_accepted_at"),
+    // Status
+    status: orderStatusEnum("status").notNull().default("new"),
+    // Auth link (optional — if parent was signed in)
+    userId: text("user_id").references(() => neonAuthUsers.id),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    stripePaymentIntentIdUnique: uniqueIndex("orders_stripe_payment_intent_id_unique").on(
+      table.stripePaymentIntentId
+    ),
+  })
+);
 
 // ─── Order line items ─────────────────────────────────────────────────────────
 export const orderLines = pgTable("order_lines", {

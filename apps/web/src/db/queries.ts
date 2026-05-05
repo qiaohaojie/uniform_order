@@ -1,5 +1,5 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants } from "./index";
-import { and, eq, desc, or, gte, inArray, lt } from "drizzle-orm";
+import { and, eq, desc, or, gte, inArray, lt, sql } from "drizzle-orm";
 
 export type LiveOrderStatus = "new" | "packing" | "ready" | "collected";
 
@@ -188,7 +188,7 @@ export async function getOrdersByTenantAndParentEmail(tenantId: string, email: s
   return db
     .select()
     .from(orders)
-    .where(and(eq(orders.tenantId, tenantId), eq(orders.parentEmail, email)))
+    .where(and(eq(orders.tenantId, tenantId), sql`lower(${orders.parentEmail}) = lower(${email})`))
     .orderBy(desc(orders.createdAt));
 }
 
@@ -414,7 +414,7 @@ export async function getOrdersByParentEmail(email: string) {
   return db
     .select()
     .from(orders)
-    .where(eq(orders.parentEmail, email))
+    .where(sql`lower(${orders.parentEmail}) = lower(${email})`)
     .orderBy(desc(orders.createdAt));
 }
 

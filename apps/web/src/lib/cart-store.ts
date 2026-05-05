@@ -2,19 +2,18 @@
 
 import { useEffect, useState } from "react";
 import type { CartLine } from "./data";
-import { SAMPLE_CART } from "./data";
 
 const STORAGE_KEY = "uo:cart:v1";
 
 function read(): CartLine[] {
-  if (typeof window === "undefined") return SAMPLE_CART;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return SAMPLE_CART;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as CartLine[]) : SAMPLE_CART;
+    return Array.isArray(parsed) ? (parsed as CartLine[]) : [];
   } catch {
-    return SAMPLE_CART;
+    return [];
   }
 }
 
@@ -36,7 +35,7 @@ export function useCart(): {
   reset: () => void;
   clearCart: () => void;
 } {
-  const [lines, setLines] = useState<CartLine[]>(SAMPLE_CART);
+  const [lines, setLines] = useState<CartLine[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -70,7 +69,7 @@ export function useCart(): {
         }
         return [...prev, line];
       }),
-    reset: () => setLines(SAMPLE_CART),
+    reset: () => setLines([]),
     clearCart: () => setLines([]),
   };
 }

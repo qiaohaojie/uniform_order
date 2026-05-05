@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCatalogByTenant, addCatalogItem } from "@/db/queries";
+import { getCatalogByTenant, addCatalogItem, getTenant } from "@/db/queries";
+import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
 
 // GET /api/catalog?tenantId=imhs
 export async function GET(req: NextRequest) {
@@ -31,6 +32,17 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+
+    const tenant = await getTenant(tenantId);
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (tenantAccessResponse) return tenantAccessResponse;
+
     if (!Array.isArray(variants) || variants.length === 0) {
       return NextResponse.json(
         { error: "At least one variant is required" },

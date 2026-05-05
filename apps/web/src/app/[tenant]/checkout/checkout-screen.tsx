@@ -34,6 +34,7 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
   const [paymentReady, setPaymentReady] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentLocked, setPaymentLocked] = useState(false);
+  const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [student, setStudent] = useState<StudentDetails>({
     studentName: "", rollClass: "", year: "Year 9",
     parentName: "", mobile: "", email: "",
@@ -150,6 +151,10 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
       setPaymentError("Payment form is still loading. Please try again in a moment.");
       return;
     }
+    if (!acceptedPolicy) {
+      setPaymentError("Please accept the refund policy, terms, and privacy policy before paying.");
+      return;
+    }
 
     writeStudentDetails(student);
     setPaying(true);
@@ -222,6 +227,7 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
         gst,
         total,
         stripePaymentIntentId: paymentIntent.id,
+        refundPolicyAccepted: acceptedPolicy,
         lines: lines.map((l) => ({
           itemId: l.itemId,
           itemName: l.name,
@@ -416,6 +422,29 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
       </div>
 
       <div className="px-4 pt-3 pb-6 border-t bg-white flex-shrink-0" style={{ borderColor: "var(--color-rule)" }}>
+        <label className="mb-2 flex items-start gap-2 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+          <input
+            type="checkbox"
+            checked={acceptedPolicy}
+            onChange={(e) => setAcceptedPolicy(e.target.checked)}
+            className="mt-[2px]"
+          />
+          <span>
+            I agree to the{" "}
+            <Link href={`/${tenant.id}/refund-policy`} className="underline">
+              refund policy
+            </Link>
+            ,{" "}
+            <Link href="/terms" className="underline">
+              terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="underline">
+              privacy policy
+            </Link>
+            .
+          </span>
+        </label>
         <Btn
           variant="primary"
           size="lg"
@@ -427,9 +456,6 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
         >
           {!stripePublishableKey ? "Payment unavailable" : paymentLocked ? "Payment confirmed" : paying ? "Processing…" : `Pay $${total.toFixed(2)} securely`}
         </Btn>
-        <div className="text-center text-[10.5px] mt-2" style={{ color: "var(--color-ink-dim)" }}>
-          By placing this order you agree to {tenant.short}&apos;s refund policy.
-        </div>
       </div>
     </>
   );

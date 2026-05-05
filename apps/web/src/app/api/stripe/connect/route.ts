@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { getTenant, updateTenantStripe } from "@/db/queries";
+import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
 
 // POST /api/stripe/connect — start Stripe Connect onboarding
 export async function POST(req: NextRequest) {
@@ -12,10 +13,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "tenantId required" }, { status: 400 });
     }
 
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+
     const tenant = await getTenant(tenantId);
     if (!tenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
+    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (tenantAccessResponse) return tenantAccessResponse;
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -68,9 +74,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+
     const stripe = getStripe();
     const tenant = await getTenant(tenantId);
-    if (!tenant || !tenant.stripeAccountId) {
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (tenantAccessResponse) return tenantAccessResponse;
+
+    if (!tenant.stripeAccountId) {
       return NextResponse.json({ connected: false });
     }
 

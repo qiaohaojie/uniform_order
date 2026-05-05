@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
 import { TENANTS, type TenantId } from "@/lib/data";
 import { Crest } from "./crest";
 import { PlatformMark } from "./platform-mark";
+import { authClient } from "@/lib/auth/client";
 
 function AdminIcon({ kind, size = 16, color = "currentColor" }: { kind: string; size?: number; color?: string }) {
   const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -27,11 +28,45 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings", icon: "settings" },
 ] as const;
 
-export function AdminShell({ tenantId, children }: { tenantId: string; children: ReactNode }) {
+export function AdminShell({
+  tenantId,
+  userName,
+  userEmail,
+  children,
+}: {
+  tenantId: string;
+  userName?: string | null;
+  userEmail: string;
+  children: ReactNode;
+}) {
   const tenant = TENANTS[tenantId as TenantId];
   const pathname = usePathname();
+  const router = useRouter();
 
   const activeId = NAV_ITEMS.find((n) => pathname.includes(`/admin/${tenantId}/${n.id}`))?.id ?? "dashboard";
+  const displayName = userName?.trim() || userEmail;
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "U";
+
+  const handleSignOut = async () => {
+    setSignOutError(null);
+    setSigningOut(true);
+    try {
+      await authClient.signOut();
+      router.replace("/");
+      router.refresh();
+    } catch {
+      setSignOutError("Sign-out failed. Please try again.");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex" style={{ background: "var(--color-parchment)", fontFamily: "var(--font-sans)" }}>
@@ -107,23 +142,38 @@ export function AdminShell({ tenantId, children }: { tenantId: string; children:
         </nav>
 
         {/* User footer */}
-        <div
-          className="px-3 py-3 flex items-center gap-2.5"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0"
-            style={{ background: "var(--color-gold)", color: "var(--color-navy-deep)" }}
-          >
-            SK
+        <div className="px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0"
+              style={{ background: "var(--color-gold)", color: "var(--color-navy-deep)" }}
+            >
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-semibold text-white truncate">{displayName}</div>
+              <div className="text-[10.5px] truncate" style={{ color: "#A3B0C2" }}>{userEmail}</div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              title="Sign out"
+              disabled={signingOut}
+              className={signingOut ? "opacity-60 cursor-not-allowed" : undefined}
+            >
+              <AdminIcon kind="logout" size={15} color="#8997A8" />
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-semibold text-white">Sarah Knight</div>
-            <div className="text-[10.5px]" style={{ color: "#A3B0C2" }}>Shop manager</div>
+          <div className="mt-2 flex items-center gap-2 text-[10.5px]" style={{ color: "#A3B0C2" }}>
+            <Link href="/terms" className="underline">Terms</Link>
+            <span>·</span>
+            <Link href="/privacy" className="underline">Privacy</Link>
           </div>
-          <Link href="/" title="Back to parent view">
-            <AdminIcon kind="logout" size={15} color="#8997A8" />
-          </Link>
+          {signOutError && (
+            <p className="mt-1 text-[10.5px]" style={{ color: "#FCA5A5" }}>
+              {signOutError}
+            </p>
+          )}
         </div>
       </div>
 
