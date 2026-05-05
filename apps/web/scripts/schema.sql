@@ -66,11 +66,15 @@ CREATE TABLE IF NOT EXISTS orders (
   total numeric(10,2) NOT NULL,
   stripe_payment_intent_id text,
   stripe_ref text,
+  refund_policy_accepted_at timestamptz,
   status order_status NOT NULL DEFAULT 'new',
   user_id text REFERENCES neon_auth.user(id),
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS orders_stripe_payment_intent_id_unique
+  ON orders (stripe_payment_intent_id);
 
 -- Order lines
 CREATE TABLE IF NOT EXISTS order_lines (

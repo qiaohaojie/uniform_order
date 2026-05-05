@@ -221,20 +221,21 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 ## 5. Suggested go-live checklist (one page)
 
-1. ☐ Stripe Connect destination charges in `payment-intent` route (§1.1)
-2. ☐ Admin auth + per-tenant authorization (§1.2)
-3. ☐ Parent orders API gated by auth or token (§1.3)
-4. ☐ Transactional email — order placed + order ready (§1.4)
-5. ☐ Refund policy page + checkout consent (§1.5)
-6. ☐ Terms + Privacy pages (§1.6)
-7. ☐ Refund/exchange action on order detail (§2.1)
-8. ☐ Stripe webhook endpoint (§2.3)
-9. ☐ Idempotent order creation tied to PaymentIntent (§2.4)
-10. ☐ Empty initial cart, no demo seed (§2.5)
-11. ☐ Production env, live Stripe keys, security headers (§2.6)
-12. ☐ Sentry + error/not-found pages (§2.7)
-13. ☐ Catalog seeded with full NSBH paper-form items (§3.1)
-14. ☐ Accountant sign-off on GST report (§3.6)
-15. ☐ Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
+1. [x] Stripe Connect destination charges in `payment-intent` route (§1.1)
+2. [x] Admin auth + per-tenant authorization (§1.2)
+   - **Note:** Current tenant authorization still supports one operator email per tenant (`tenants.shop_email`). Multi-operator RBAC remains pending.
+3. [x] Parent orders API gated by auth or token (§1.3)
+4. [ ] Transactional email — order placed + order ready (§1.4)
+5. [x] Refund policy page + checkout consent (§1.5)
+6. [x] Terms + Privacy pages (§1.6)
+7. [ ] Refund/exchange action on order detail (§2.1)
+8. [ ] Stripe webhook endpoint (§2.3)
+9. [ ] Idempotent order creation tied to PaymentIntent (§2.4)
+10. [x] Empty initial cart, no demo seed (§2.5)
+11. [ ] Production env, live Stripe keys, security headers (§2.6)
+12. [ ] Sentry + error/not-found pages (§2.7)
+13. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
+14. [ ] Accountant sign-off on GST report (§3.6)
+15. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
 
 The super-admin portal (§2.2) is required for onboarding tenant #3 and beyond, but the launch tenant (NSBH) can ship without it provided RGSH stays on seed data.

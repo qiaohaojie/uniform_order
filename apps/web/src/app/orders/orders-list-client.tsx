@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TENANTS, type TenantId } from "@/lib/data";
-import { readStudentDetails } from "@/lib/order-store";
 import { Crest } from "@/components/crest";
 import { Chip } from "@/components/chip";
 
@@ -76,18 +75,17 @@ function StatusTrack({ accent, status }: { accent: string; status: string }) {
   );
 }
 
-export function OrdersListClient() {
+export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
   const [orders, setOrders] = useState<DbOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [parentEmail, setParentEmail] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAll = async () => {
-      const saved = readStudentDetails();
-      const email = saved?.email.trim();
-      setParentEmail(email || null);
-      if (!email) {
+      const normalizedEmail = parentEmail.trim().toLowerCase();
+      if (!normalizedEmail) {
         setOrders([]);
+        setFetchError("Missing account email.");
         setLoading(false);
         return;
       }
@@ -97,7 +95,7 @@ export function OrdersListClient() {
         const results = await Promise.all(
           tenantIds.map((tid) =>
             fetch(
-              `/api/orders?tenantId=${encodeURIComponent(tid)}&email=${encodeURIComponent(email)}`
+              `/api/orders?tenantId=${encodeURIComponent(tid)}&email=${encodeURIComponent(normalizedEmail)}`
             ).then(async (r) => {
               if (!r.ok) {
                 const data = await r.json().catch(() => null);
@@ -107,18 +105,20 @@ export function OrdersListClient() {
             })
           )
         );
+        setFetchError(null);
         const all: DbOrder[] = results.flat();
         // Sort newest first
         all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setOrders(all);
       } catch (err) {
         console.error("Failed to fetch orders:", err);
+        setFetchError(err instanceof Error ? err.message : "Failed to fetch orders.");
       } finally {
         setLoading(false);
       }
     };
     fetchAll();
-  }, []);
+  }, [parentEmail]);
 
   if (loading) {
     return (
@@ -132,13 +132,14 @@ export function OrdersListClient() {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
         <div className="text-[32px] mb-3">🛍️</div>
-        <div className="font-serif text-[17px] font-semibold mb-1" style={{ color: "var(--color-ink)" }}>
-          {parentEmail ? "No orders yet" : "No checkout email found"}
+        <div
+          className="font-serif text-[17px] font-semibold mb-1"
+          style={{ color: "var(--color-ink)" }}
+        >
+          {fetchError ? "Could not load orders" : "No orders yet"}
         </div>
         <div className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
-          {parentEmail
-            ? "Your orders will appear here after you place them."
-            : "Place an order first, then your order history will appear here."}
+          {fetchError ?? "Your orders will appear here after you place them."}
         </div>
       </div>
     );

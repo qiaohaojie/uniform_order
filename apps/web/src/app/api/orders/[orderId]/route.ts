@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrderById, updateOrderStatus } from "@/db/queries";
+import { getOrderById, getTenant, updateOrderStatus } from "@/db/queries";
+import {
+  ensureParentEmailAccess,
+  ensureTenantAccess,
+  requireSessionUser,
+} from "@/lib/auth/authorization";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 const ORDER_STATUSES = ["new", "packing", "ready", "collected"] as const;
 type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -16,10 +22,31 @@ export async function GET(
   const { orderId } = await params;
   const tenantId = new URL(req.url).searchParams.get("tenantId");
   try {
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+
     const order = await getOrderById(orderId);
     if (!order || (tenantId && order.tenantId !== tenantId)) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+
+    const tenant = await getTenant(order.tenantId);
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (tenantAccessResponse) {
+      const parentEmailDenial = ensureParentEmailAccess(authResult.user, order.parentEmail);
+      if (parentEmailDenial) return parentEmailDenial;
+
+      const rateLimitResponse = applyRateLimit(req, `order-detail:${order.tenantId}:${authResult.user.id}`, {
+        limit: 30,
+        windowMs: 60_000,
+      });
+      if (rateLimitResponse) return rateLimitResponse;
+    }
+
     return NextResponse.json(order);
   } catch (err) {
     console.error("GET /api/orders/[orderId] error:", err);
@@ -34,6 +61,9 @@ export async function PATCH(
 ) {
   const { orderId } = await params;
   try {
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+
     const { status, tenantId } = await req.json();
     if (!isOrderStatus(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
@@ -42,6 +72,13 @@ export async function PATCH(
     if (!order || (tenantId && order.tenantId !== tenantId)) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+
+    const tenant = await getTenant(order.tenantId);
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (tenantAccessResponse) return tenantAccessResponse;
 
     const updated = await updateOrderStatus(orderId, status);
     if (updated.length === 0) {
