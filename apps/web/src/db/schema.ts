@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgSchema,
@@ -27,6 +28,7 @@ export const neonAuthUsers = neonAuthSchema.table("user", {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 export const orderStatusEnum = pgEnum("order_status", [
+  "pending_payment",
   "new",
   "packing",
   "ready",
@@ -48,6 +50,7 @@ export const tenants = pgTable("tenants", {
   address: text("address"),
   shopHours: text("shop_hours"),
   shopEmail: text("shop_email"),
+  collectionInstructions: text("collection_instructions"),
   // Stripe Connect
   stripeAccountId: text("stripe_account_id"),
   stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false),
@@ -115,7 +118,8 @@ export const orders = pgTable(
     // Legal
     refundPolicyAcceptedAt: timestamp("refund_policy_accepted_at"),
     // Status
-    status: orderStatusEnum("status").notNull().default("new"),
+    emailsSent: jsonb("emails_sent").notNull().default(sql`'{}'::jsonb`),
+    status: orderStatusEnum("status").notNull().default("pending_payment"),
     // Auth link (optional — if parent was signed in)
     userId: text("user_id").references(() => neonAuthUsers.id),
     createdAt: timestamp("created_at").defaultNow(),
