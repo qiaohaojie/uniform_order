@@ -6,7 +6,6 @@ import {
   Heading,
   Hr,
   Html,
-  Img,
   Link,
   Preview,
   Row,
@@ -20,6 +19,7 @@ interface OrderItem {
   variantLabel: string;
   qty: number;
   unitPrice: number;
+  lineTotal: number;
 }
 
 interface OrderConfirmationEmailProps {
@@ -84,7 +84,7 @@ export const OrderConfirmationEmail = ({
                     {item.qty}
                   </Column>
                   <Column style={{ ...itemCol, textAlign: "right" }}>
-                    ${(item.unitPrice * item.qty).toFixed(2)}
+                    ${item.lineTotal.toFixed(2)}
                   </Column>
                 </Row>
               ))}

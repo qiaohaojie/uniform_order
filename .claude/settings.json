@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./node_modules/**)",
+      "Read(./apps/web/node_modules/**)",
+      "Read(./pdf-extractor/node_modules/**)",
+      "Read(./apps/web/.next/**)",
+      "Read(./pnpm-lock.yaml)",
+      "Read(./apps/web/tsconfig.tsbuildinfo)"
+    ]
+  }
+}

@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("Confirmation email failed for order", flipped[0].id, err);
     }
+  } else {
+    console.info("stripe webhook: no pending_payment order matched", pi.id);
   }
 
   return NextResponse.json({ received: true });

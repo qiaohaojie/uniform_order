@@ -68,7 +68,7 @@ export async function PATCH(
     if ("response" in authResult) return authResult.response;
 
     const { status, tenantId } = await req.json();
-    if (!isOrderStatus(status)) {
+    if (!isOrderStatus(status) || status === "pending_payment") {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
     const order = await getOrderById(orderId);
