@@ -148,6 +148,7 @@ export const orderLines = pgTable("order_lines", {
   itemId: text("item_id").notNull(),
   itemName: text("item_name").notNull(),
   variantLabel: text("variant_label").notNull(),
+  size: text("size"),
   qty: integer("qty").notNull().default(1),
   unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
   lineTotal: numeric("line_total", { precision: 10, scale: 2 }).notNull(),
