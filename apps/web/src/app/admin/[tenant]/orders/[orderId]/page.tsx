@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TENANTS, type TenantId } from "@/lib/data";
-import { getOrderById } from "@/db/queries";
+import { getOrderById, getOrderRefunds, getTotalRefunded } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { Chip } from "@/components/chip";
 import { DoubleRule } from "@/components/double-rule";
@@ -47,13 +47,19 @@ export default async function OrderDetailPage({
   const order = await getOrderById(orderId);
   if (!order || order.tenantId !== tid) notFound();
 
-  const statusMap: Record<string, { tone: "info" | "warn" | "success" | "neutral"; label: string }> = {
+  const refunds = await getOrderRefunds(orderId);
+  const refundedTotal = await getTotalRefunded(orderId);
+
+  const statusMap: Record<string, { tone: "info" | "warn" | "success" | "neutral" | "danger"; label: string }> = {
+    pending_payment: { tone: "neutral", label: "Pending payment" },
     new: { tone: "info", label: "New" },
     packing: { tone: "warn", label: "Packing" },
     ready: { tone: "success", label: "Ready for pickup" },
     collected: { tone: "neutral", label: "Collected" },
+    partially_refunded: { tone: "danger", label: "Partially refunded" },
+    refunded: { tone: "danger", label: "Refunded" },
   };
-  const statusInfo = statusMap[order.status];
+  const statusInfo = statusMap[order.status] ?? { tone: "neutral", label: order.status };
   const total = parseFloat(order.total);
   const gst = parseFloat(order.gst);
   const placedAt = order.createdAt
@@ -79,15 +85,19 @@ export default async function OrderDetailPage({
               ← Back to orders
             </Link>
             <PrintButton label="Print pick slip" />
-            <OrderDetailActions
-              orderId={order.id}
-              tenantId={tid}
-              currentStatus={order.status}
-              accent={tenant.accent}
-              parentEmail={order.parentEmail}
-              parentName={order.parentName}
-              studentName={order.studentName}
-            />
+            <div className="relative">
+              <OrderDetailActions
+                orderId={order.id}
+                tenantId={tid}
+                currentStatus={order.status}
+                accent={tenant.accent}
+                parentEmail={order.parentEmail}
+                parentName={order.parentName}
+                studentName={order.studentName}
+                total={total}
+                refunded={refundedTotal}
+              />
+            </div>
           </div>
         }
       />
@@ -227,6 +237,39 @@ export default async function OrderDetailPage({
                 </tr>
               </tfoot>
             </table>
+
+            {/* Refund history */}
+            {refunds.length > 0 && (
+              <>
+                <DoubleRule />
+                <div className="mt-4">
+                  <div className="text-[10.5px] uppercase tracking-[0.6px] font-bold mb-2" style={{ color: "var(--color-ink-dim)" }}>
+                    Refunds
+                  </div>
+                  {refunds.map((refund) => (
+                    <div key={refund.id} className="flex items-center justify-between py-2 border-b text-[12.5px]" style={{ borderColor: "var(--color-rule)", borderStyle: "dashed" }}>
+                      <div style={{ color: "var(--color-ink)" }}>
+                        {refund.reason ? refund.reason : "Refund"}
+                        {refund.stripeRefundId && (
+                          <span className="ml-1 text-[10px] font-mono" style={{ color: "var(--color-ink-dim)" }}>
+                            · {refund.stripeRefundId}
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-semibold tnum" style={{ color: "#B23A2A" }}>
+                        −${parseFloat(String(refund.amount)).toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-2 text-[12.5px] font-semibold">
+                    <div style={{ color: "var(--color-ink)" }}>Net total</div>
+                    <div className="tnum" style={{ color: "var(--color-ink)" }}>
+                      ${Math.max(0, total - refundedTotal).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Footer */}
             <div className="mt-6 flex items-center justify-between">

@@ -9,6 +9,7 @@ import {
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
+import { serverCaptureException } from "@/lib/analytics/server";
 
 const ORDER_STATUSES = ["pending_payment", "new", "packing", "ready", "collected"] as const;
 type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -53,6 +54,7 @@ export async function GET(
     return NextResponse.json(order);
   } catch (err) {
     console.error("GET /api/orders/[orderId] error:", err);
+    await serverCaptureException("api-order-detail-get", err instanceof Error ? err : new Error(String(err)), { method: "GET", orderId });
     return NextResponse.json({ error: "Failed to fetch order" }, { status: 500 });
   }
 }
@@ -108,6 +110,7 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PATCH /api/orders/[orderId] error:", err);
+    await serverCaptureException("api-order-detail-patch", err instanceof Error ? err : new Error(String(err)), { method: "PATCH", orderId });
     return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
   }
 }

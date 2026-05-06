@@ -33,6 +33,8 @@ export const orderStatusEnum = pgEnum("order_status", [
   "packing",
   "ready",
   "collected",
+  "partially_refunded",
+  "refunded",
 ]);
 
 export const deliveryMethodEnum = pgEnum("delivery_method", [
@@ -149,4 +151,18 @@ export const orderLines = pgTable("order_lines", {
   qty: integer("qty").notNull().default(1),
   unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
   lineTotal: numeric("line_total", { precision: 10, scale: 2 }).notNull(),
+});
+
+// ─── Order refunds ───────────────────────────────────────────────────────────
+export const orderRefunds = pgTable("order_refunds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: text("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  lineId: uuid("line_id").references(() => orderLines.id, { onDelete: "set null" }),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason"),
+  operatorUserId: text("operator_user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
+  stripeRefundId: text("stripe_refund_id"),
+  createdAt: timestamp("created_at").defaultNow(),
 });

@@ -14,6 +14,7 @@ import {
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
+import { serverCaptureException } from "@/lib/analytics/server";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   } catch (err) {
     console.error("GET /api/orders error:", err);
+    await serverCaptureException("api-orders-get", err instanceof Error ? err : new Error(String(err)), { method: "GET", tenantId });
     return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
   }
 }
@@ -243,6 +245,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ orderId: createdOrderId }, { status: 201 });
   } catch (err) {
     console.error("POST /api/orders error:", err);
+    await serverCaptureException("api-orders-post", err instanceof Error ? err : new Error(String(err)), { method: "POST" });
     return NextResponse.json({ error: "Failed to place order" }, { status: 500 });
   }
 }
