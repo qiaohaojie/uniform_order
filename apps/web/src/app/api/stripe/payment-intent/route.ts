@@ -3,6 +3,16 @@ import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { getTenant } from "@/db/queries";
 
+// TODO(refunds): When a refund route is added (e.g. POST /api/stripe/refund),
+// it MUST pass `reverse_transfer: true` (and usually `refund_application_fee: true`)
+// to stripe.refunds.create(). Because we use destination charges below
+// (transfer_data.destination = tenant.stripeAccountId), refunds are debited from
+// the PLATFORM balance by default — without reverse_transfer the connected
+// uniform shop keeps the parent's money and the platform absorbs the full loss.
+// For chargebacks (which auto-debit the platform balance immediately), use
+// stripe.transfers.createReversal() against the original transfer to claw back
+// from the shop. See conversation in T-019dfac8-94cf-739f-80b2-d7a15c283cf5.
+
 // POST /api/stripe/payment-intent
 export async function POST(req: NextRequest) {
   try {

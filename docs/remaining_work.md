@@ -83,6 +83,14 @@ For a payment site collecting student PII, AU consumer law and the Privacy Act 1
 
 **Required:** `/terms`, `/privacy` static pages, linked in the footer of both portals.
 
+### 1.7 No platform-approval gate on connected tenants (Stripe Connect compliance)
+
+**Where:** [apps/web/src/app/api/stripe/payment-intent/route.ts](file:///Volumes/T7/georgeqiao/dev/uniform_order/apps/web/src/app/api/stripe/payment-intent/route.ts), `tenants` schema in [src/db/schema.ts](file:///Volumes/T7/georgeqiao/dev/uniform_order/apps/web/src/db/schema.ts)
+
+We accepted **Platform** liability when configuring Stripe Connect, which contractually obliges us to "review each seller to ensure they're not operating in a restricted business category or selling restricted products." Today, the moment Stripe reports `charges_enabled = true` for a connected account, the tenant can immediately take live payments — no human at the platform has confirmed the shop is legitimate, the school nominated them, or that they're not on Stripe's restricted-businesses list. This is a Stripe Connect Platform Agreement breach and a chargeback/fines exposure.
+
+**Required:** Add a separate `platform_approval_status` field on tenants (`pending` / `approved` / `rejected`); gate `POST /api/stripe/payment-intent` on `approved`; add a super-admin approval queue; surface status to the shop. Full requirements doc: [platform_approval_gate.md](./platform_approval_gate.md).
+
 ---
 
 ## 2. 🟠 High — required for an acceptable v1
@@ -151,10 +159,10 @@ A first-time visitor sees pre-populated demo items in their cart. Acceptable for
 ### 2.7 Error handling, logging, observability
 
 - No error boundary / global `error.tsx` / `not-found.tsx` styled to brand.
-- No structured logging or monitoring (Sentry / Logtail / PostHog).
+- No structured logging or monitoring — PostHog (error tracking + logs + product analytics) is not yet wired in.
 - API routes only `console.error` — failures are silent in production.
 
-**Required:** `error.tsx`, `not-found.tsx`, Sentry (or equivalent) wired to both client and server, request-id correlation in logs.
+**Required:** `error.tsx`, `not-found.tsx`, PostHog SDK wired to both client (`posthog-js`) and server (`posthog-node`) with error tracking and log capture enabled, request-id correlation in logs.
 
 ---
 
@@ -228,14 +236,15 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 4. [ ] Transactional email — order placed + order ready (§1.4)
 5. [x] Refund policy page + checkout consent (§1.5)
 6. [x] Terms + Privacy pages (§1.6)
-7. [ ] Refund/exchange action on order detail (§2.1)
-8. [ ] Stripe webhook endpoint (§2.3)
-9. [ ] Idempotent order creation tied to PaymentIntent (§2.4)
-10. [x] Empty initial cart, no demo seed (§2.5)
-11. [ ] Production env, live Stripe keys, security headers (§2.6)
-12. [ ] Sentry + error/not-found pages (§2.7)
-13. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
-14. [ ] Accountant sign-off on GST report (§3.6)
-15. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
+7. [ ] Platform approval gate on connected tenants (§1.7 — see [platform_approval_gate.md](./platform_approval_gate.md))
+8. [ ] Refund/exchange action on order detail (§2.1)
+9. [ ] Stripe webhook endpoint (§2.3)
+10. [ ] Idempotent order creation tied to PaymentIntent (§2.4)
+11. [x] Empty initial cart, no demo seed (§2.5)
+12. [ ] Production env, live Stripe keys, security headers (§2.6)
+13. [ ] PostHog (error tracking + logs) + error/not-found pages (§2.7)
+14. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
+15. [ ] Accountant sign-off on GST report (§3.6)
+16. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
 
 The super-admin portal (§2.2) is required for onboarding tenant #3 and beyond, but the launch tenant (NSBH) can ship without it provided RGSH stays on seed data.
