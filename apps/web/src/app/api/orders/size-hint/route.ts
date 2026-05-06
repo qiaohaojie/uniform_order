@@ -11,16 +11,16 @@ export async function GET(req: NextRequest) {
   const tenantId = searchParams.get("tenantId");
   const itemId = searchParams.get("itemId");
 
-  if (!tenantId || !itemId) {
-    return NextResponse.json(
-      { error: "tenantId and itemId required" },
-      { status: 400 },
-    );
-  }
-
   try {
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
+
+    if (!tenantId || !itemId) {
+      return NextResponse.json(
+        { error: "tenantId and itemId required" },
+        { status: 400 },
+      );
+    }
 
     const tenant = await getTenant(tenantId);
     if (!tenant) {
