@@ -8,5 +8,8 @@
       "Read(./pnpm-lock.yaml)",
       "Read(./apps/web/tsconfig.tsbuildinfo)"
     ]
+  },
+  "enabledPlugins": {
+    "stripe@claude-plugins-official": true
   }
 }

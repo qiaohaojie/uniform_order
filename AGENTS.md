@@ -2,6 +2,33 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Superpowers Framework: Execution Protocol
+
+### Phase 1: Discovery & Specification (Branch: **Base Branch**)
+
+- **Initialize:** Call `superpowers:brainstorming` to define the "What" and "Why."
+- **Iterate:** Propose architectural choices and edge cases; wait for my review/questions.
+- **Commit:** Once I approve the spec, save and commit the document to your current **Base Branch**.
+
+### Phase 2: Isolation & Baseline
+
+- **Isolate:** Call `superpowers:using-git-worktrees` to branch off the Base Branch into a new, isolated directory.
+- **Verify:** Run the existing test suite immediately to ensure a clean **"Green"** baseline before making changes.
+
+### Phase 3: Tactical Planning (Inside Worktree)
+
+- **Initialize:** Call `superpowers:writing-plans` within the newly created worktree.
+- **Finalize:** Present the implementation tasks for my explicit approval. Ensure all file paths are grounded in the worktree filesystem.
+
+### Phase 4: Execution (Agentic Mode)
+
+- **Directive:** Call `superpowers:subagent-driven-development` (or preferred execution skill).
+- **Autonomy:** Operate **agentically**. Chain tasks together automatically without asking for sign-off between each successful task.
+- **Pause Only If:**
+  - A terminal command or build fails.
+  - A critical architectural decision/deviation is required.
+  - The entire Phase is successfully completed.
+
 ## Commands
 
 All commands run from the repo root via pnpm workspaces.
@@ -74,15 +101,15 @@ Next.js App Router server components do data fetching and pass props down. Pages
 
 Tailwind CSS v4 (`@import "tailwindcss"`) with custom design tokens defined in `src/index.css` under `@theme`:
 
-| Token | Value |
-|---|---|
-| `--color-navy-deep` | `#081A2D` (admin sidebar) |
+| Token               | Value                       |
+| ------------------- | --------------------------- |
+| `--color-navy-deep` | `#081A2D` (admin sidebar)   |
 | `--color-parchment` | `#FAF6EE` (page background) |
-| `--color-paper` | `#FDFBF6` (card background) |
-| `--color-rule` | `#E5DFD2` (borders) |
-| `--color-gold` | `#B08A3E` (accents) |
-| `--font-serif` | Newsreader (headings) |
-| `--font-sans` | Inter (body) |
+| `--color-paper`     | `#FDFBF6` (card background) |
+| `--color-rule`      | `#E5DFD2` (borders)         |
+| `--color-gold`      | `#B08A3E` (accents)         |
+| `--font-serif`      | Newsreader (headings)       |
+| `--font-sans`       | Inter (body)                |
 
 Add `.tnum` class (`font-feature-settings: "tnum"`) on any price or numeric display.
 
@@ -97,6 +124,7 @@ HeroUI v3 (`@heroui/react`) and HeroUI Pro (`@heroui-pro/react`) are installed b
 **Design system:** `my_doc/UI_prototypes/project/Design System.html` — canonical tokens, typography, and component styles.
 
 **UI prototypes:** `my_doc/UI_prototypes/project/` contains HTML/JSX prototypes exported from Codex Design covering three flows:
+
 - `parent.jsx` — parent shopping flow
 - `operator.jsx` — admin/operator flow
 - `superadmin.jsx` — platform super-admin flow
