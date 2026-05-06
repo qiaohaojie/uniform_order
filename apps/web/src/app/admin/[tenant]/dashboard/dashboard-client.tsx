@@ -12,6 +12,8 @@ function StatusBadge({ status }: { status: LiveOrderStatus }) {
     packing: { tone: "warn", label: "Packing" },
     ready: { tone: "success", label: "Ready" },
     collected: { tone: "neutral", label: "Collected" },
+    partially_refunded: { tone: "warn", label: "Partially Refunded" },
+    refunded: { tone: "neutral", label: "Refunded" },
   };
   const { tone, label } = map[status];
   return <Chip tone={tone}>{label}</Chip>;

@@ -1,7 +1,7 @@
-import { db, orders, orderLines, catalogItems, catalogVariants, tenants } from "./index";
-import { and, eq, desc, or, gte, inArray, lt, sql } from "drizzle-orm";
+import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds } from "./index";
+import { and, eq, desc, or, gte, inArray, lt, sql, sum } from "drizzle-orm";
 
-export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected";
+export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
 
 export type LiveRecentOrder = {
   id: string;
@@ -65,7 +65,7 @@ export type LiveReportsData = {
   gstRows: LiveGstRow[];
 };
 
-function money(value: string | number | null | undefined) {
+export function money(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
@@ -420,13 +420,50 @@ export async function getOrdersByParentEmail(email: string) {
 
 export async function updateOrderStatus(
   orderId: string,
-  status: "new" | "packing" | "ready" | "collected"
+  status: "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded"
 ) {
   return db
     .update(orders)
     .set({ status, updatedAt: new Date() })
     .where(eq(orders.id, orderId))
     .returning({ id: orders.id });
+}
+
+export async function getOrderRefunds(orderId: string) {
+  return db
+    .select()
+    .from(orderRefunds)
+    .where(eq(orderRefunds.orderId, orderId))
+    .orderBy(desc(orderRefunds.createdAt));
+}
+
+export async function getTotalRefunded(orderId: string): Promise<number> {
+  const [result] = await db
+    .select({ total: sum(orderRefunds.amount) })
+    .from(orderRefunds)
+    .where(eq(orderRefunds.orderId, orderId));
+  return money(result?.total ?? 0);
+}
+
+export async function addOrderRefund(data: {
+  orderId: string;
+  lineId?: string;
+  amount: string | number;
+  reason?: string;
+  operatorUserId?: string;
+  stripeRefundId?: string;
+}) {
+  return db
+    .insert(orderRefunds)
+    .values({
+      orderId: data.orderId,
+      lineId: data.lineId ?? null,
+      amount: String(data.amount),
+      reason: data.reason ?? null,
+      operatorUserId: data.operatorUserId ?? null,
+      stripeRefundId: data.stripeRefundId ?? null,
+    })
+    .returning({ id: orderRefunds.id });
 }
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
