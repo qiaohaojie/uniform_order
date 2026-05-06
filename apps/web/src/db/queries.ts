@@ -418,11 +418,13 @@ export async function getOrdersByParentEmail(email: string) {
     .orderBy(desc(orders.createdAt));
 }
 
+export type SizeHint = { studentName: string; size: string; variantLabel: string };
+
 export async function getPreviousSizeHint(
   tenantId: string,
   parentEmail: string,
   itemId: string,
-): Promise<{ studentName: string; size: string; variantLabel: string } | null> {
+): Promise<SizeHint | null> {
   const [latest] = await db
     .select({ id: orders.id, studentName: orders.studentName })
     .from(orders)

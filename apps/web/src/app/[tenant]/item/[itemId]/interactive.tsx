@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { CatalogItem, Tenant } from "@/lib/data";
+import type { SizeHint } from "@/db/queries";
 import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CartIcon, CheckIcon } from "@/components/icons";
@@ -27,12 +28,12 @@ export function ItemDetailInteractive({
   const [qty, setQty] = useState(1);
   const [showGuide, setShowGuide] = useState(false);
 
-  const [hint, setHint] = useState<{ studentName: string; size: string; variantLabel: string } | null>(null);
+  const [hint, setHint] = useState<SizeHint | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams({ tenantId: tenant.id, itemId: item.id });
     let cancelled = false;
-    fetch(`/api/orders/size-hint?${params.toString()}`, { credentials: "same-origin" })
+    fetch(`/api/orders/size-hint?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!cancelled) setHint(data?.hint ?? null);
