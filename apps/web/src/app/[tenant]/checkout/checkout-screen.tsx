@@ -253,6 +253,7 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
           itemId: l.itemId,
           itemName: l.name,
           variantLabel: l.variantLabel,
+          size: l.size,
           qty: l.qty,
           unitPrice: l.price,
           lineTotal: l.price * l.qty,
