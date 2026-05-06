@@ -35,6 +35,12 @@ export async function POST(req: NextRequest) {
     if (!tenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
+    if (tenant.platformApprovalStatus !== "approved") {
+      return NextResponse.json(
+        { error: "Tenant not yet approved by platform" },
+        { status: 409 }
+      );
+    }
     if (!tenant.stripeAccountId) {
       return NextResponse.json(
         { error: "Tenant has no connected Stripe account" },
