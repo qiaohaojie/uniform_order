@@ -97,7 +97,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 | # | Item | Source |
 |---|---|---|
-| 4.1 | "Riley wore size X last year" hint driven from live order history (see §4.9) | Audit item 17 |
+| 4.1 | ~~"Riley wore size X last year" hint driven from live order history~~ **✅ Done** — see §4.9 note | Audit item 17 |
 | 4.2 | "New product" and "Export" buttons on Dashboard wired up | Audit §2 / Dashboard |
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
@@ -108,11 +108,13 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 | 4.9 | Implementation detail for §4.1 — replace hardcoded size hint (see below) | known_issues #1 |
 | 4.10 | Note: transactional-email webhook commit was not split as planned (`3ce98b1` collapsed Task 6 Steps 3 & 4). Functionality correct; history/bisect deviation only — not worth rewriting. | known_issues #3 |
 
-### 4.9 Replace hardcoded "Riley wore size X last year" hint
+### 4.9 ✅ Replace hardcoded "Riley wore size X last year" hint — DONE (smoke test pending Stripe Connect)
 
-**File:** `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx:147`
+**Implemented in:** branch `worktree-feat-size-hint` (commits `6700615`–`669ce30`)
 
-**Problem:** The size hint shown beneath the size selector on the item detail page is a static string `"Riley wore size 14 last year"`. It does not reflect the actual parent's order history or their child's name.
+**Status:** Code complete, type-check passing, smoke tests T2/T3/T4/T5/T6/T7 verified via DB-injected test data. Checkout-path smoke test (T3/T4 via real Stripe payment) could not be run because the NSBH tenant's Stripe Express account is not yet onboarded — same gap as §2.8 / §5 checklist item 4. **Re-run the checkout smoke test once the Stripe Connect account is active.**
+
+**Original problem (resolved):** The size hint shown beneath the size selector on the item detail page was a static string `"Riley wore size 14 last year"`. It did not reflect the actual parent's order history or their child's name.
 
 **Proper fix — three pieces:**
 

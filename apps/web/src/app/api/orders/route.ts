@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
             itemId: line.itemId,
             itemName: line.itemName,
             variantLabel: line.variantLabel,
+            size: line.size?.trim() || null,
             qty: line.qty,
             unitPrice: String(line.unitPrice),
             lineTotal: String(line.lineTotal),

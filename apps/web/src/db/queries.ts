@@ -1,5 +1,5 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds } from "./index";
-import { and, eq, desc, or, gte, inArray, lt, sql, sum } from "drizzle-orm";
+import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 
 export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
 
@@ -416,6 +416,50 @@ export async function getOrdersByParentEmail(email: string) {
     .from(orders)
     .where(sql`lower(${orders.parentEmail}) = lower(${email})`)
     .orderBy(desc(orders.createdAt));
+}
+
+export type SizeHint = { studentName: string; size: string; variantLabel: string };
+
+export async function getPreviousSizeHint(
+  tenantId: string,
+  parentEmail: string,
+  itemId: string,
+): Promise<SizeHint | null> {
+  const [latest] = await db
+    .select({ id: orders.id, studentName: orders.studentName })
+    .from(orders)
+    .innerJoin(orderLines, eq(orderLines.orderId, orders.id))
+    .where(
+      and(
+        eq(orders.tenantId, tenantId),
+        eq(orders.parentEmail, parentEmail),
+        eq(orderLines.itemId, itemId),
+        isNotNull(orderLines.size),
+      ),
+    )
+    .orderBy(desc(orders.createdAt))
+    .limit(1);
+
+  if (!latest) return null;
+
+  const tuples = await db
+    .selectDistinct({
+      size: orderLines.size,
+      variantLabel: orderLines.variantLabel,
+    })
+    .from(orderLines)
+    .where(
+      and(
+        eq(orderLines.orderId, latest.id),
+        eq(orderLines.itemId, itemId),
+        isNotNull(orderLines.size),
+      ),
+    );
+
+  if (tuples.length !== 1) return null;
+  const t = tuples[0];
+  if (!t.size) return null;
+  return { studentName: latest.studentName, size: t.size, variantLabel: t.variantLabel };
 }
 
 export async function updateOrderStatus(
