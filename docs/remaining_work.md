@@ -110,7 +110,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 ### 4.9 ✅ Replace hardcoded "Riley wore size X last year" hint — DONE (smoke test pending Stripe Connect)
 
-**Implemented in:** branch `worktree-feat-size-hint` (commits `6700615`–`669ce30`)
+**Implemented in:** merged to `main` (commits `6700615`–`0d61038`)
 
 **Status:** Code complete, type-check passing, smoke tests T2/T3/T4/T5/T6/T7 verified via DB-injected test data. Checkout-path smoke test (T3/T4 via real Stripe payment) could not be run because the NSBH tenant's Stripe Express account is not yet onboarded — same gap as §2.8 / §5 checklist item 4. **Re-run the checkout smoke test once the Stripe Connect account is active.**
 
