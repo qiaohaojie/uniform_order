@@ -20,27 +20,15 @@ function getClientAddress(req: NextRequest) {
     return requestIp.trim();
   }
 
-  const trustedProxyIpHeaders = [
-    req.headers.get("x-real-ip"),
-    req.headers.get("cf-connecting-ip"),
-    req.headers.get("x-forwarded-for"),
-  ];
-
-  const trustedProxyIp = trustedProxyIpHeaders.find((value) => value && value.trim().length > 0);
-  if (trustedProxyIp) {
-    return trustedProxyIp.split(",")[0]?.trim() ?? "unknown";
+  const trustedProxyIp =
+    req.headers.get("x-real-ip") ?? req.headers.get("cf-connecting-ip");
+  if (trustedProxyIp && trustedProxyIp.trim().length > 0) {
+    return trustedProxyIp.trim();
   }
 
-  // x-forwarded-for can be client-controlled unless set by a trusted proxy.
-  // Only trust it if x-real-ip or cf-connecting-ip was also present,
-  // indicating we're behind a known proxy layer.
-  if (trustedProxyIp) {
-    const forwardedFor = req.headers.get("x-forwarded-for");
-    if (forwardedFor) {
-      return forwardedFor.split(",")[0]?.trim() ?? null;
-    }
-  }
-
+  // x-forwarded-for can be spoofed by the client on untrusted networks.
+  // We intentionally do not fall back to it here; only x-real-ip and
+  // cf-connecting-ip from known proxy layers are accepted.
   return null;
 }
 
