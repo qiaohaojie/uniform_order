@@ -3,7 +3,7 @@
 **Project:** Uniform Online Order System
 **Author:** Engineering audit
 **Date:** 5 May 2026
-**Sources:** [PDP](../my_doc/PDP.md), [FEATURE_AUDIT.md](./FEATURE_AUDIT.md), live codebase scan
+**Sources:** [PDP](../my_doc/PDP.md), former `docs/FEATURE_AUDIT.md` (now consolidated into this file and `docs/completed.md`), live codebase scan
 
 This document lists every item that must be resolved (or explicitly deferred) before the platform can go live with a paying NSW school. Items are grouped by severity. Each item maps back to either a PDP requirement, an unfinished feature from the audit, or a production-readiness gap discovered during the codebase scan.
 
@@ -197,3 +197,19 @@ Add a `useEffect` that:
 8. [ ] Stripe Express account onboarded for NSBH (test mode first, then live): complete onboarding at Stripe Dashboard → Connect → Accounts, verify `account.updated` webhook syncs `stripe_charges_enabled = true` to tenants table, then re-run Test 3 smoke test (place order → partial refund → full refund → 409 on third attempt)
 
 The super-admin portal (§2.2) is required for onboarding tenant #3 and beyond, but the launch tenant (NSBH) can ship without it provided RGSH stays on seed data.
+
+---
+
+## 6. Cross-reference — items merged in from `docs/FEATURE_AUDIT.md`
+
+The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are tracked here as follows:
+
+| Audit item | Tracked in |
+|---|---|
+| "Add another child" button on school picker | §3.3 |
+| "Riley wore size X last year" hint (hardcoded) | §4.1 + §4.9 (implementation detail) |
+| Dashboard "New product" button not wired | §4.2 |
+| Dashboard "Export" button not wired | §4.2 |
+| Refund / exchange action on order detail | §2.1 (✅ done in PR #4; E2E pending Stripe Connect) |
+| Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) | §2.2 |
+| Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) | §3.1 |
