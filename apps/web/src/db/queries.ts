@@ -65,7 +65,7 @@ export type LiveReportsData = {
   gstRows: LiveGstRow[];
 };
 
-function money(value: string | number | null | undefined) {
+export function money(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
   return Math.round((parsed + Number.EPSILON) * 100) / 100;

@@ -14,7 +14,7 @@ import {
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
-import { serverCaptureException } from "@/lib/analytics/server";
+import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
@@ -234,6 +234,16 @@ export async function POST(req: NextRequest) {
     if (!createdOrderId) {
       throw new Error("Unable to generate a unique order ID");
     }
+
+    await serverCapture(authResult.user.id, "order_placed", {
+      order_id: createdOrderId,
+      tenant_id: tenantId,
+      delivery: delivery ?? "pickup",
+      total,
+      subtotal,
+      item_count: lines.length,
+      $set: { email: normalizedParentEmail },
+    });
 
     // Send order confirmation email (best-effort; do not fail the request)
     try {

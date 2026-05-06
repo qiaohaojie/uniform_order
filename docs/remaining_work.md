@@ -22,17 +22,20 @@ This document lists every item that must be resolved (or explicitly deferred) be
 
 ## 2. 🟠 High — required for an acceptable v1
 
-### 2.1 Refund / exchange UI on order detail (admin)
+### 2.1 Refund / exchange UI on order detail (admin) ✅
 
-**Where:** `apps/web/src/app/admin/[tenant]/orders/[orderId]/page.tsx`
+**Status: DONE (PR #4 — feat/posthog-and-hostinger-deploy).**
+- Refund button + partial-amount dialog on admin order detail.
+- `POST /api/orders/[orderId]/refund` — Stripe `refunds.create` with idempotency key, partial and full refund supported.
+- `order_refunds` table (migration `0003_futuristic_snowbird`) records each refund with operator user ID, stripe refund ID, amount, reason.
+- `order_status` enum extended: `partially_refunded`, `refunded`. Status chip updates accordingly.
+- `charge.refunded` webhook handler records out-of-band refunds from Stripe Dashboard.
 
-PDP §2 names "handle refunds/exchanges" as a core operator capability. No UI exists. The audit lists this as item 13.
-
-**Required:**
-- "Refund full / refund line / exchange" actions on order detail.
-- Stripe refund call (`stripe.refunds.create`) — partial-amount supported.
-- New `order_refunds` table (or `order_lines.refunded_qty`) to record refunded items, reason, operator userId, refundedAt.
-- Status chip should reflect "Partially refunded" / "Refunded".
+**Post-merge test item — Test 3 (refund E2E) blocked pending Stripe Connect:**
+The smoke-test refund flow (place order → partial refund → full refund → 409 on third attempt → idempotency replay) could not be completed because NSBH has no onboarded Stripe Express account (`stripe_account_id` is null in dev DB). To run Test 3:
+1. Complete Stripe Express onboarding for the NSBH test account (Stripe Dashboard → Connect → Accounts).
+2. Update `tenants.stripe_account_id` and verify `stripe_charges_enabled = true` is synced via the `account.updated` webhook.
+3. Re-run Test 3 from the smoke-test plan.
 
 ### 2.2 Super-admin / platform portal — none of 4 screens exist
 
@@ -56,14 +59,14 @@ Without this, onboarding a second school requires running a SQL seed script. For
 
 ### 2.6 Production environment configuration ✅
 
-**Status: DONE (code).** `apps/web/vercel.json` created with production security headers:
+**Status: DONE (code).** `apps/web/next.config.ts` (`headers()` block) emits production security headers:
 - `Strict-Transport-Security` (max-age 63072000, includeSubDomains, preload)
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `X-Frame-Options: DENY`
 - `Content-Security-Policy` allowing Stripe, PostHog, and Resend domains
 
-**Remaining (ops):** Switch from Stripe test keys to live keys, pin production DB URL, configure Vercel environment groups, and assign production domain + TLS before deploy.
+**Remaining (ops):** Switch from Stripe test keys to live keys, pin production DB URL, configure Hostinger Node.js app env vars (preview vs production), and assign production domain + TLS before deploy.
 
 ### 2.7 Error handling, logging, observability ✅
 
@@ -74,7 +77,7 @@ Without this, onboarding a second school requires running a SQL seed script. For
 - `error.tsx` forwards unhandled errors to PostHog alongside `console.error`.
 - API routes (`/api/orders`, `/api/orders/[orderId]`, `/api/orders/[orderId]/refund`, `/api/stripe/webhook`) all send exceptions to PostHog.
 
-**Remaining:** Verify PostHog project key is set in production Vercel env vars.
+**Remaining:** Verify PostHog project key is set in production Hostinger env vars.
 
 ---
 
@@ -184,9 +187,9 @@ Add a `useEffect` that:
 
 ## 5. Suggested go-live checklist (one page)
 
-1. [ ] Refund/exchange action on order detail (§2.1)
+1. [x] Refund/exchange action on order detail (§2.1 — done in PR #4; E2E test pending Stripe Connect setup, see §2.1 note)
 2. [x] Stripe webhook endpoint (§2.3 — `payment_intent.succeeded`, `account.updated`, `charge.refunded` all wired)
-3. [x] Production env config — `vercel.json` headers, CSP, HSTS (§2.6 — code done; ops: live Stripe keys + domain + TLS still needed)
+3. [x] Production env config — `next.config.ts` security headers, CSP, HSTS (§2.6 — code done; ops: live Stripe keys + domain + TLS still needed)
 4. [x] PostHog (error tracking + logs) + error/not-found pages (§2.7 — client + server SDK wired, API routes instrumented, branded pages already done)
 5. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
 6. [ ] Accountant sign-off on GST report (§3.6)

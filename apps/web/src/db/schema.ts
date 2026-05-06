@@ -154,15 +154,23 @@ export const orderLines = pgTable("order_lines", {
 });
 
 // ─── Order refunds ───────────────────────────────────────────────────────────
-export const orderRefunds = pgTable("order_refunds", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  orderId: text("order_id")
-    .notNull()
-    .references(() => orders.id, { onDelete: "cascade" }),
-  lineId: uuid("line_id").references(() => orderLines.id, { onDelete: "set null" }),
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
-  reason: text("reason"),
-  operatorUserId: text("operator_user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
-  stripeRefundId: text("stripe_refund_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const orderRefunds = pgTable(
+  "order_refunds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    lineId: uuid("line_id").references(() => orderLines.id, { onDelete: "set null" }),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+    reason: text("reason"),
+    operatorUserId: text("operator_user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
+    stripeRefundId: text("stripe_refund_id"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    stripeRefundIdUnique: uniqueIndex("order_refunds_stripe_refund_id_unique").on(
+      table.stripeRefundId
+    ),
+  })
+);

@@ -104,7 +104,7 @@ For a payment site collecting student PII, AU consumer law and the Privacy Act 1
 
 ### 2.6 Production environment configuration ✅
 
-**Where:** `apps/web/vercel.json`
+**Where:** `apps/web/next.config.ts`
 
 **Status: DONE (code).** Production security headers configured:
 - `Strict-Transport-Security` (max-age 63072000, includeSubDomains, preload)
@@ -113,7 +113,7 @@ For a payment site collecting student PII, AU consumer law and the Privacy Act 1
 - `X-Frame-Options: DENY`
 - `Content-Security-Policy` allowing Stripe, PostHog, and Resend domains
 
-**Remaining (ops):** Switch to live Stripe keys, pin production DB URL, configure Vercel environment groups, assign production domain + TLS.
+**Remaining (ops):** Switch to live Stripe keys, pin production DB URL, configure Hostinger env groups, assign production domain + TLS.
 
 ### 2.7 Error handling, logging, observability ✅
 
@@ -124,4 +124,4 @@ For a payment site collecting student PII, AU consumer law and the Privacy Act 1
 - `error.tsx` forwards unhandled errors to PostHog alongside `console.error`.
 - API routes (`/api/orders`, `/api/orders/[orderId]`, `/api/orders/[orderId]/refund`, `/api/stripe/webhook`) send exceptions to PostHog with contextual metadata (step, orderId, etc.).
 
-**Remaining:** Verify PostHog project key in production Vercel env vars.
+**Remaining:** Verify PostHog project key in production Hostinger env vars.

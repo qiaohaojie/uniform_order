@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { posthog } from "@/lib/analytics/client";
 
 type OrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
 
@@ -72,6 +73,12 @@ export function OrderDetailActions({
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Failed to advance status.");
       }
+      posthog.capture("order_status_advanced", {
+        order_id: orderId,
+        tenant_id: tenantId,
+        from_status: currentStatus,
+        to_status: next,
+      });
       router.refresh();
     } catch (err) {
       console.error("Failed to advance status:", err);
@@ -82,6 +89,10 @@ export function OrderDetailActions({
   };
 
   const handleNotify = () => {
+    posthog.capture("order_ready_notification_sent", {
+      order_id: orderId,
+      tenant_id: tenantId,
+    });
     const subject = encodeURIComponent(`Your uniform order ${orderId} is ready`);
     const body = encodeURIComponent(
       `Hi ${parentName},\n\nYour uniform order ${orderId} for ${studentName} is ready for collection.\n\nPlease collect during shop hours.\n\nThank you.`

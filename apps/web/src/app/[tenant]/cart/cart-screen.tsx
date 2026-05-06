@@ -8,6 +8,7 @@ import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
 import { Btn } from "@/components/btn";
 import { BackIcon } from "@/components/icons";
+import { posthog } from "@/lib/analytics/client";
 
 export function CartScreen({ tenant }: { tenant: Tenant }) {
   const { lines, hydrated, setQty } = useCart();
@@ -131,7 +132,14 @@ export function CartScreen({ tenant }: { tenant: Tenant }) {
             <span className="font-serif text-[18px] font-semibold">Total</span>
             <span className="font-serif text-[22px] font-semibold tnum">${total}</span>
           </div>
-          <Link href={`/${tenant.id}/checkout`}>
+          <Link
+            href={`/${tenant.id}/checkout`}
+            onClick={() => posthog.capture("checkout_started", {
+              tenant_id: tenant.id,
+              item_count: totalQty,
+              cart_total: total,
+            })}
+          >
             <Btn variant="primary" size="lg" fullWidth accent={tenant.accent}>
               Checkout
             </Btn>

@@ -10,6 +10,7 @@ import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/components/icons";
 import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
+import { posthog } from "@/lib/analytics/client";
 
 type Delivery = "pickup" | "ship";
 
@@ -157,6 +158,12 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
     }
 
     writeStudentDetails(student);
+    posthog.capture("payment_attempted", {
+      tenant_id: tenant.id,
+      delivery,
+      total,
+      item_count: lines.length,
+    });
     setPaying(true);
     let confirmedPaymentIntentId: string | null = null;
     try {
@@ -201,12 +208,26 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
       });
 
       if (error) {
+        posthog.capture("payment_failed", {
+          tenant_id: tenant.id,
+          error_code: error.code,
+          error_type: error.type,
+          delivery,
+          total,
+        });
         setPaymentError(error.message ?? "Payment failed. Please check your card details and try again.");
         setPaying(false);
         return;
       }
 
       if (!paymentIntent || paymentIntent.status !== "succeeded") {
+        posthog.capture("payment_failed", {
+          tenant_id: tenant.id,
+          reason: "intent_not_succeeded",
+          status: paymentIntent?.status,
+          delivery,
+          total,
+        });
         setPaymentError("Payment was not completed. Please check your card details and try again.");
         setPaying(false);
         return;
@@ -351,7 +372,10 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
           <DeliveryOption
             tenant={tenant}
             on={delivery === "pickup"}
-            onSelect={() => setDelivery("pickup")}
+            onSelect={() => {
+              setDelivery("pickup");
+              posthog.capture("delivery_method_selected", { method: "pickup", tenant_id: tenant.id });
+            }}
             icon={<PickupIcon size={18} />}
             title="Pickup at school office"
             sub="Free · Ready in 1–2 school days"
@@ -359,7 +383,10 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
           <DeliveryOption
             tenant={tenant}
             on={delivery === "ship"}
-            onSelect={() => setDelivery("ship")}
+            onSelect={() => {
+              setDelivery("ship");
+              posthog.capture("delivery_method_selected", { method: "ship", tenant_id: tenant.id });
+            }}
             icon={<ShipIcon size={18} />}
             title="Ship to home"
             sub="$9.50 · 3–5 business days"
