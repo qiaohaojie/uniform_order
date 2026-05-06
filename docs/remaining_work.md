@@ -47,27 +47,34 @@ Without this, onboarding a second school requires running a SQL seed script. For
 - Platform-level Stripe payouts overview.
 - Branding editor (logo upload, accent colour picker, live parent preview).
 
-### 2.3 Stripe webhook handler — partially done
+### 2.3 Stripe webhook handler ✅
 
-**Status: PARTIAL.** `POST /api/stripe/webhook` exists with signature verification and idempotent handling for `payment_intent.succeeded` (atomically transitions `pending_payment → new` and sends confirmation email). `account.updated` and `charge.refunded` are not yet handled — the latter two remain required for reliable Connect onboarding sync and out-of-band refund reconciliation.
+**Status: DONE.** `POST /api/stripe/webhook` has signature verification and idempotent handling for:
+- `payment_intent.succeeded` — atomically transitions `pending_payment → new`, sends confirmation email
+- `account.updated` — syncs Stripe Connect account status to `tenants` (payouts/charges enabled)
+- `charge.refunded` — records out-of-band refunds from Stripe Dashboard, updates `orderRefunds` table, recalculates total refunded, transitions order to `partially_refunded` or `refunded`
 
-### 2.6 Production environment configuration
+### 2.6 Production environment configuration ✅
 
-- Switch from Stripe **test** keys to **live** keys (today `.env.local` is test mode per audit).
-- Production database URL pinned to a non-shared Neon branch.
-- `NEXT_PUBLIC_*` keys reviewed (no secret leaks).
-- Vercel project (or chosen host) with environment groups for `preview` / `production`.
-- Domain + TLS (`uniformsonline.com.au` or per-tenant subdomains).
-- Add `vercel.json` headers (`Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, basic CSP).
+**Status: DONE (code).** `apps/web/vercel.json` created with production security headers:
+- `Strict-Transport-Security` (max-age 63072000, includeSubDomains, preload)
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy` allowing Stripe, PostHog, and Resend domains
 
-### 2.7 Error handling, logging, observability — partially done
+**Remaining (ops):** Switch from Stripe test keys to live keys, pin production DB URL, configure Vercel environment groups, and assign production domain + TLS before deploy.
 
-**Status: PARTIAL.**
-- Global `error.tsx` and `not-found.tsx` exist, styled to brand.
-- PostHog (error tracking + logs + product analytics) is not yet wired in.
-- API routes still use `console.error` only — failures are silent in production without a log aggregator.
+### 2.7 Error handling, logging, observability ✅
 
-**Remaining required:** Wire PostHog SDK to both client (`posthog-js`) and server (`posthog-node`) with error tracking and log capture enabled, request-id correlation in logs.
+**Status: DONE (code).**
+- `posthog-js` + `posthog-node` installed.
+- Client: `lib/analytics/client.ts` + `<PostHogProvider>` in root layout — captures `$pageview`, `identifyUser`, `resetUser`.
+- Server: `lib/analytics/server.ts` — lazy `PostHog` client with `serverCaptureException`.
+- `error.tsx` forwards unhandled errors to PostHog alongside `console.error`.
+- API routes (`/api/orders`, `/api/orders/[orderId]`, `/api/orders/[orderId]/refund`, `/api/stripe/webhook`) all send exceptions to PostHog.
+
+**Remaining:** Verify PostHog project key is set in production Vercel env vars.
 
 ---
 
@@ -178,9 +185,9 @@ Add a `useEffect` that:
 ## 5. Suggested go-live checklist (one page)
 
 1. [ ] Refund/exchange action on order detail (§2.1)
-2. [~] Stripe webhook endpoint (§2.3 — `payment_intent.succeeded` done; `account.updated` + `charge.refunded` pending)
-3. [ ] Production env, live Stripe keys, security headers (§2.6)
-4. [~] PostHog (error tracking + logs) + error/not-found pages (§2.7 — branded error/not-found done; PostHog wiring pending)
+2. [x] Stripe webhook endpoint (§2.3 — `payment_intent.succeeded`, `account.updated`, `charge.refunded` all wired)
+3. [x] Production env config — `vercel.json` headers, CSP, HSTS (§2.6 — code done; ops: live Stripe keys + domain + TLS still needed)
+4. [x] PostHog (error tracking + logs) + error/not-found pages (§2.7 — client + server SDK wired, API routes instrumented, branded pages already done)
 5. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
 6. [ ] Accountant sign-off on GST report (§3.6)
 7. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible

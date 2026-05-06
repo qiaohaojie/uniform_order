@@ -81,6 +81,15 @@ For a payment site collecting student PII, AU consumer law and the Privacy Act 1
 
 ## 2. 🟠 High (resolved)
 
+### 2.3 Stripe webhook handler ✅
+
+**Where:** `apps/web/src/app/api/stripe/webhook/route.ts`
+
+**Status: DONE.** Signature verification with raw-body parsing. Idempotent handling for:
+- `payment_intent.succeeded` — atomically flips `pending_payment → new`, sends confirmation email, stamps `emails_sent`.
+- `account.updated` — syncs `stripePayoutsEnabled` / `stripeChargesEnabled` to `tenants`.
+- `charge.refunded` — records out-of-band refunds, inserts `orderRefunds` row, recalculates total refunded, updates order status to `partially_refunded` or `refunded`.
+
 ### 2.4 Order placement is not idempotent / not atomic with payment ✅
 
 **Where:** `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`
@@ -92,3 +101,27 @@ For a payment site collecting student PII, AU consumer law and the Privacy Act 1
 **Where:** `apps/web/src/lib/cart-store.ts`
 
 **Status: DONE.** Cart initializes empty; `SAMPLE_CART` remains as a fixture only (not seeded at runtime).
+
+### 2.6 Production environment configuration ✅
+
+**Where:** `apps/web/vercel.json`
+
+**Status: DONE (code).** Production security headers configured:
+- `Strict-Transport-Security` (max-age 63072000, includeSubDomains, preload)
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy` allowing Stripe, PostHog, and Resend domains
+
+**Remaining (ops):** Switch to live Stripe keys, pin production DB URL, configure Vercel environment groups, assign production domain + TLS.
+
+### 2.7 Error handling, logging, observability ✅
+
+**Status: DONE (code).**
+- `posthog-js` + `posthog-node` installed.
+- Client analytics: `lib/analytics/client.ts` + `<PostHogProvider>` wired into root layout — captures `$pageview`, `identifyUser`, `resetUser`.
+- Server analytics: `lib/analytics/server.ts` — lazy `PostHog` client, `serverCaptureException`.
+- `error.tsx` forwards unhandled errors to PostHog alongside `console.error`.
+- API routes (`/api/orders`, `/api/orders/[orderId]`, `/api/orders/[orderId]/refund`, `/api/stripe/webhook`) send exceptions to PostHog with contextual metadata (step, orderId, etc.).
+
+**Remaining:** Verify PostHog project key in production Vercel env vars.
