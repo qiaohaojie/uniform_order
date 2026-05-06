@@ -12,6 +12,8 @@ type Bucket = {
 
 // NOTE: This rate limiter is in-memory and resets on cold starts.
 // Not suitable for distributed or persistent rate-limit enforcement.
+// On Hostinger's single Node.js app this works correctly; if we ever scale
+// to multiple instances, swap this for a Redis or Upstash-backed limiter.
 const buckets = new Map<string, Bucket>();
 
 function getClientAddress(req: NextRequest) {

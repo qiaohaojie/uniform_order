@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { captureException } from "@/lib/analytics/client";
 
 export default function GlobalError({
   error,
@@ -12,6 +13,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("Global error:", error);
+    captureException(error, { digest: error.digest, page: window.location.pathname });
   }, [error]);
 
   return (

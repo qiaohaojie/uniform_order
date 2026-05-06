@@ -7,6 +7,7 @@ import type { CatalogItem, Tenant } from "@/lib/data";
 import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CartIcon, CheckIcon } from "@/components/icons";
+import { posthog } from "@/lib/analytics/client";
 
 export function ItemDetailInteractive({
   tenant,
@@ -37,6 +38,16 @@ export function ItemDetailInteractive({
       qty,
       price: variant.price,
       name: item.name,
+    });
+    posthog.capture("item_added_to_cart", {
+      item_id: item.id,
+      item_name: item.name,
+      variant: variant.label,
+      size,
+      qty,
+      unit_price: variant.price,
+      line_total: variant.price * qty,
+      tenant_id: tenant.id,
     });
     router.push(`/${tenant.id}/cart`);
   };
