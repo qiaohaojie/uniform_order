@@ -15,6 +15,13 @@
       "when": 1777983556209,
       "tag": "0001_youthful_purifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778047004407,
+      "tag": "0002_rapid_donald_blake",
+      "breakpoints": true
     }
   ]
 }
