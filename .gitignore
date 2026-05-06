@@ -35,3 +35,4 @@ my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
 
 # superpowers runtime state
 .superpowers/
+.claude/skills/integration-nextjs-app-router/references
