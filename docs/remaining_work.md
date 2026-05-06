@@ -22,20 +22,7 @@ This document lists every item that must be resolved (or explicitly deferred) be
 
 ## 2. 🟠 High — required for an acceptable v1
 
-### 2.1 Refund / exchange UI on order detail (admin) ✅
-
-**Status: DONE (PR #4 — feat/posthog-and-hostinger-deploy).**
-- Refund button + partial-amount dialog on admin order detail.
-- `POST /api/orders/[orderId]/refund` — Stripe `refunds.create` with idempotency key, partial and full refund supported.
-- `order_refunds` table (migration `0003_futuristic_snowbird`) records each refund with operator user ID, stripe refund ID, amount, reason.
-- `order_status` enum extended: `partially_refunded`, `refunded`. Status chip updates accordingly.
-- `charge.refunded` webhook handler records out-of-band refunds from Stripe Dashboard.
-
-**Post-merge test item — Test 3 (refund E2E) blocked pending Stripe Connect:**
-The smoke-test refund flow (place order → partial refund → full refund → 409 on third attempt → idempotency replay) could not be completed because NSBH has no onboarded Stripe Express account (`stripe_account_id` is null in dev DB). To run Test 3:
-1. Complete Stripe Express onboarding for the NSBH test account (Stripe Dashboard → Connect → Accounts).
-2. Update `tenants.stripe_account_id` and verify `stripe_charges_enabled = true` is synced via the `account.updated` webhook.
-3. Re-run Test 3 from the smoke-test plan.
+> §2.1 (refund/exchange UI), §2.3 (Stripe webhook handler), §2.6 (production env config — code), and §2.7 (error handling / observability — code) are now complete and have been moved to `docs/completed.md` §4. Their leftover ops/verification follow-ups are tracked below in §2.8.
 
 ### 2.2 Super-admin / platform portal — none of 4 screens exist
 
@@ -50,34 +37,13 @@ Without this, onboarding a second school requires running a SQL seed script. For
 - Platform-level Stripe payouts overview.
 - Branding editor (logo upload, accent colour picker, live parent preview).
 
-### 2.3 Stripe webhook handler ✅
+### 2.8 Ops / verification follow-ups (carried over from completed code work)
 
-**Status: DONE.** `POST /api/stripe/webhook` has signature verification and idempotent handling for:
-- `payment_intent.succeeded` — atomically transitions `pending_payment → new`, sends confirmation email
-- `account.updated` — syncs Stripe Connect account status to `tenants` (payouts/charges enabled)
-- `charge.refunded` — records out-of-band refunds from Stripe Dashboard, updates `orderRefunds` table, recalculates total refunded, transitions order to `partially_refunded` or `refunded`
+The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verification items still need to happen before go-live:
 
-### 2.6 Production environment configuration ✅
-
-**Status: DONE (code).** `apps/web/next.config.ts` (`headers()` block) emits production security headers:
-- `Strict-Transport-Security` (max-age 63072000, includeSubDomains, preload)
-- `X-Content-Type-Options: nosniff`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `X-Frame-Options: DENY`
-- `Content-Security-Policy` allowing Stripe, PostHog, and Resend domains
-
-**Remaining (ops):** Switch from Stripe test keys to live keys, pin production DB URL, configure Hostinger Node.js app env vars (preview vs production), and assign production domain + TLS before deploy.
-
-### 2.7 Error handling, logging, observability ✅
-
-**Status: DONE (code).**
-- `posthog-js` + `posthog-node` installed.
-- Client: `lib/analytics/client.ts` + `<PostHogProvider>` in root layout — captures `$pageview`, `identifyUser`, `resetUser`.
-- Server: `lib/analytics/server.ts` — lazy `PostHog` client with `serverCaptureException`.
-- `error.tsx` forwards unhandled errors to PostHog alongside `console.error`.
-- API routes (`/api/orders`, `/api/orders/[orderId]`, `/api/orders/[orderId]/refund`, `/api/stripe/webhook`) all send exceptions to PostHog.
-
-**Remaining:** Verify PostHog project key is set in production Hostinger env vars.
+- **Refund E2E (from §2.1):** Once NSBH's Stripe Express account is onboarded, run smoke-test Test 3 — place order → partial refund → full refund → 409 on third attempt → idempotency replay. (See §5 checklist item 8.)
+- **Production env (from §2.6):** Switch from Stripe test keys to live keys; pin production `DATABASE_URL`; configure Hostinger Node.js app env groups (preview vs production); assign production domain + TLS.
+- **Observability (from §2.7):** Verify PostHog project key is set in production Hostinger env vars (and confirm events are arriving from production after first deploy).
 
 ---
 
@@ -187,14 +153,13 @@ Add a `useEffect` that:
 
 ## 5. Suggested go-live checklist (one page)
 
-1. [x] Refund/exchange action on order detail (§2.1 — done in PR #4; E2E test pending Stripe Connect setup, see item 8 below)
-2. [x] Stripe webhook endpoint (§2.3 — `payment_intent.succeeded`, `account.updated`, `charge.refunded` all wired)
-3. [x] Production env config — `next.config.ts` security headers, CSP, HSTS (§2.6 — code done; ops: live Stripe keys + domain + TLS still needed)
-4. [x] PostHog (error tracking + logs) + error/not-found pages (§2.7 — client + server SDK wired, API routes instrumented, branded pages already done)
-5. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
-6. [ ] Accountant sign-off on GST report (§3.6)
-7. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
-8. [ ] Stripe Express account onboarded for NSBH (test mode first, then live): complete onboarding at Stripe Dashboard → Connect → Accounts, verify `account.updated` webhook syncs `stripe_charges_enabled = true` to tenants table, then re-run Test 3 smoke test (place order → partial refund → full refund → 409 on third attempt)
+> Items 1–4 of the original checklist are complete and have been moved to `docs/completed.md` §4.5.
+
+1. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
+2. [ ] Accountant sign-off on GST report (§3.6)
+3. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
+4. [ ] Stripe Express account onboarded for NSBH (test mode first, then live): complete onboarding at Stripe Dashboard → Connect → Accounts, verify `account.updated` webhook syncs `stripe_charges_enabled = true` to tenants table, then re-run Test 3 smoke test (place order → partial refund → full refund → 409 on third attempt)
+5. [ ] Ops follow-ups in §2.8 (live Stripe keys, prod DB URL, Hostinger env, prod domain + TLS, PostHog key verified)
 
 The super-admin portal (§2.2) is required for onboarding tenant #3 and beyond, but the launch tenant (NSBH) can ship without it provided RGSH stays on seed data.
 
@@ -210,6 +175,6 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 | "Riley wore size X last year" hint (hardcoded) | §4.1 + §4.9 (implementation detail) |
 | Dashboard "New product" button not wired | §4.2 |
 | Dashboard "Export" button not wired | §4.2 |
-| Refund / exchange action on order detail | §2.1 (✅ done in PR #4; E2E pending Stripe Connect) |
+| Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 4 |
 | Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) | §2.2 |
 | Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) | §3.1 |
