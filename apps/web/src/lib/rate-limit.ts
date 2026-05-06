@@ -23,7 +23,7 @@ function getClientAddress(req: NextRequest) {
   const trustedProxyIpHeaders = [
     req.headers.get("x-real-ip"),
     req.headers.get("cf-connecting-ip"),
-    req.headers.get("x-vercel-forwarded-for"),
+    req.headers.get("x-forwarded-for"),
   ];
 
   const trustedProxyIp = trustedProxyIpHeaders.find((value) => value && value.trim().length > 0);
@@ -32,7 +32,9 @@ function getClientAddress(req: NextRequest) {
   }
 
   // x-forwarded-for can be client-controlled unless set by a trusted proxy.
-  if (req.headers.has("x-vercel-id")) {
+  // Only trust it if x-real-ip or cf-connecting-ip was also present,
+  // indicating we're behind a known proxy layer.
+  if (trustedProxyIp) {
     const forwardedFor = req.headers.get("x-forwarded-for");
     if (forwardedFor) {
       return forwardedFor.split(",")[0]?.trim() ?? null;

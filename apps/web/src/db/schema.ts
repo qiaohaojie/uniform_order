@@ -55,6 +55,11 @@ export const tenants = pgTable("tenants", {
   stripeAccountId: text("stripe_account_id"),
   stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false),
   stripeChargesEnabled: boolean("stripe_charges_enabled").default(false),
+  // Platform approval gate (Stripe Connect compliance)
+  platformApprovalStatus: text("platform_approval_status").notNull().default("pending"),
+  platformApprovedAt: timestamp("platform_approved_at"),
+  platformApprovedBy: text("platform_approved_by"),
+  platformRejectionReason: text("platform_rejection_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

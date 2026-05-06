@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
+    if (tenant.platformApprovalStatus !== "approved") {
+      return NextResponse.json(
+        { error: "Tenant not yet approved by platform" },
+        { status: 409 }
+      );
+    }
 
     const amountInCents = Math.round(amountNumber * 100);
     const feeBps = Number(process.env.STRIPE_APPLICATION_FEE_BPS ?? 0);
