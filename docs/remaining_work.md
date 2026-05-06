@@ -187,12 +187,13 @@ Add a `useEffect` that:
 
 ## 5. Suggested go-live checklist (one page)
 
-1. [x] Refund/exchange action on order detail (§2.1 — done in PR #4; E2E test pending Stripe Connect setup, see §2.1 note)
+1. [x] Refund/exchange action on order detail (§2.1 — done in PR #4; E2E test pending Stripe Connect setup, see item 8 below)
 2. [x] Stripe webhook endpoint (§2.3 — `payment_intent.succeeded`, `account.updated`, `charge.refunded` all wired)
 3. [x] Production env config — `next.config.ts` security headers, CSP, HSTS (§2.6 — code done; ops: live Stripe keys + domain + TLS still needed)
 4. [x] PostHog (error tracking + logs) + error/not-found pages (§2.7 — client + server SDK wired, API routes instrumented, branded pages already done)
 5. [ ] Catalog seeded with full NSBH paper-form items (§3.1)
 6. [ ] Accountant sign-off on GST report (§3.6)
 7. [ ] Manual end-to-end test: parent orders → Stripe charge → operator marks ready → parent receives email → operator refunds one line → Stripe refund visible
+8. [ ] Stripe Express account onboarded for NSBH (test mode first, then live): complete onboarding at Stripe Dashboard → Connect → Accounts, verify `account.updated` webhook syncs `stripe_charges_enabled = true` to tenants table, then re-run Test 3 smoke test (place order → partial refund → full refund → 409 on third attempt)
 
 The super-admin portal (§2.2) is required for onboarding tenant #3 and beyond, but the launch tenant (NSBH) can ship without it provided RGSH stays on seed data.
