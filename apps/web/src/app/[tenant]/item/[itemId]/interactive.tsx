@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { CatalogItem, Tenant } from "@/lib/data";
 import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
@@ -26,6 +26,22 @@ export function ItemDetailInteractive({
   const [size, setSize] = useState(item.variants[0]?.sizes[Math.min(2, item.variants[0].sizes.length - 1)] ?? "");
   const [qty, setQty] = useState(1);
   const [showGuide, setShowGuide] = useState(false);
+
+  const [hint, setHint] = useState<{ studentName: string; size: string; variantLabel: string } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams({ tenantId: tenant.id, itemId: item.id });
+    let cancelled = false;
+    fetch(`/api/orders/size-hint?${params.toString()}`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) setHint(data?.hint ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant.id, item.id]);
 
   const variant = item.variants[variantIdx]!;
   const cartCount = lines.reduce((s, l) => s + l.qty, 0);
@@ -153,10 +169,12 @@ export function ItemDetailInteractive({
               );
             })}
           </div>
-          <div className="mt-2 text-[11px] flex items-center gap-1.5" style={{ color: "var(--color-ink-dim)" }}>
-            <span style={{ color: "var(--color-success)" }}><CheckIcon size={12} /></span>
-            <span>Tim wore size 14 last year</span>
-          </div>
+          {hint && (
+            <div className="mt-2 text-[11px] flex items-center gap-1.5" style={{ color: "var(--color-ink-dim)" }}>
+              <span style={{ color: "var(--color-success)" }}><CheckIcon size={12} /></span>
+              <span>{hint.studentName} wore size {hint.size} last year</span>
+            </div>
+          )}
         </div>
       </div>
 
