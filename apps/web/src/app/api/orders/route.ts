@@ -13,6 +13,7 @@ import {
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
+import { sendOrderConfirmationEmail } from "@/lib/email";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
@@ -230,6 +231,13 @@ export async function POST(req: NextRequest) {
 
     if (!createdOrderId) {
       throw new Error("Unable to generate a unique order ID");
+    }
+
+    // Send order confirmation email (best-effort; do not fail the request)
+    try {
+      await sendOrderConfirmationEmail(createdOrderId);
+    } catch (err) {
+      console.error("Order confirmation email failed for order", createdOrderId, err);
     }
 
     return NextResponse.json({ orderId: createdOrderId }, { status: 201 });
