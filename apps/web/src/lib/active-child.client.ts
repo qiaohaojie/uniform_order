@@ -9,9 +9,9 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export function setActiveChildCookieClient(childId: string): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${ACTIVE_CHILD_COOKIE_NAME}=${encodeURIComponent(
-    childId
-  )}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+  const secureFlag =
+    typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${ACTIVE_CHILD_COOKIE_NAME}=${encodeURIComponent(childId)}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax${secureFlag}`;
 }
 
 export function readActiveChildCookieClient(): string | null {
@@ -23,5 +23,7 @@ export function readActiveChildCookieClient(): string | null {
 
 export function clearActiveChildCookieClient(): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${ACTIVE_CHILD_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
+  const secureFlag =
+    typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${ACTIVE_CHILD_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax${secureFlag}`;
 }
