@@ -519,6 +519,13 @@ export function setActiveChildCookieClient(childId: string): void {
   )}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
 }
 
+export function readActiveChildCookieClient(): string | null {
+  if (typeof document === "undefined") return null;
+  const escaped = COOKIE_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export function clearActiveChildCookieClient(): void {
   if (typeof document === "undefined") return;
   document.cookie = `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
@@ -1121,7 +1128,11 @@ import { PlatformMark } from "@/components/platform-mark";
 import { ChevronRightIcon, PlusIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
 import { ChildFormModal, type TenantOption } from "./child-form-modal";
-import { setActiveChildCookieClient } from "@/lib/active-child";
+import {
+  setActiveChildCookieClient,
+  readActiveChildCookieClient,
+  clearActiveChildCookieClient,
+} from "@/lib/active-child";
 
 type TenantBrandRow = {
   id: string;
@@ -1260,6 +1271,11 @@ export function HomeClient(props: Props) {
     setRemovingId(id);
     try {
       await fetch(`/api/parent/children/${id}`, { method: "DELETE" });
+      // Per spec: clear uo:active-child if the removed profile was the active one.
+      // Otherwise stale cookie state would persist client-side until next sign-out.
+      if (readActiveChildCookieClient() === id) {
+        clearActiveChildCookieClient();
+      }
       refresh();
     } finally {
       setRemovingId(null);
@@ -1502,9 +1518,10 @@ Now sign in. Re-visit `/`. Expect:
 - "Good morning, <firstname>." greeting.
 - Empty middle area + the dashed "Add another child" button.
 - Tap "Add another child" → modal opens with NSBH/RGHS in the dropdown. Save → modal closes, picker shows the new child card.
-- Tap the child card → cookie sets and navigates to `/<tenantId>`.
+- Tap the child card → `uo:active-child` cookie sets (verify in devtools → Application → Cookies) and navigates to `/<tenantId>`.
 - Edit the child → modal opens pre-filled, school select disabled.
 - Remove → confirm prompt, on OK the row disappears.
+- **Active-child remove check:** save two children, tap the first to set the active cookie, navigate back to `/`, then Remove that first child. Confirm `uo:active-child` is cleared in devtools. Now repeat with two children, tap the first to set the active cookie, but Remove the *second* child. Confirm the cookie is **still set** to the first child's id.
 
 **Single-child reachability check** (the manage-children path):
 - After saving exactly one child, navigate to `/` directly. Expect: auto-redirect to that child's tenant catalog.
@@ -1868,6 +1885,8 @@ parentNote: normalizedParentNote,
 
 The spec requires clearing `uo:active-child` on a successful order placement that names a different child than the one carried by the cookie (`docs/superpowers/specs/2026-05-08-parent-account-children-design.md` "Tap-a-child — active-child transport contract" → "Cleared:"). Without this, a parent who taps Riley, edits the form to Mia, and submits will still see Riley's banner and prefill on the next shopping flow.
 
+**Why a name-only check isn't enough:** the spec explicitly allows two children with the same first name (`docs/superpowers/specs/...` Edge cases table — "Parent has two kids with the same first name | Allowed"). Comparing only `studentName` would treat Alex (Year 9) and Alex (Year 7) as the same child and skip the clear. The robust client-side heuristic is to compare the full prefill triple — `studentName`, `studentYear`, `rollClass`. If any one of the three differs, the cookie is cleared. (Identical-twins-same-class is the only degenerate case where this still keeps the cookie, but that's effectively one shopping profile and acceptable.)
+
 Implementation in `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`:
 
 1. Add the import:
@@ -1876,17 +1895,21 @@ Implementation in `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`:
 import { clearActiveChildCookieClient } from "@/lib/active-child";
 ```
 
-2. Locate the success branch of the `/api/orders` POST — the block that currently runs `clearCart()` and `router.push(...)` to the placed page. Immediately before the navigate, compare the submitted student name against the prefill's:
+2. Locate the success branch of the `/api/orders` POST — the block that currently runs `clearCart()` and `router.push(...)` to the placed page. Immediately before the navigate, compare the submitted student fields against the prefill's:
 
 ```ts
-const submittedName = student.studentName.trim().toLowerCase();
-const activeName = (prefill?.studentName ?? "").trim().toLowerCase();
-if (!activeName || submittedName !== activeName) {
+const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+const matchesActive =
+  prefill !== null &&
+  norm(student.studentName) === norm(prefill.studentName) &&
+  norm(student.year) === norm(prefill.year) &&
+  norm(student.rollClass) === norm(prefill.rollClass);
+if (!matchesActive) {
   clearActiveChildCookieClient();
 }
 ```
 
-This clears the cookie only when (a) there was no active child or (b) the order's student name doesn't match it. If the parent kept Riley's name through checkout, the cookie stays and the next visit's banners still read "Shopping for Riley".
+This clears the cookie unless the parent kept ALL of {name, year, rollClass} unchanged from the active-child prefill. If the parent kept Riley unchanged, the cookie stays and the next visit's banners still read "Shopping for Riley".
 
 - [ ] **Step 7: Type-check**
 
@@ -1909,8 +1932,9 @@ psql "$DATABASE_URL" -c "SELECT id, parent_note FROM orders ORDER BY created_at 
 Expected: latest order row has `parent_note = 'Test note from parent'`.
 
 **Active-child reconciliation check (the new Step 6):**
-- After the placed page renders, devtools → Application → Cookies → confirm `uo:active-child` is **still set** (you submitted as Riley, matching the active child).
-- Now place a second order: tap Riley on the picker, but this time edit the student name in the checkout form to "Mia" before paying. After placement, expect `uo:active-child` to be **cleared**. Re-visit `/nsbh` and confirm the catalog header banner is hidden (no active child).
+- After the placed page renders, devtools → Application → Cookies → confirm `uo:active-child` is **still set** (you submitted as Riley, matching the active child on all of name + year + roll class).
+- Place a second order: tap Riley on the picker, but this time edit the student name in the checkout form to "Mia" before paying. After placement, expect `uo:active-child` to be **cleared** (name diverged). Re-visit `/nsbh` and confirm the catalog header banner is hidden.
+- **Same-name siblings check** (the case the name-only comparison would miss): create two children at NSBH both named "Alex", one in Year 9 and one in Year 7. Tap Alex/Year 9 on the picker (active cookie now points at that profile). At checkout, edit the year field to "Year 7" and place the order. Expect `uo:active-child` to be **cleared** even though the name didn't change.
 
 Stop dev server.
 
