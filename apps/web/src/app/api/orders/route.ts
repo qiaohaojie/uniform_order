@@ -158,10 +158,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const normalizedParentNote =
-      typeof parentNote === "string" && parentNote.trim().length > 0
-        ? parentNote.trim().slice(0, 500)
-        : null;
+    let normalizedParentNote: string | null = null;
+    if (typeof parentNote === "string") {
+      const trimmed = parentNote.trim();
+      if (trimmed.length > 500) {
+        return NextResponse.json(
+          { error: "parentNote must be 500 characters or fewer" },
+          { status: 400 }
+        );
+      }
+      normalizedParentNote = trimmed.length > 0 ? trimmed : null;
+    } else if (parentNote !== undefined && parentNote !== null) {
+      return NextResponse.json(
+        { error: "parentNote must be a string" },
+        { status: 400 }
+      );
+    }
 
     const prefix = tenantId.toUpperCase();
     const insertOrder = async (orderId: string) => {
