@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CATALOG, CATEGORIES, PARENT, TENANTS, type TenantId } from "@/lib/data";
+import { CATALOG, CATEGORIES, TENANTS, type TenantId } from "@/lib/data";
+import { getActiveChild } from "@/lib/active-child";
 import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
 import { CartIcon, SearchIcon } from "@/components/icons";
@@ -17,7 +18,11 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
   const catParam = typeof sp.cat === "string" ? sp.cat : undefined;
   const activeCat = (catParam && CATEGORIES.includes(catParam as never) ? catParam : DEFAULT_CATEGORY) as string;
 
-  const kid = PARENT.kids.find((k) => k.tenantId === tenant.id);
+  const active = await getActiveChild();
+  const kid =
+    active && active.tenantId === tenant.id
+      ? { name: active.name, year: `Year ${active.year}` }
+      : null;
   const items = CATALOG.filter((i) => i.cat === activeCat);
 
   return (
