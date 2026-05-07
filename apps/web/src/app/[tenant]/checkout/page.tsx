@@ -9,14 +9,13 @@ export default async function CheckoutPage({ params }: PageProps<"/[tenant]/chec
   const { tenant: tid } = await params;
   if (!(tid in TENANTS)) notFound();
 
-  const user = await getSessionUser();
+  const [user, active] = await Promise.all([getSessionUser(), getActiveChild()]);
   if (!user) {
     redirect(`/auth/sign-in?callbackURL=${encodeURIComponent(`/${tid}/checkout`)}`);
   }
 
   const tenant = TENANTS[tid as TenantId];
 
-  const active = await getActiveChild();
   const prefill =
     active && active.tenantId === tid
       ? {

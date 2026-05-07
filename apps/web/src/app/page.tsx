@@ -9,10 +9,14 @@ export default async function Home({
   searchParams: Promise<{ action?: string }>;
 }) {
   const sp = await searchParams;
-  const user = await getSessionUser();
-  const tenants = await getPubliclyListedTenants();
 
-  const tenantBrandRows = tenants.map((t) => ({
+  // Parallelize session check and public tenant list — neither depends on the other.
+  const [user, listedTenants] = await Promise.all([
+    getSessionUser(),
+    getPubliclyListedTenants(),
+  ]);
+
+  const tenantBrandRows = listedTenants.map((t) => ({
     id: t.id,
     name: t.name,
     short: t.short,
