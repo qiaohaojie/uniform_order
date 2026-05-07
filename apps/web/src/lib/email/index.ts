@@ -82,7 +82,8 @@ export async function sendOrderConfirmationEmail(orderId: string) {
       lineTotal: Number(line.lineTotal),
     })),
     totalAmount: Number(order.total),
-    refundPolicyUrl: `${requireAppUrl()}/${tenant.id}/refund-policy`,
+    shopEmail: tenant.shopEmail,
+    orderUrl: `${requireAppUrl()}/orders/${order.id}`,
   };
 
   const html = await render(React.createElement(OrderConfirmationEmail, props));
@@ -142,6 +143,7 @@ export async function sendOrderReadyEmail(orderId: string) {
     collectionInstructions:
       tenant.collectionInstructions || "Please collect from the school office.",
     shopHours: tenant.shopHours || "Mon-Fri, 8:30am - 4:00pm",
+    orderUrl: `${requireAppUrl()}/orders/${order.id}`,
   };
 
   const html = await render(React.createElement(OrderReadyEmail, props));

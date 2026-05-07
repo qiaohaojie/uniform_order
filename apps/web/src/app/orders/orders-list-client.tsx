@@ -156,9 +156,10 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
         const tenant = TENANTS[o.tenantId as TenantId];
         if (!tenant) return null;
         return (
-          <div
+          <Link
             key={o.id}
-            className="bg-white border rounded-xl p-4 mb-3.5"
+            href={`/orders/${o.id}`}
+            className="block bg-white border rounded-xl p-4 mb-3.5 hover:shadow-sm transition-shadow"
             style={{ borderColor: "var(--color-rule)" }}
           >
             <div className="flex items-center gap-2.5 mb-2.5">
@@ -183,7 +184,7 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
                 ? `We'll email you when it's ready for pickup at the ${tenant.short} office.`
                 : "Shipping to your address."}
             </div>
-          </div>
+          </Link>
         );
       })}
 
@@ -206,15 +207,20 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
                   className={`flex items-center gap-3 px-4 py-3 ${i < past.length - 1 ? "border-b" : ""}`}
                   style={{ borderColor: "var(--color-rule)" }}
                 >
-                  <Crest tenant={tenant} size={32} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-semibold">
-                      {o.studentName}
+                  <Link
+                    href={`/orders/${o.id}`}
+                    className="flex items-center gap-3 flex-1 min-w-0"
+                  >
+                    <Crest tenant={tenant} size={32} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12.5px] font-semibold">
+                        {o.studentName}
+                      </div>
+                      <div className="text-[10.5px]" style={{ color: "var(--color-ink-dim)" }}>
+                        {new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })} · {o.id}
+                      </div>
                     </div>
-                    <div className="text-[10.5px]" style={{ color: "var(--color-ink-dim)" }}>
-                      {new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })} · {o.id}
-                    </div>
-                  </div>
+                  </Link>
                   <div className="flex flex-col items-end gap-1">
                     <div className="text-[13px] font-bold tnum">${parseFloat(o.total).toFixed(2)}</div>
                     <Link
