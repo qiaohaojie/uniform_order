@@ -10,7 +10,10 @@ import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/components/icons";
 import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
+import { clearActiveChildCookieClient } from "@/lib/active-child";
 import { posthog } from "@/lib/analytics/client";
+
+type Prefill = { studentName: string; year: string; rollClass: string } | null;
 
 type Delivery = "pickup" | "ship";
 
@@ -27,7 +30,7 @@ async function readApiError(res: Response, fallback: string) {
   }
 }
 
-export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
+export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: Prefill }) {
   const router = useRouter();
   const { lines, clearCart } = useCart();
   const [delivery, setDelivery] = useState<Delivery>("pickup");
@@ -36,21 +39,24 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
   const [paymentError, setPaymentError] = useState("");
   const [paymentLocked, setPaymentLocked] = useState(false);
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
-  const [student, setStudent] = useState<StudentDetails>({
-    studentName: "", rollClass: "", year: "Year 9",
-    parentName: "", mobile: "", email: "",
+  const [student, setStudent] = useState<StudentDetails>(() => {
+    const saved = readStudentDetails();
+    return {
+      studentName: prefill?.studentName ?? saved?.studentName ?? "",
+      rollClass: prefill?.rollClass ?? saved?.rollClass ?? "",
+      year: prefill?.year ?? saved?.year ?? "Year 9",
+      parentName: saved?.parentName ?? "",
+      mobile: saved?.mobile ?? "",
+      email: saved?.email ?? "",
+    };
   });
+  const [parentNote, setParentNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof StudentDetails, string>>>({});
   const cardMountRef = useRef<HTMLDivElement | null>(null);
   const stripeRef = useRef<Stripe | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const cardRef = useRef<StripeCardElement | null>(null);
   const paymentLockedRef = useRef(false);
-
-  useEffect(() => {
-    const saved = readStudentDetails();
-    if (saved) setStudent(saved);
-  }, []);
 
   useEffect(() => {
     paymentLockedRef.current = paymentLocked;
@@ -249,6 +255,7 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
         total,
         stripePaymentIntentId: paymentIntent.id,
         refundPolicyAccepted: acceptedPolicy,
+        parentNote: parentNote.trim() ? parentNote.trim() : null,
         lines: lines.map((l) => ({
           itemId: l.itemId,
           itemName: l.name,
@@ -268,6 +275,15 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
       if (res.ok) {
         const { orderId } = await res.json();
         clearCart();
+        const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+        const matchesActive =
+          prefill !== null &&
+          norm(student.studentName) === norm(prefill.studentName) &&
+          norm(student.year) === norm(prefill.year) &&
+          norm(student.rollClass) === norm(prefill.rollClass);
+        if (!matchesActive) {
+          clearActiveChildCookieClient();
+        }
         router.push(`/${tenant.id}/order/placed?total=${total.toFixed(2)}&delivery=${delivery}&orderId=${orderId}`);
       } else {
         const message = await readApiError(res, "Failed to place order.");
@@ -445,6 +461,23 @@ export function CheckoutScreen({ tenant }: { tenant: Tenant }) {
           <div className="flex justify-between items-baseline">
             <span className="font-serif text-[18px] font-semibold">Total</span>
             <span className="font-serif text-[22px] font-semibold tnum">${total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div className="px-5 pt-2 pb-1">
+          <label className="type-label block mb-1" style={{ color: "var(--color-ink-dim)" }}>
+            Note for the school (optional)
+          </label>
+          <textarea
+            value={parentNote}
+            onChange={(e) => setParentNote(e.target.value.slice(0, 500))}
+            rows={3}
+            placeholder="Anything the shop should know about this order?"
+            className="w-full border rounded-md px-3 py-2 text-[13px] outline-none resize-y"
+            style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+          />
+          <div className="text-[11px] mt-1" style={{ color: "var(--color-ink-dim)" }}>
+            {parentNote.length} / 500
           </div>
         </div>
       </div>

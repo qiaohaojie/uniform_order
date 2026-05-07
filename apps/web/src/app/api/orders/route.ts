@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
       total,
       stripePaymentIntentId,
       refundPolicyAccepted,
+      parentNote,
       lines,
     } = body;
 
@@ -157,6 +158,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedParentNote =
+      typeof parentNote === "string" && parentNote.trim().length > 0
+        ? parentNote.trim().slice(0, 500)
+        : null;
+
     const prefix = tenantId.toUpperCase();
     const insertOrder = async (orderId: string) => {
       await db.transaction(async (tx) => {
@@ -178,6 +184,7 @@ export async function POST(req: NextRequest) {
           stripeRef: normalizedStripePaymentIntentId,
           refundPolicyAcceptedAt: new Date(),
           userId: authResult.user.id,
+          parentNote: normalizedParentNote,
         });
 
         for (const line of lines) {
