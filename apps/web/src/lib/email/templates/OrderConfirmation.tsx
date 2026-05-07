@@ -31,7 +31,8 @@ interface OrderConfirmationEmailProps {
   studentYear: string;
   items: OrderItem[];
   totalAmount: number;
-  refundPolicyUrl: string;
+  shopEmail: string | null;
+  orderUrl: string;
 }
 
 export const OrderConfirmationEmail = ({
@@ -43,7 +44,8 @@ export const OrderConfirmationEmail = ({
   studentYear = "Year 1",
   items = [],
   totalAmount = 0,
-  refundPolicyUrl = "#",
+  shopEmail = null,
+  orderUrl = "#",
 }: OrderConfirmationEmailProps) => {
   const previewText = `Order Confirmation ${orderId} - ${tenantName}`;
 
@@ -99,12 +101,33 @@ export const OrderConfirmationEmail = ({
               </Row>
             </Section>
 
+            <Section style={ctaSection}>
+              <Link href={orderUrl} style={{ ...ctaButton, backgroundColor: tenantAccent }}>
+                View order status
+              </Link>
+            </Section>
+
             <Text style={footerText}>
-              Please review our{" "}
-              <Link href={refundPolicyUrl} style={link}>
-                Refund Policy
-              </Link>{" "}
-              if you have any questions.
+              {(() => {
+                const safeName = tenantName?.trim();
+                const safeEmail = shopEmail?.trim();
+                const validEmail = safeEmail && safeEmail.includes("@") ? safeEmail : null;
+                if (!safeName) {
+                  return "For refund or exchange questions, please contact your school directly.";
+                }
+                if (validEmail) {
+                  return (
+                    <>
+                      For refund or exchange questions, contact {safeName} at{" "}
+                      <Link href={`mailto:${validEmail}`} style={link}>
+                        {validEmail}
+                      </Link>
+                      .
+                    </>
+                  );
+                }
+                return `For refund or exchange questions, contact ${safeName} directly.`;
+              })()}
             </Text>
           </Section>
           <Hr style={footerHr} />
@@ -249,4 +272,19 @@ const footerNote = {
 const link = {
   color: "#556cd6",
   textDecoration: "underline",
+};
+
+const ctaSection = {
+  textAlign: "center" as const,
+  margin: "24px 0 8px",
+};
+
+const ctaButton = {
+  display: "inline-block",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: "bold" as const,
+  textDecoration: "none",
+  padding: "12px 24px",
+  borderRadius: "6px",
 };

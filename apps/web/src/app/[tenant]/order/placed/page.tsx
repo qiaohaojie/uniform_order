@@ -60,7 +60,7 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
       </div>
 
       <div className="px-5 pt-5 pb-7 flex-shrink-0">
-        <Link href="/orders">
+        <Link href={`/orders/${orderId}`}>
           <Btn variant="primary" size="lg" fullWidth accent={tenant.accent}>
             View order details
           </Btn>

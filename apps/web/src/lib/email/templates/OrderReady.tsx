@@ -5,6 +5,7 @@ import {
   Heading,
   Hr,
   Html,
+  Link,
   Preview,
   Section,
   Text,
@@ -18,6 +19,7 @@ interface OrderReadyEmailProps {
   studentName: string;
   collectionInstructions: string;
   shopHours: string;
+  orderUrl: string;
 }
 
 export const OrderReadyEmail = ({
@@ -27,6 +29,7 @@ export const OrderReadyEmail = ({
   studentName = "Student",
   collectionInstructions = "Please collect from the school office.",
   shopHours = "Mon-Fri, 8:30am - 4:00pm",
+  orderUrl = "#",
 }: OrderReadyEmailProps) => {
   const previewText = `Your order ${orderId} is ready for pickup!`;
 
@@ -57,6 +60,11 @@ export const OrderReadyEmail = ({
             <Text style={text}>
               Please bring a copy of this email or your order number when you come to collect.
             </Text>
+            <Section style={ctaSection}>
+              <Link href={orderUrl} style={{ ...ctaButton, backgroundColor: tenantAccent }}>
+                View order status
+              </Link>
+            </Section>
           </Section>
           <Hr style={footerHr} />
           <Section style={footer}>
@@ -151,4 +159,19 @@ const footerNote = {
   fontSize: "12px",
   textAlign: "center" as const,
   margin: "0",
+};
+
+const ctaSection = {
+  textAlign: "center" as const,
+  margin: "24px 0 8px",
+};
+
+const ctaButton = {
+  display: "inline-block",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: "bold" as const,
+  textDecoration: "none",
+  padding: "12px 24px",
+  borderRadius: "6px",
 };

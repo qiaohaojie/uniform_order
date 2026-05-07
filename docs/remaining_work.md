@@ -100,6 +100,26 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 `MobileShell` caps at 430px. Verify behaviour on iPhone SE (375px), Android landscape, and iPad split-view.
 
+### 3.10 Refund policy — capture during school onboarding (v1 ships with inline contact only)
+
+**v1 status (shipped):** Order confirmation email no longer links to a policy page. Footer now reads "For refund or exchange questions, contact {tenantName} at {shopEmail}." No platform-authored refund text under uniformorder.online's name. No `/terms` page. (Commit on `worktree-parent-order-detail`.)
+
+**Follow-ups (not v1 blockers):**
+
+1. **Delete the orphaned `/[tenant]/refund-policy` route.** No longer referenced from email after the v1 email change. Either remove the route entirely or leave it as a stub. Low priority — dead route, no harm if it sits.
+
+2. **School onboarding form must capture refund-policy data** (when §2.2 super-admin portal is built):
+   - Refund policy text *or* external URL (textarea or link field)
+   - Digital declaration: "We confirm this refund policy complies with Australian Consumer Law and we accept responsibility for honoring it for purchases via uniformorder.online" — name, role, date
+   - Seller-of-record acknowledgement checkbox (school confirms they understand they are seller of record under Stripe Connect)
+   - Store on `tenants` row (new columns) or a `tenant_legal` join table; version on update
+
+3. **Re-introduce per-tenant policy link in email (v2)** once schools have authored their own content via the onboarding form above. Footer becomes "Refund policy" link to school-authored `/[tenant]/refund-policy`.
+
+4. **Platform `/terms` page — deferred indefinitely.** Not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
+
+**Reference:** `my_doc/Legal/Refund_Policy/2026-05-07-refund-policy-ownership.md` for the full reasoning across Stripe Connect, marketplace practice, business, operational, and AU legal lenses, plus the v1 vs. v2 split.
+
 ---
 
 ## 4. 🟢 Low — post-launch acceptable
