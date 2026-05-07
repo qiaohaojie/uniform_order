@@ -487,7 +487,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
             className="w-full border rounded-md px-3 py-2 text-[13px] outline-none resize-y"
             style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
           />
-          <div className="text-[11px] mt-1" style={{ color: "var(--color-ink-dim)" }}>
+          <div className="text-[11px] mt-1" style={{ color: parentNote.length >= 500 ? "#B91C1C" : "var(--color-ink-dim)" }}>
             {parentNote.length} / 500
           </div>
         </div>
