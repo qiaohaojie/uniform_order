@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Tenant } from "@/lib/data";
-import { PARENT, cartTotal } from "@/lib/data";
+import { cartTotal } from "@/lib/data";
 import { useCart } from "@/lib/cart-store";
 import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
@@ -10,11 +10,13 @@ import { Btn } from "@/components/btn";
 import { BackIcon } from "@/components/icons";
 import { posthog } from "@/lib/analytics/client";
 
-export function CartScreen({ tenant }: { tenant: Tenant }) {
+type ActiveChildView = { name: string; year: string } | null;
+
+export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChild: ActiveChildView }) {
   const { lines, hydrated, setQty } = useCart();
   const total = cartTotal(lines);
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
-  const kid = PARENT.kids.find((k) => k.tenantId === tenant.id);
+  const kid = activeChild;
 
   return (
     <>
