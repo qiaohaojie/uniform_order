@@ -89,14 +89,41 @@ export async function POST(req: NextRequest) {
   if (event.type === "account.updated") {
     const account = event.data.object as Stripe.Account;
     if (account.id) {
-      await db
-        .update(tenants)
-        .set({
-          stripePayoutsEnabled: account.payouts_enabled ?? false,
-          stripeChargesEnabled: account.charges_enabled ?? false,
-          updatedAt: new Date(),
-        })
-        .where(eq(tenants.stripeAccountId, account.id));
+      try {
+        const updated = await db
+          .update(tenants)
+          .set({
+            stripePayoutsEnabled: account.payouts_enabled ?? false,
+            stripeChargesEnabled: account.charges_enabled ?? false,
+            updatedAt: new Date(),
+          })
+          .where(eq(tenants.stripeAccountId, account.id))
+          .returning({ id: tenants.id });
+
+        if (updated.length === 0) {
+          console.info("stripe webhook: account.updated matched no tenant", account.id);
+          await serverCapture("stripe-webhook", "stripe_account_updated_unmatched", {
+            stripe_account_id: account.id,
+            event_id: event.id,
+          });
+        } else {
+          await serverCapture("stripe-webhook", "stripe_account_updated", {
+            tenant_id: updated[0].id,
+            stripe_account_id: account.id,
+            payouts_enabled: account.payouts_enabled ?? false,
+            charges_enabled: account.charges_enabled ?? false,
+            details_submitted: account.details_submitted ?? false,
+          });
+        }
+      } catch (err) {
+        console.error("stripe webhook: account.updated DB write failed", err);
+        await serverCaptureException(
+          "stripe-webhook",
+          err instanceof Error ? err : new Error(String(err)),
+          { step: "account-updated", stripeAccountId: account.id, eventId: event.id }
+        );
+        throw err; // let Stripe retry
+      }
     }
     return NextResponse.json({ received: true });
   }
