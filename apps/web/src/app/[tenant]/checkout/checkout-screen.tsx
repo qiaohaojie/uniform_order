@@ -58,6 +58,17 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
   const cardRef = useRef<StripeCardElement | null>(null);
   const paymentLockedRef = useRef(false);
 
+  // When active-child prefill is in effect, write the merged values to localStorage
+  // on first render so a parent who switches active child and bounces away mid-checkout
+  // sees the correct prefill on return.
+  useEffect(() => {
+    if (prefill) {
+      writeStudentDetails(student);
+    }
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     paymentLockedRef.current = paymentLocked;
   }, [paymentLocked]);
