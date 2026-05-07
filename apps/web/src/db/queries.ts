@@ -1,4 +1,4 @@
-import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds } from "./index";
+import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds, parentChildren } from "./index";
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 
 export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
@@ -631,4 +631,138 @@ export async function updateTenantSettings(
     .set({ ...data, updatedAt: new Date() })
     .where(eq(tenants.id, tenantId))
     .returning({ id: tenants.id });
+}
+
+// ─── Parent saved children ───────────────────────────────────────────────────
+export type ParentChildRow = {
+  id: string;
+  tenantId: string;
+  name: string;
+  year: string;
+  rollClass: string | null;
+  lastConfirmedAt: Date;
+  createdAt: Date;
+};
+
+export async function getChildrenForParent(parentId: string): Promise<ParentChildRow[]> {
+  return db
+    .select({
+      id: parentChildren.id,
+      tenantId: parentChildren.tenantId,
+      name: parentChildren.name,
+      year: parentChildren.year,
+      rollClass: parentChildren.rollClass,
+      lastConfirmedAt: parentChildren.lastConfirmedAt,
+      createdAt: parentChildren.createdAt,
+    })
+    .from(parentChildren)
+    .where(eq(parentChildren.parentId, parentId))
+    .orderBy(parentChildren.createdAt);
+}
+
+export async function getChildById(id: string): Promise<ParentChildRow & { parentId: string } | null> {
+  const [row] = await db
+    .select({
+      id: parentChildren.id,
+      parentId: parentChildren.parentId,
+      tenantId: parentChildren.tenantId,
+      name: parentChildren.name,
+      year: parentChildren.year,
+      rollClass: parentChildren.rollClass,
+      lastConfirmedAt: parentChildren.lastConfirmedAt,
+      createdAt: parentChildren.createdAt,
+    })
+    .from(parentChildren)
+    .where(eq(parentChildren.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function createChild(data: {
+  parentId: string;
+  tenantId: string;
+  name: string;
+  year: string;
+  rollClass: string | null;
+}): Promise<ParentChildRow> {
+  const [row] = await db
+    .insert(parentChildren)
+    .values(data)
+    .returning({
+      id: parentChildren.id,
+      tenantId: parentChildren.tenantId,
+      name: parentChildren.name,
+      year: parentChildren.year,
+      rollClass: parentChildren.rollClass,
+      lastConfirmedAt: parentChildren.lastConfirmedAt,
+      createdAt: parentChildren.createdAt,
+    });
+  return row;
+}
+
+export async function updateChild(
+  id: string,
+  patch: { name?: string; year?: string; rollClass?: string | null }
+): Promise<ParentChildRow | null> {
+  const [row] = await db
+    .update(parentChildren)
+    .set({ ...patch, lastConfirmedAt: new Date() })
+    .where(eq(parentChildren.id, id))
+    .returning({
+      id: parentChildren.id,
+      tenantId: parentChildren.tenantId,
+      name: parentChildren.name,
+      year: parentChildren.year,
+      rollClass: parentChildren.rollClass,
+      lastConfirmedAt: parentChildren.lastConfirmedAt,
+      createdAt: parentChildren.createdAt,
+    });
+  return row ?? null;
+}
+
+export async function deleteChild(id: string): Promise<void> {
+  await db.delete(parentChildren).where(eq(parentChildren.id, id));
+}
+
+export async function confirmChild(id: string): Promise<ParentChildRow | null> {
+  const [row] = await db
+    .update(parentChildren)
+    .set({ lastConfirmedAt: new Date() })
+    .where(eq(parentChildren.id, id))
+    .returning({
+      id: parentChildren.id,
+      tenantId: parentChildren.tenantId,
+      name: parentChildren.name,
+      year: parentChildren.year,
+      rollClass: parentChildren.rollClass,
+      lastConfirmedAt: parentChildren.lastConfirmedAt,
+      createdAt: parentChildren.createdAt,
+    });
+  return row ?? null;
+}
+
+export async function getPubliclyListedTenants() {
+  return db
+    .select()
+    .from(tenants)
+    .where(eq(tenants.isPubliclyListed, true))
+    .orderBy(tenants.name);
+}
+
+export async function getOrderForReceipt(orderId: string) {
+  const [row] = await db
+    .select({
+      id: orders.id,
+      tenantId: orders.tenantId,
+      parentEmail: orders.parentEmail,
+      studentName: orders.studentName,
+      studentYear: orders.studentYear,
+      total: orders.total,
+      delivery: orders.delivery,
+      parentNote: orders.parentNote,
+    })
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+  return row ?? null;
 }
