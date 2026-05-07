@@ -68,6 +68,15 @@ Already counted in §1.5 as a blocker for the consent step. Listed again here be
 
 Button renders, has no `onClick`. Audit item 15. PDP allows ordering for multiple children — without this, families with siblings have to re-checkout per child.
 
+**Decision (2026-05-07): Path B — DB-backed parent accounts.** During brainstorming we concluded the right model is a real parent account on the platform with server-side saved children, not a localStorage-only convenience. Storing children's profiles server-side is lawful under the APPs with standard SaaS privacy hygiene (privacy notice, collection notice, edit/delete, retention rule) — see `my_doc/Legal/Parent_Children_Onboarding/2026-05-07-parent-school-linking.md` for the full reasoning. This pulls in scope beyond the original ticket; tracked dependencies:
+
+- **Parent auth** via **Neon Auth** with **magic-link email + Google sign-in** providers. Identity auto-syncs to Postgres via `neon_auth.users_sync`; FK from new `parent_children` table.
+- **`/privacy` page** (one-time content task; supersedes the deferred `/terms` page from §3.10 follow-up #4 to the extent that storage of personal data is now disclosed).
+- **`is_publicly_listed` tenant flag** so the picker only lists schools that have opted in.
+- **§3.4 (parent order tracking page)** can ride along once auth lands — same identity, same email-keyed lookup. Worth bundling.
+
+Spec: `docs/superpowers/specs/2026-05-08-parent-account-children-design.md`.
+
 ### 3.4 Order tracking page for parents
 
 PDP §3.1 mentions "order tracking" beyond an emailed receipt. Today the parent orders list shows status text but no per-order timeline (placed → packing → ready → collected). Add a parent-facing detail page at `/[tenant]/order/[orderId]` keyed by parent email + order ID.
