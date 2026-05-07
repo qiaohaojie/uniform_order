@@ -10,7 +10,7 @@ import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/components/icons";
 import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
-import { clearActiveChildCookieClient } from "@/lib/active-child";
+import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 import { posthog } from "@/lib/analytics/client";
 
 type Prefill = { studentName: string; year: string; rollClass: string } | null;

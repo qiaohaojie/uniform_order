@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CATALOG, CATEGORIES, TENANTS, type TenantId } from "@/lib/data";
-import { getActiveChild } from "@/lib/active-child";
+import { getActiveChild } from "@/lib/active-child.server";
 import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
 import { CartIcon, SearchIcon } from "@/components/icons";

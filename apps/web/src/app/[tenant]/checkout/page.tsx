@@ -3,7 +3,7 @@ import { TENANTS, type TenantId } from "@/lib/data";
 import { MobileShell } from "@/components/mobile-shell";
 import { CheckoutScreen } from "./checkout-screen";
 import { getSessionUser } from "@/lib/auth/authorization";
-import { getActiveChild } from "@/lib/active-child";
+import { getActiveChild } from "@/lib/active-child.server";
 
 export default async function CheckoutPage({ params }: PageProps<"/[tenant]/checkout">) {
   const { tenant: tid } = await params;

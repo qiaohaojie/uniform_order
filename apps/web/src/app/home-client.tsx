@@ -13,7 +13,7 @@ import {
   setActiveChildCookieClient,
   readActiveChildCookieClient,
   clearActiveChildCookieClient,
-} from "@/lib/active-child";
+} from "@/lib/active-child.client";
 import type { TenantId } from "@/lib/data";
 
 type TenantBrandRow = {

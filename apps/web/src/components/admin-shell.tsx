@@ -6,7 +6,7 @@ import { TENANTS, type TenantId } from "@/lib/data";
 import { Crest } from "./crest";
 import { PlatformMark } from "./platform-mark";
 import { authClient } from "@/lib/auth/client";
-import { clearActiveChildCookieClient } from "@/lib/active-child";
+import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 
 function AdminIcon({ kind, size = 16, color = "currentColor" }: { kind: string; size?: number; color?: string }) {
   const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };

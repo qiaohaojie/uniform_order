@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { TENANTS, type TenantId } from "@/lib/data";
 import { MobileShell } from "@/components/mobile-shell";
 import { CartScreen } from "./cart-screen";
-import { getActiveChild } from "@/lib/active-child";
+import { getActiveChild } from "@/lib/active-child.server";
 
 export default async function CartPage({ params }: PageProps<"/[tenant]/cart">) {
   const { tenant: tid } = await params;
