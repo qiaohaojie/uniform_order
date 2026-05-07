@@ -2,17 +2,15 @@ import "server-only";
 import { cookies } from "next/headers";
 import { getSessionUser } from "@/lib/auth/authorization";
 import { getChildById } from "@/db/queries";
+import { ACTIVE_CHILD_COOKIE_NAME } from "./active-child.client";
 
 export type ActiveChild = {
   id: string;
   tenantId: string;
   name: string;
-  year: string;            // canonical short form, e.g. "9"
+  year: string;
   rollClass: string | null;
 };
-
-const COOKIE_NAME = "uo:active-child";
-const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 /**
  * Server-side reader. Resolves the cookie's child UUID, ownership-checks
@@ -26,7 +24,7 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  */
 export async function getActiveChild(): Promise<ActiveChild | null> {
   const cookieStore = await cookies();
-  const childId = cookieStore.get(COOKIE_NAME)?.value;
+  const childId = cookieStore.get(ACTIVE_CHILD_COOKIE_NAME)?.value;
   if (!childId) return null;
 
   const user = await getSessionUser();
@@ -43,23 +41,4 @@ export async function getActiveChild(): Promise<ActiveChild | null> {
     year: child.year,
     rollClass: child.rollClass,
   };
-}
-
-/**
- * Server-side mutator. Writes the cookie. Used by API routes and server actions.
- * Client code should use the response cookie pattern via a small fetch endpoint.
- */
-export async function setActiveChildCookieServer(childId: string): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, childId, {
-    path: "/",
-    sameSite: "lax",
-    httpOnly: false,
-    maxAge: COOKIE_MAX_AGE_SECONDS,
-  });
-}
-
-export async function clearActiveChildCookieServer(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
 }
