@@ -61,6 +61,7 @@ export function HomeClient(props: Props) {
     | { open: true; mode: "edit"; child: ParentChildRow }
   >({ open: false });
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (props.mode !== "logged-in") return;
@@ -143,8 +144,12 @@ export function HomeClient(props: Props) {
     refresh();
   };
 
-  const onRemove = async (id: string, name: string) => {
-    if (!confirm(`Remove ${name} from your saved children? Past orders are not affected.`)) return;
+  const requestRemove = (id: string, name: string) => setRemoveTarget({ id, name });
+
+  const confirmRemove = async () => {
+    if (!removeTarget) return;
+    const { id } = removeTarget;
+    setRemoveTarget(null);
     setRemovingId(id);
     try {
       await fetch(`/api/parent/children/${id}`, { method: "DELETE" });
@@ -238,7 +243,7 @@ export function HomeClient(props: Props) {
               <div className="flex justify-end gap-3 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
                 <button onClick={() => setModal({ open: true, mode: "edit", child: c })}>Edit</button>
                 <button
-                  onClick={() => onRemove(c.id, c.name)}
+                  onClick={() => requestRemove(c.id, c.name)}
                   disabled={removingId === c.id}
                   style={{ color: "#B91C1C" }}
                 >
@@ -285,6 +290,46 @@ export function HomeClient(props: Props) {
             refresh();
           }}
         />
+      )}
+
+      {removeTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-confirm-title"
+        >
+          <div
+            className="bg-white rounded-xl border shadow-xl w-full max-w-sm mx-4 p-6"
+            style={{ borderColor: "var(--color-rule)" }}
+          >
+            <h2 id="remove-confirm-title" className="font-serif text-[18px] font-semibold mb-2" style={{ color: "var(--color-ink)" }}>
+              Remove {removeTarget.name}?
+            </h2>
+            <p className="text-[13px] mb-5" style={{ color: "var(--color-ink-dim)" }}>
+              Past orders are not affected.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoveTarget(null)}
+                className="px-4 h-9 rounded-md text-[13px]"
+                style={{ background: "var(--color-parchment)", color: "var(--color-ink)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemove}
+                className="px-4 h-9 rounded-md text-[13px] text-white"
+                style={{ background: "#B91C1C" }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </MobileShell>
   );
