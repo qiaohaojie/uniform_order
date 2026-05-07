@@ -272,21 +272,6 @@ export const PAST_ORDERS: PastOrder[] = [
   { id: "RGHS-01880", date: "22 Jan 2026", kid: "Mia", school: "rgsh", total: 218, items: 5, status: "collected" },
 ];
 
-export interface Kid {
-  name: string;
-  year: string;
-  tenantId: TenantId;
-}
-
-export const PARENT = {
-  name: "George Qiao",
-  email: "george.qiao@gmail.com",
-  kids: [
-    { name: "Riley", year: "Year 9", tenantId: "nsbh" as TenantId },
-    { name: "Mia", year: "Year 7", tenantId: "rgsh" as TenantId },
-  ] satisfies Kid[],
-};
-
 export function getItem(id: string): CatalogItem | undefined {
   return CATALOG.find((i) => i.id === id);
 }
