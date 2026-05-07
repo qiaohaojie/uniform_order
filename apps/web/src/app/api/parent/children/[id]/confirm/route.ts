@@ -6,6 +6,10 @@ import { confirmChild, getChildById } from "@/db/queries";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, ctx: RouteContext) {
+  // Pre-auth: bucket by IP only. Generous; just a probe-defence.
+  const preAuthRl = applyRateLimit(req, "parent-children:confirm:anon", { limit: 60, windowMs: 60_000 });
+  if (preAuthRl) return preAuthRl;
+
   const auth = await requireSessionUser();
   if ("response" in auth) return auth.response;
 

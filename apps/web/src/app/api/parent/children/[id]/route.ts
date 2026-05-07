@@ -15,6 +15,10 @@ async function loadOwnedChild(id: string, parentId: string) {
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
+  // Pre-auth: bucket by IP only. Generous; just a probe-defence.
+  const preAuthRl = applyRateLimit(req, "parent-children:patch:anon", { limit: 60, windowMs: 60_000 });
+  if (preAuthRl) return preAuthRl;
+
   const auth = await requireSessionUser();
   if ("response" in auth) return auth.response;
 
@@ -32,6 +36,13 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 
   const patch: { name?: string; year?: string; rollClass?: string | null } = {};
   const b = body as Record<string, unknown>;
+
+  if (b.tenantId !== undefined && b.tenantId !== child.tenantId) {
+    return NextResponse.json(
+      { error: "Cannot change school for a saved child; remove and re-add." },
+      { status: 400 }
+    );
+  }
 
   if (b.name !== undefined) {
     if (typeof b.name !== "string") return NextResponse.json({ error: "name must be a string" }, { status: 400 });
@@ -70,6 +81,10 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 }
 
 export async function DELETE(req: NextRequest, ctx: RouteContext) {
+  // Pre-auth: bucket by IP only. Generous; just a probe-defence.
+  const preAuthRl = applyRateLimit(req, "parent-children:delete:anon", { limit: 60, windowMs: 60_000 });
+  if (preAuthRl) return preAuthRl;
+
   const auth = await requireSessionUser();
   if ("response" in auth) return auth.response;
 

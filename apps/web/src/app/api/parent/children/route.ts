@@ -31,6 +31,10 @@ function validateRollClass(value: unknown): { ok: true; value: string | null } |
 
 // GET /api/parent/children — list children for the current user.
 export async function GET(req: NextRequest) {
+  // Pre-auth: bucket by IP only. Generous; just a probe-defence.
+  const preAuthRl = applyRateLimit(req, "parent-children:get:anon", { limit: 200, windowMs: 60_000 });
+  if (preAuthRl) return preAuthRl;
+
   const auth = await requireSessionUser();
   if ("response" in auth) return auth.response;
 
@@ -43,6 +47,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/parent/children — create a new saved child.
 export async function POST(req: NextRequest) {
+  // Pre-auth: bucket by IP only. Generous; just a probe-defence.
+  const preAuthRl = applyRateLimit(req, "parent-children:post:anon", { limit: 60, windowMs: 60_000 });
+  if (preAuthRl) return preAuthRl;
+
   const auth = await requireSessionUser();
   if ("response" in auth) return auth.response;
 
