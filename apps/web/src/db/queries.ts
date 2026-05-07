@@ -749,6 +749,11 @@ export async function getPubliclyListedTenants() {
     .orderBy(tenants.name);
 }
 
+export async function getTenantsByIds(ids: string[]) {
+  if (ids.length === 0) return [];
+  return db.select().from(tenants).where(inArray(tenants.id, ids));
+}
+
 export async function getOrderForReceipt(orderId: string) {
   const [row] = await db
     .select({
