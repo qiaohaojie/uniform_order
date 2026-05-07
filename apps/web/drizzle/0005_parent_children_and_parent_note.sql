@@ -9,6 +9,12 @@ CREATE TABLE "parent_children" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+-- NOTE: The orders.user_id FK swap below requires a full table validation
+-- on populated tables (Postgres scans every row). For prod-scale tables,
+-- run as a two-step migration instead:
+--   ALTER TABLE "orders" ADD CONSTRAINT "..." FOREIGN KEY (...) REFERENCES ... NOT VALID;
+--   ALTER TABLE "orders" VALIDATE CONSTRAINT "...";
+-- The current single-statement form is fine for the early-stage order table size.
 ALTER TABLE "orders" DROP CONSTRAINT "orders_user_id_user_id_fk";
 --> statement-breakpoint
 ALTER TABLE "orders" ADD COLUMN "parent_note" text;--> statement-breakpoint
