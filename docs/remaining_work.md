@@ -44,6 +44,7 @@ The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verificat
 - **Refund E2E (from §2.1):** Once NSBH's Stripe Express account is onboarded, run smoke-test Test 3 — place order → partial refund → full refund → 409 on third attempt → idempotency replay. (See §5 checklist item 8.)
 - **Production env (from §2.6):** Switch from Stripe test keys to live keys; pin production `DATABASE_URL`; configure Hostinger Node.js app env groups (preview vs production); assign production domain + TLS.
 - **Observability (from §2.7):** Verify PostHog project key is set in production Hostinger env vars (and confirm events are arriving from production after first deploy).
+- **Stripe webhook events (from §3.5):** Verify the production Stripe webhook endpoint subscribes to `account.updated` in addition to `payment_intent.succeeded` and `charge.refunded`.
 
 ---
 
@@ -71,9 +72,17 @@ Button renders, has no `onClick`. Audit item 15. PDP allows ordering for multipl
 
 PDP §3.1 mentions "order tracking" beyond an emailed receipt. Today the parent orders list shows status text but no per-order timeline (placed → packing → ready → collected). Add a parent-facing detail page at `/[tenant]/order/[orderId]` keyed by parent email + order ID.
 
-### 3.5 Stripe Connect onboarding completion polling / webhook
+### 3.5 Stripe Connect onboarding completion polling / webhook ✅
 
-`GET /api/stripe/connect` reads `stripePayoutsEnabled` from the DB but the field is only updated when the operator returns to the page. A drop-off mid-onboarding leaves the school looking "not connected" forever. Tied to webhook work in §2.3 (`account.updated`).
+**Status:** Code complete (2026-05-07). Both push (webhook) and pull (live API fetch) paths keep `stripePayoutsEnabled` / `stripeChargesEnabled` in sync.
+
+- `account.updated` webhook handler in `apps/web/src/app/api/stripe/webhook/route.ts` updates the tenants row keyed by `stripeAccountId`, captures PostHog events (success, unmatched-account, exception), and re-throws on DB error so Stripe retries.
+- `GET /api/stripe/connect` live-fetches the account from Stripe on every call and persists fresh status, so any settings-page load reconciles state regardless of webhook delivery.
+- Settings UI renders three correct states: not connected, connected/onboarding incomplete, connected/ready.
+
+**Smoke test (no real Express account required):** with the dev server + Stripe CLI listener running, run `stripe trigger account.updated` and confirm the PostHog `stripe_account_updated` (or `stripe_account_updated_unmatched`) event fires and the DB row reflects the payload.
+
+**Remaining (ops):** verify the production Stripe webhook endpoint subscribes to `account.updated` (alongside `payment_intent.succeeded` and `charge.refunded`). Tracked under §2.8.
 
 ### 3.6 GST / BAS report — auditor sign-off
 
