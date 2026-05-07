@@ -1472,7 +1472,25 @@ pnpm check-types:web
 
 If `<Crest>` complains about the brand-row shape, peek at `apps/web/src/components/crest.tsx` to see which fields are required and adjust `tenantToBrand()` accordingly. Pass empty strings for any required-but-unused string fields.
 
-- [ ] **Step 4: Smoke test the picker**
+- [ ] **Step 4: Wire the bottom-nav `kids` tab to the picker**
+
+The `?action=add-child` bypass on the auto-redirect is dead code unless something in the signed-in app actually links there. Without this, a parent who has saved exactly one child gets auto-redirected past `/` on every visit and can never reach the picker again to add a sibling. The natural reachable entry point is the bottom-nav `Kids` tab, which is currently `href: "#"`.
+
+Edit `apps/web/src/components/bottom-nav.tsx`. Change the `kids` tab's `href` from `"#"` to `"/?action=add-child"`:
+
+```tsx
+{ id: "kids", label: "Kids", href: "/?action=add-child", icon: KidsIcon },
+```
+
+Leave `profile` as `"#"` for now — out of scope.
+
+- [ ] **Step 5: Type-check again**
+
+```bash
+pnpm check-types:web
+```
+
+- [ ] **Step 6: Smoke test the picker**
 
 ```bash
 pnpm dev:web
@@ -1488,12 +1506,16 @@ Now sign in. Re-visit `/`. Expect:
 - Edit the child → modal opens pre-filled, school select disabled.
 - Remove → confirm prompt, on OK the row disappears.
 
+**Single-child reachability check** (the manage-children path):
+- After saving exactly one child, navigate to `/` directly. Expect: auto-redirect to that child's tenant catalog.
+- From the catalog, tap the bottom-nav `Kids` tab. Expect: lands on `/?action=add-child`, the picker renders (auto-redirect skipped), and the Add Child modal is open. Save a second child. Expect: now `/` shows two children, no auto-redirect.
+
 Stop dev server with Ctrl-C.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/app/home-client.tsx apps/web/src/app/page.tsx
+git add apps/web/src/app/home-client.tsx apps/web/src/app/page.tsx apps/web/src/components/bottom-nav.tsx
 git commit -m "feat(picker): real Neon Auth + DB-driven home with add/edit/remove"
 ```
 
@@ -1842,16 +1864,40 @@ In `insertOrder`'s `tx.insert(orders).values({ ... })` call, append:
 parentNote: normalizedParentNote,
 ```
 
-- [ ] **Step 6: Type-check**
+- [ ] **Step 6: Reconcile the active-child cookie after a successful order**
+
+The spec requires clearing `uo:active-child` on a successful order placement that names a different child than the one carried by the cookie (`docs/superpowers/specs/2026-05-08-parent-account-children-design.md` "Tap-a-child — active-child transport contract" → "Cleared:"). Without this, a parent who taps Riley, edits the form to Mia, and submits will still see Riley's banner and prefill on the next shopping flow.
+
+Implementation in `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`:
+
+1. Add the import:
+
+```ts
+import { clearActiveChildCookieClient } from "@/lib/active-child";
+```
+
+2. Locate the success branch of the `/api/orders` POST — the block that currently runs `clearCart()` and `router.push(...)` to the placed page. Immediately before the navigate, compare the submitted student name against the prefill's:
+
+```ts
+const submittedName = student.studentName.trim().toLowerCase();
+const activeName = (prefill?.studentName ?? "").trim().toLowerCase();
+if (!activeName || submittedName !== activeName) {
+  clearActiveChildCookieClient();
+}
+```
+
+This clears the cookie only when (a) there was no active child or (b) the order's student name doesn't match it. If the parent kept Riley's name through checkout, the cookie stays and the next visit's banners still read "Shopping for Riley".
+
+- [ ] **Step 7: Type-check**
 
 ```bash
 pnpm check-types:web
 ```
 
-- [ ] **Step 7: Smoke test**
+- [ ] **Step 8: Smoke test**
 
-`pnpm dev:web`. Sign in, add a saved NSBH child, tap into the catalog, add an item, checkout. Confirm:
-- Student name / year / roll class fields are pre-populated from the saved child.
+`pnpm dev:web`. Sign in, add a saved NSBH child named "Riley", tap into the catalog, add an item, go to checkout. Confirm:
+- Student name / year / roll class fields are pre-populated with Riley.
 - The "Note for the school (optional)" textarea is below delivery.
 - Type a note ("Test note from parent"), place the order with Stripe test card.
 - After placement, query the DB:
@@ -1862,15 +1908,19 @@ psql "$DATABASE_URL" -c "SELECT id, parent_note FROM orders ORDER BY created_at 
 
 Expected: latest order row has `parent_note = 'Test note from parent'`.
 
+**Active-child reconciliation check (the new Step 6):**
+- After the placed page renders, devtools → Application → Cookies → confirm `uo:active-child` is **still set** (you submitted as Riley, matching the active child).
+- Now place a second order: tap Riley on the picker, but this time edit the student name in the checkout form to "Mia" before paying. After placement, expect `uo:active-child` to be **cleared**. Re-visit `/nsbh` and confirm the catalog header banner is hidden (no active child).
+
 Stop dev server.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/web/src/app/\[tenant\]/checkout/page.tsx \
         apps/web/src/app/\[tenant\]/checkout/checkout-screen.tsx \
         apps/web/src/app/api/orders/route.ts
-git commit -m "feat(checkout): active-child prefill + parent_note capture"
+git commit -m "feat(checkout): active-child prefill + parent_note capture + reconcile-on-success"
 ```
 
 ---
