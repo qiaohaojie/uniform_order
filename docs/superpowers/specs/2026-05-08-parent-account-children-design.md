@@ -23,7 +23,7 @@ Replace the hardcoded picker mock with a DB-backed list of saved "shopping profi
 - Per-item `requires_staff_approval` flag for branded items.
 - Manual order claim flow (every order in this codebase already has `userId` populated; there are no unlinked guest orders to claim).
 - Auto-detection of year rollover beyond a `last_confirmed_at < Jan 1 of current year` check.
-- Separate `parent_profiles` extension table (not needed for this PR — Stack Auth's user fields cover everything we'd put on it).
+- Separate `parent_profiles` extension table (not needed for this PR — Neon Auth's user fields cover everything we'd put on it).
 
 ---
 
@@ -129,7 +129,7 @@ ALTER TABLE orders
   ADD COLUMN parent_note text;
 
 -- Fix existing FK: today orders.user_id has no ON DELETE action, which would
--- block Stack Auth account-deletion. Set to SET NULL so deleted accounts
+-- block Neon Auth account-deletion. Set to SET NULL so deleted accounts
 -- de-link orders without removing the school's record.
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_user_id_user_id_fk;
 ALTER TABLE orders
@@ -140,9 +140,10 @@ ALTER TABLE orders
 **Key decisions:**
 
 - `parent_id` is `text` (not `uuid`) to match `neon_auth.user(id)` which is `text` in this codebase.
-- `ON DELETE CASCADE` on parent_id — Stack Auth's account-deletion path automatically clears saved children. Matches APP 11 retention expectations.
+- `ON DELETE CASCADE` on parent_id — Neon Auth's account-deletion path automatically clears saved children. Matches APP 11 retention expectations.
 - `ON DELETE RESTRICT` on tenant_id — prevents accidental orphaning if a tenant is removed; super-admin must explicitly handle. Tenant deletion is rare and should be deliberate.
 - `year` as `text` — future-flexible (Prep, K, mixed-stage, special programs).
+- **Canonical year format: short form in DB ("9"), `Year 9` rendered in UI.** This is a fresh decision for `parent_children`; it does *not* migrate existing data. `orders.studentYear` rows currently contain the prefixed form ("Year 9") because that's what `YEAR_OPTIONS` in checkout pushes today. Those existing rows are left as-is — they are a transactional snapshot of what the parent typed at the time, not a normalised dimension. New code path: when a `parent_children` row's data flows into a new order, the unprefixed "9" is written into `parent_children.year`, prefixed to "Year 9" by the order-creation layer before insert. Rendering: the picker, catalog banner, cart banner, and any other UI prefixes "Year " to the bare value from `parent_children.year`. The `YEAR_OPTIONS` constant in checkout (`checkout-screen.tsx:17`) is unchanged — it still uses prefixed labels — but its source value should be normalised to short form when it lands in `parent_children`.
 - No `unique(parent_id, tenant_id, name)` constraint — a parent could legitimately have two kids named "Alex" at the same school. Dedup is a UX concern, not a schema one.
 - `is_publicly_listed` is **separate** from the existing `platformApprovalStatus` column. Approval is about Stripe Connect KYC; listing is about marketplace visibility. A school can be approved-but-not-listed (URL-only entry) or unapproved-and-not-listed (still being onboarded).
 - `orders.parent_note` is nullable; existing rows backfill to `NULL` (no migration data needed). 500-char cap enforced at API + client; no DB constraint (allows future schema-free expansion).
@@ -175,13 +176,41 @@ export default async function Home() {
 }
 ```
 
-**Logged-out state:** unchanged greeting, "You haven't added any children yet" empty card, single dashed "Add a child" CTA → on tap, redirect to `/auth/sign-in?callbackURL=/?action=add-child`. After sign-in, picker re-renders signed-in and the `?action=add-child` query opens the add-child sheet automatically.
+**Logged-out state:** the picker doubles as the **public school chooser** so that fresh visitors who hit `/` can still find their school without already knowing a tenant URL. Renders:
+
+- Generic greeting (no name).
+- A list of all `is_publicly_listed = true` tenants as crest cards. Tapping a card navigates straight to `/[tenantId]` (catalog browsable anonymously, today's behaviour).
+- Below the list, a single "Sign in to save your children" CTA → `/auth/sign-in?callbackURL=/?action=add-child`. After sign-in, picker re-renders signed-in and the `?action=add-child` query opens the add-child sheet automatically.
+
+This is exactly what `is_publicly_listed` was introduced for — the not-signed-in `/` becomes the marketplace's public discovery surface; deep-linked `/[slug]` URLs (the canonical entry path schools share with their families) continue to work as before.
 
 **Logged-in state:** list of saved children (each card: name, school, year, "tap to shop" affordance), then the dashed "Add another child" button, then a `<UserButton />` or sign-out link. If a child has `last_confirmed_at < Jan 1 of current year` AND today is past Jan 1, render the inline stale-year pill on that card.
 
-**Tap-a-child:** navigate to `/[tenantId]?child=<uuid>`. The catalog page picks up `?child=` as a server-side query, fetches the child (ownership-checked), and prefills the checkout form's name / year / roll class. (No localStorage for this path.)
+**Tap-a-child — active-child transport contract:**
 
-**Removal of mock data:** delete `PARENT` const from `lib/data.ts`. Verify no other module imports it (grep before delete).
+A `?child=<uuid>` query parameter does not survive catalog → item-detail → cart → checkout, and three of the four `PARENT` consumer files are server components that cannot read localStorage. Solving this with one consistent contract:
+
+- **`uo:active-child` cookie** (httpOnly: false, sameSite: lax, path: `/`, ~30 day expiry).
+- **Set:** when the parent taps a child card on the picker. Implementation: a small client wrapper around the card's link writes the cookie, then navigates. (Not a server action — we want it to also work from the picker on logged-out shopping if a future flow needs it; for v1, only signed-in users can write this.)
+- **Read:** server-side via `cookies()` from `next/headers` in any of the consumer routes (`/[tenant]/page.tsx`, `/[tenant]/cart/page.tsx`, `/[tenant]/checkout/page.tsx`, `/[tenant]/order/placed/page.tsx`). Reading helper: `getActiveChild()` in a new `lib/active-child.ts` — reads cookie, ownership-checks against `getSessionUser()`, returns `{ id, name, year, rollClass, tenantId } | null`.
+- **Cleared:** on sign-out (added to the existing sign-out flow), on explicit "remove" of the active child profile, and on a successful order placement that names a different child than the active-child cookie value.
+- **Mismatched-tenant case:** if `cookie.tenantId !== current tenant`, the consumer treats `getActiveChild()` as `null` for that route (don't show "Shopping for · Riley, Year 9" on Mia's school).
+- **Relationship to existing `uo:student:v1` localStorage:** unchanged. That key continues to hold the free-form student-details snapshot used by checkout. The new cookie carries *which saved profile is active*; checkout, when it loads, prefers the active-child cookie's data over `uo:student:v1` and overwrites localStorage with that data on first render. This keeps a single source of truth and avoids drift.
+
+The cookie name `uo:active-child` follows the existing `uo:` prefix convention (e.g. `uo:student:v1`, `uo:orders:v1`).
+
+### Mock-data cleanup map
+
+`PARENT` is imported by four files today (verified by grep). Each surface gets an explicit fate; the constant cannot just be deleted:
+
+| File | Current `PARENT` usage | Fate |
+|---|---|---|
+| `apps/web/src/app/page.tsx` | `PARENT.name` (greeting), `PARENT.kids` (list, single-kid auto-redirect) | Rewritten per "Picker flow" above. Single-kid auto-redirect preserved: if signed-in user has exactly one saved child, redirect to that tenant. |
+| `apps/web/src/app/[tenant]/page.tsx` | `PARENT.kids.find(k => k.tenantId === tenant.id)` for the "Shopping for · Riley, Year 9" header banner | Replace with `getActiveChild()` server-side. If active child matches this tenant, render banner with their name + year. Else hide banner entirely. |
+| `apps/web/src/app/[tenant]/cart/cart-screen.tsx` | Same `PARENT.kids.find(...)` for cart header banner | Component is `"use client"`. Move the lookup to the parent server route `cart/page.tsx`, which calls `getActiveChild()` and passes `activeChildName / activeChildYear` as props to `<CartScreen>`. |
+| `apps/web/src/app/[tenant]/order/placed/page.tsx` | `PARENT.email` in receipt copy | Replace with the actual order's `parent_email`, looked up by `searchParams.orderId`. The order ID is already in scope on this page; fetching the row gives us the real email and incidentally lets us echo the placed order's student name correctly too. |
+
+**Cleanup ordering:** all four consumers must be updated in the same commit that deletes the `PARENT` constant. Drizzle/typescript build will fail loudly if any are missed — that's the safety net.
 
 ---
 
@@ -200,7 +229,7 @@ export default async function Home() {
 All routes:
 - `await getSessionUser()`; 401 if missing.
 - Path `[id]` routes verify the row's `parent_id === user.id`; 404 (not 403) on mismatch to prevent ID enumeration.
-- Validation: `name` 1–60 chars, `year` ∈ ["7","8","9","10","11","12"] for v1 (high-school launch tenants), `rollClass` 0–20 chars, `tenantId` ∈ publicly-listed tenants only on POST. PATCH cannot change `tenantId` (force a remove-and-re-add for that intent).
+- Validation: `name` 1–60 chars, `year` ∈ ["7","8","9","10","11","12"] (**launch-tenant validation policy, not schema truth** — the DB column stays `text` for flexibility; widen the allow-list when a primary or K–12 tenant onboards), `rollClass` 0–20 chars, `tenantId` ∈ publicly-listed tenants only on POST. PATCH cannot change `tenantId` (force a remove-and-re-add for that intent).
 
 **Add sheet UI:**
 
@@ -298,8 +327,8 @@ The existing page (`app/privacy/page.tsx`) is a one-paragraph stub. Expand to co
 1. **What we collect** — parent identity (email, display name from Google sign-in if used), saved children profiles (name, year, roll class, school), order details (line items, pickup/shipping, payment metadata via Stripe), order notes.
 2. **Why** — fulfilling uniform purchases; remembering profiles for re-ordering.
 3. **Where it's stored** — Neon (US-hosted Postgres); Stripe (US-hosted) for payment metadata; Resend for transactional email.
-4. **How long** — saved children retained until you delete them or your account; orders retained for 7 years for tax/accounting (Australian record-keeping requirements). Account deletion via the user menu cascades children; orders are de-linked but retained.
-5. **Your rights** — access, correction, deletion (links to user-settings page).
+4. **How long** — saved children retained until you delete them or your account; orders retained for 7 years for tax/accounting (Australian record-keeping requirements). Deleting your account cascades saved children; orders are de-linked but retained.
+5. **Your rights** — access, correction, deletion. *Implementation plan must verify which path Neon Auth's `<AuthView>` exposes for the parent (account / profile / settings sub-route) and pin the URL here. If Neon Auth does not expose a self-service deletion path in the version we're on, fall back to "email support to delete your account" with the platform support address — do not promise self-service we don't have.*
 6. **Contact** — platform support email.
 
 Linked from: picker footer, sign-in modal (already), add-child sheet (collection notice link). The previous decision to defer a platform `/terms` page (per `Refund_Policy/2026-05-07-refund-policy-ownership.md`) is unchanged — `/privacy` is a privacy notice, not terms of service.
@@ -310,10 +339,10 @@ Linked from: picker footer, sign-in modal (already), add-child sheet (collection
 
 | Case | Behaviour |
 |---|---|
-| Same email used for both magic-link and Google | Stack Auth dedupes by primary email. Implementation plan must verify on staging before merge; if dedup is off, raise as a Neon Auth project setting before launch. |
+| Same email used for both magic-link and Google | Neon Auth dedupes by primary email. Implementation plan must verify on staging before merge; if dedup is off, raise as a Neon Auth project setting before launch. |
 | Tenant flips `is_publicly_listed` to false after a parent saved a child for it | Child remains visible on the picker (don't punish parents for school's listing change). Child can still be edited/removed. New "Add a child" sheet hides that tenant. |
 | Tenant deleted | Blocked by `RESTRICT` FK; super-admin must reassign or delete dependent rows first. |
-| Parent deletes account | `parent_children` cascades. **Concrete fix bundled in this PR:** `orders.userId` today is declared without an `onDelete` action (`db/schema.ts:131`), which defaults to `NO ACTION` and would block Stack Auth's account-delete with an FK violation as soon as a parent has any order. Change the FK to `ON DELETE SET NULL` (matching `orderRefunds.operatorUserId` at `db/schema.ts:168`). De-linked orders remain on the school's records — required for tax / fulfilment audit. |
+| Parent deletes account | `parent_children` cascades. **Concrete fix bundled in this PR:** `orders.userId` today is declared without an `onDelete` action (`db/schema.ts:131`), which defaults to `NO ACTION` and would block Neon Auth's account-delete with an FK violation as soon as a parent has any order. Change the FK to `ON DELETE SET NULL` (matching `orderRefunds.operatorUserId` at `db/schema.ts:168`). De-linked orders remain on the school's records — required for tax / fulfilment audit. |
 | Guest checkout | Not possible today — checkout requires sign-in. Out of scope. |
 | Child name is a nickname / preferred name | Allowed and intentional. Field is "name as it should appear on the order," not "legal name." |
 | Parent edits a child the night before pickup of an in-flight order | Edit only affects future orders. The in-flight order has its own snapshot of `studentName / studentYear / studentRoll` from when it was placed (`orders.studentName`, etc.); editing the child profile does not retroactively mutate orders. |
