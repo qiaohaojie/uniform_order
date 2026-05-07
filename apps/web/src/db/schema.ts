@@ -11,6 +11,7 @@ import {
   uuid,
   pgEnum,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 
 // ─── Neon Auth schema reference ─────────────────────────────────────────────
@@ -53,6 +54,8 @@ export const tenants = pgTable("tenants", {
   shopHours: text("shop_hours"),
   shopEmail: text("shop_email"),
   collectionInstructions: text("collection_instructions"),
+  // Marketplace visibility
+  isPubliclyListed: boolean("is_publicly_listed").notNull().default(false),
   // Stripe Connect
   stripeAccountId: text("stripe_account_id"),
   stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false),
@@ -124,11 +127,13 @@ export const orders = pgTable(
     stripeRef: text("stripe_ref"),
     // Legal
     refundPolicyAcceptedAt: timestamp("refund_policy_accepted_at"),
+    // Optional note from parent to school
+    parentNote: text("parent_note"),
     // Status
     emailsSent: jsonb("emails_sent").notNull().default(sql`'{}'::jsonb`),
     status: orderStatusEnum("status").notNull().default("pending_payment"),
     // Auth link (optional — if parent was signed in)
-    userId: text("user_id").references(() => neonAuthUsers.id),
+    userId: text("user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -173,5 +178,27 @@ export const orderRefunds = pgTable(
     stripeRefundIdUnique: uniqueIndex("order_refunds_stripe_refund_id_unique").on(
       table.stripeRefundId
     ),
+  })
+);
+
+// ─── Parent's saved children ─────────────────────────────────────────────────
+export const parentChildren = pgTable(
+  "parent_children",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parentId: text("parent_id")
+      .notNull()
+      .references(() => neonAuthUsers.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    year: text("year").notNull(),                  // canonical short form: "7".."12"
+    rollClass: text("roll_class"),
+    lastConfirmedAt: timestamp("last_confirmed_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    parentIdx: index("parent_children_parent_idx").on(t.parentId),
   })
 );
