@@ -234,6 +234,68 @@ export const CATALOG: CatalogItem[] = [
     name: "Math Set",
     variants: [{ label: "N/A", price: 7, sizes: ["OS"] }],
   },
+  {
+    id: "shorts-navy",
+    cat: "Summer",
+    name: "Navy Shorts — Adjustable Side Tabs",
+    description: "Mid-grey poly/viscose with adjustable side tabs.",
+    variants: [
+      { label: "Boys 10–16", price: 43, sizes: ["10", "12", "14", "16"] },
+      { label: "Mens 4–8", price: 45, sizes: ["4", "5", "6", "7", "8"] },
+    ],
+  },
+  {
+    id: "sock-grey",
+    cat: "Winter",
+    name: "Grey Socks (cotton blend, midi)",
+    description: "Pack of one pair.",
+    variants: [
+      { label: "3–9", price: 5, sizes: ["3-9"] },
+      { label: "7–11", price: 5, sizes: ["7-11"] },
+    ],
+  },
+  {
+    id: "scarf",
+    cat: "Winter",
+    name: "School Scarf",
+    variants: [{ label: "One size", price: 20, sizes: ["OS"] }],
+  },
+  {
+    id: "prefect-tie",
+    cat: "Winter",
+    name: "Prefect Tie",
+    variants: [{ label: "147cm", price: 22, sizes: ["147"] }],
+  },
+  {
+    id: "soccer-jersey",
+    cat: "Sports",
+    name: "Soccer Jersey",
+    variants: [{ label: "12–22", price: 40, sizes: ["12", "14", "16", "18", "20", "22"] }],
+  },
+  {
+    id: "swimming-briefs",
+    cat: "Sports",
+    name: "Swimming Briefs",
+    variants: [{ label: "XS–XXL", price: 45, sizes: ["XS", "S", "M", "L", "XL", "XXL"] }],
+  },
+  {
+    id: "exercise-book-a4",
+    cat: "Stationery",
+    name: "A4 Exercise Book — 128 pages, plastic cover",
+    variants: [{ label: "N/A", price: 2, sizes: ["OS"] }],
+  },
+  {
+    id: "exercise-book-math",
+    cat: "Stationery",
+    name: "Math Exercise Book — 128 pages, plastic cover",
+    variants: [{ label: "N/A", price: 2, sizes: ["OS"] }],
+  },
+  {
+    id: "ring-binder",
+    cat: "Stationery",
+    name: "Ring Binder — Crested",
+    variants: [{ label: "N/A", price: 5, sizes: ["OS"] }],
+  },
 ];
 
 export const CATEGORIES: ItemCategory[] = ["Summer", "Winter", "Sports", "Formal", "Bags", "Stationery"];

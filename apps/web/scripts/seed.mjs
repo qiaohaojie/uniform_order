@@ -65,6 +65,16 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
     // Stationery
     { id: "calc", tenantId: "nsbh", name: "Scientific Calculator", category: "Stationery", description: null, sortOrder: 18 },
     { id: "mathset", tenantId: "nsbh", name: "Math Set", category: "Stationery", description: null, sortOrder: 19 },
+    // Paper-form items not previously seeded (PDP §4)
+    { id: "shorts-navy", tenantId: "nsbh", name: "Navy Shorts — Adjustable Side Tabs", category: "Summer", description: "Mid-grey poly/viscose with adjustable side tabs.", sortOrder: 20 },
+    { id: "sock-grey", tenantId: "nsbh", name: "Grey Socks (cotton blend, midi)", category: "Winter", description: "Pack of one pair.", sortOrder: 21 },
+    { id: "scarf", tenantId: "nsbh", name: "School Scarf", category: "Winter", description: null, sortOrder: 22 },
+    { id: "prefect-tie", tenantId: "nsbh", name: "Prefect Tie", category: "Winter", description: null, sortOrder: 23 },
+    { id: "soccer-jersey", tenantId: "nsbh", name: "Soccer Jersey", category: "Sports", description: null, sortOrder: 24 },
+    { id: "swimming-briefs", tenantId: "nsbh", name: "Swimming Briefs", category: "Sports", description: null, sortOrder: 25 },
+    { id: "exercise-book-a4", tenantId: "nsbh", name: "A4 Exercise Book — 128 pages, plastic cover", category: "Stationery", description: null, sortOrder: 26 },
+    { id: "exercise-book-math", tenantId: "nsbh", name: "Math Exercise Book — 128 pages, plastic cover", category: "Stationery", description: null, sortOrder: 27 },
+    { id: "ring-binder", tenantId: "nsbh", name: "Ring Binder — Crested", category: "Stationery", description: null, sortOrder: 28 },
   ];
 
   for (const item of items) {
@@ -130,6 +140,26 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
     { itemId: "calc", label: "N/A", price: 33 },
     // mathset
     { itemId: "mathset", label: "N/A", price: 7 },
+    // shorts-navy
+    { itemId: "shorts-navy", label: "Boys 10–16", price: 43 },
+    { itemId: "shorts-navy", label: "Mens 4–8", price: 45 },
+    // sock-grey
+    { itemId: "sock-grey", label: "3–9", price: 5 },
+    { itemId: "sock-grey", label: "7–11", price: 5 },
+    // scarf
+    { itemId: "scarf", label: "One size", price: 20 },
+    // prefect-tie
+    { itemId: "prefect-tie", label: "147cm", price: 22 },
+    // soccer-jersey
+    { itemId: "soccer-jersey", label: "12–22", price: 40 },
+    // swimming-briefs
+    { itemId: "swimming-briefs", label: "XS–XXL", price: 45 },
+    // exercise-book-a4
+    { itemId: "exercise-book-a4", label: "N/A", price: 2 },
+    // exercise-book-math
+    { itemId: "exercise-book-math", label: "N/A", price: 2 },
+    // ring-binder
+    { itemId: "ring-binder", label: "N/A", price: 5 },
   ];
 
   // Delete existing variants for these items first (to avoid duplicates on re-seed)

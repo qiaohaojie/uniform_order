@@ -79,11 +79,15 @@ The parent-account / "add another child" feature shipped via PR #6 (squash-merge
 
 ### 3.1 Missing catalog items from the paper form
 
-**Where:** `apps/web/src/db/queries.ts` seed data; audit §4.
+**Where:** `apps/web/scripts/seed.mjs` (DB seed) and `apps/web/src/lib/data.ts` (`CATALOG`, the parent shop's source-of-truth today).
 
-NSBH paper form items missing from the seed: Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie. PDP §4 lists these explicitly.
+**Status (NSBH):** code complete. The 8 PDP-listed missing items now exist as 9 SKUs (Exercise Books split into A4 + Math, both on the paper form): `shorts-navy`, `sock-grey`, `scarf`, `prefect-tie`, `soccer-jersey`, `swimming-briefs`, `exercise-book-a4`, `exercise-book-math`, `ring-binder`. Variants/prices match the paper form (`my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf`). `GarmentVector` shape map updated so each new ID renders the closest silhouette instead of the generic "misc" fallback. Smoke-tested on `pnpm dev:web` — all 9 items appear in the correct category on `/nsbh` and the item detail pages render with correct names + prices.
 
-**Required:** Update seed + run a one-off insert against production for both NSBH and RGSH (RGSH catalog needs review with the school).
+**Remaining:**
+
+- [ ] **Run prod NSBH seed.** `apps/web/scripts/seed.mjs` is idempotent (`ON CONFLICT DO UPDATE` for items, `DELETE + INSERT` for variants). Run against the production Neon DB once these changes ship: `cd apps/web && node scripts/seed.mjs` with the prod `DATABASE_URL`. (Note: today the parent shop reads `CATALOG` from `lib/data.ts`, not the DB — the seed run only matters for the admin catalog table and once parent-shop DB-reads land.)
+- [ ] **RGSH catalog (separate task).** Needs school sign-off on the catalog list — RGSH currently inherits NSBH-only seed entries. Capture as a school-onboarding sub-task once §2.2 super-admin portal exists.
+- [ ] **Out-of-scope discrepancies flagged for follow-up:** the paper form has a third White-Shirt-SS row (`men 4–8 → $45`) and a middle White-Shirt-LS variant (`10,12,…,18 → $57`) that the existing seed never captured. Track separately so this PR stays focused.
 
 ### 3.2 Refund-policy *page* (the actual content)
 
