@@ -50,7 +50,7 @@ The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verificat
 
 ### 2.9 Catalog management — production deployment follow-ups
 
-The catalog management feature (PR #9 — self-service add/edit catalog items, image uploads via UploadThing, approval gate) is code-complete and smoke-tested on dev. Before / during the first production deploy that includes it, the following non-code actions need to happen on Hostinger:
+The catalog management feature (self-service add/edit catalog items, image uploads via UploadThing, approval gate) shipped to `main` as `c9237d9` (PR #9, merged 2026-05-08, branch deleted). Before / during the first production deploy that includes it, the following non-code actions need to happen on Hostinger:
 
 - [ ] **`UPLOADTHING_TOKEN` env var** — get the token from `https://uploadthing.com/dashboard → API Keys` (single combined v7 token, no separate key/app id). Add via hPanel → Advanced → Node.js → Environment Variables, then **restart the Node.js app** from the same panel. Without this, image uploads silently fail.
 - [ ] **CSP / `next/image` host allowlist** — already wired in `apps/web/next.config.ts` for `utfs.io`, `*.utfs.io`, `*.ufs.sh` (commit `dd35a70`). Just confirm the deployed build serves the same headers (curl `-I` the homepage and check `Content-Security-Policy`).
@@ -72,7 +72,7 @@ The catalog management feature (PR #9 — self-service add/edit catalog items, i
 - The 3 orders currently in the `orders` table are all from 2026-05-01 — all pre-date the bug.
 - No parent has placed an order since 2026-05-05, so the bug has never fired in real traffic.
 
-**Why it surfaced now:** caught during PR #9 catalog-management smoke testing — the same `db.transaction(...)` pattern was used in `addCatalogItem` / `updateCatalogItem` and threw the identical error on the first Save in dev. PR #9 already fixed those two call sites (commit `ac90e00`, switched to `db.batch`). The orders POST has the same pattern but is **out of scope for that PR**.
+**Why it surfaced now:** caught during PR #9 catalog-management smoke testing — the same `db.transaction(...)` pattern was used in `addCatalogItem` / `updateCatalogItem` and threw the identical error on the first Save in dev. PR #9 (merged as `c9237d9`) already fixed those two call sites (commit `ac90e00`, switched to `db.batch`). The orders POST has the same pattern but was **out of scope for that PR**.
 
 **Required fix (small, mechanical):**
 
@@ -103,7 +103,7 @@ The catalog management feature (PR #9 — self-service add/edit catalog items, i
 
 **Priority:** 🔴 Blocker for any production parent-checkout traffic. Currently masked because (a) no real parents have checked out since May 5 and (b) Stripe webhook flows write to other tables, not `orders` directly. The first real checkout post-deploy will fail.
 
-**Suggested branching strategy:** stand-alone tiny PR (≤30 LOC change), can ship independently of PR #9 or be bundled with it as a safety net before NSBH go-live.
+**Suggested branching strategy:** stand-alone tiny PR (≤30 LOC change). Must ship before NSBH go-live.
 
 ---
 
