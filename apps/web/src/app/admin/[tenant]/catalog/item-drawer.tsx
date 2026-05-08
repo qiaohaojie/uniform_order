@@ -224,6 +224,12 @@ export function ItemDrawer({
                 <UploadDropzone
                   endpoint="catalogImage"
                   input={{ tenantId: tenant.id }}
+                  // mode: "auto" uploads immediately on file pick/drop. The
+                  // default "manual" mode requires a second "Upload N file(s)"
+                  // click and its queue state has been observed to get stuck
+                  // after re-mount cycles (e.g. dev-mode HMR, or open→Remove
+                  // →pick within one drawer session).
+                  config={{ mode: "auto" }}
                   onClientUploadComplete={(res) => {
                     const url = res?.[0]?.serverData?.url;
                     if (url) setImageUrl(url);

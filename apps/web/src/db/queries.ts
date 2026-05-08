@@ -1,5 +1,6 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds, parentChildren } from "./index";
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 
 export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
 
@@ -569,27 +570,31 @@ export async function addCatalogItem(data: {
   sortOrder?: number;
   variants: { label: string; price: number; active?: boolean }[];
 }) {
-  await db.transaction(async (tx) => {
-    await tx.insert(catalogItems).values({
-      id: data.id,
-      tenantId: data.tenantId,
-      name: data.name,
-      category: data.category,
-      description: data.description ?? null,
-      imageUrl: data.imageUrl ?? null,
-      active: data.active ?? true,
-      sortOrder: data.sortOrder ?? 0,
-    });
-
-    for (const v of data.variants) {
-      await tx.insert(catalogVariants).values({
-        itemId: data.id,
-        label: v.label,
-        price: String(v.price),
-        active: v.active ?? true,
-      });
-    }
+  // neon-http driver doesn't support interactive db.transaction; use db.batch
+  // which runs all statements atomically in a single HTTP round-trip.
+  const itemInsert = db.insert(catalogItems).values({
+    id: data.id,
+    tenantId: data.tenantId,
+    name: data.name,
+    category: data.category,
+    description: data.description ?? null,
+    imageUrl: data.imageUrl ?? null,
+    active: data.active ?? true,
+    sortOrder: data.sortOrder ?? 0,
   });
+  const variantInserts = data.variants.map((v) =>
+    db.insert(catalogVariants).values({
+      itemId: data.id,
+      label: v.label,
+      price: String(v.price),
+      active: v.active ?? true,
+    })
+  );
+  const stmts: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [
+    itemInsert,
+    ...variantInserts,
+  ];
+  await db.batch(stmts);
 }
 
 /**
@@ -620,54 +625,76 @@ export async function updateCatalogItem(
     active?: boolean;
   }[]
 ) {
-  await db.transaction(async (tx) => {
-    const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (fields.name !== undefined) updates.name = fields.name;
-    if (fields.category !== undefined) updates.category = fields.category;
-    if (fields.description !== undefined) updates.description = fields.description;
-    if (fields.imageUrl !== undefined) updates.imageUrl = fields.imageUrl;
-    if (fields.active !== undefined) updates.active = fields.active;
-    if (fields.sortOrder !== undefined) updates.sortOrder = fields.sortOrder;
+  // neon-http driver doesn't support interactive db.transaction. We read
+  // existing variant ids first (one round-trip), then run all writes via
+  // db.batch (atomic HTTP-level transaction). Concurrent edits between the
+  // read and write are not protected — acceptable for the 1-2 ops/tenant
+  // catalog editor.
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (fields.name !== undefined) updates.name = fields.name;
+  if (fields.category !== undefined) updates.category = fields.category;
+  if (fields.description !== undefined) updates.description = fields.description;
+  if (fields.imageUrl !== undefined) updates.imageUrl = fields.imageUrl;
+  if (fields.active !== undefined) updates.active = fields.active;
+  if (fields.sortOrder !== undefined) updates.sortOrder = fields.sortOrder;
 
-    await tx.update(catalogItems).set(updates).where(eq(catalogItems.id, itemId));
+  const itemUpdate = db
+    .update(catalogItems)
+    .set(updates)
+    .where(eq(catalogItems.id, itemId));
 
-    if (variants !== undefined) {
-      const existing = await tx
-        .select({ id: catalogVariants.id })
-        .from(catalogVariants)
-        .where(eq(catalogVariants.itemId, itemId));
-      const existingIds = new Set(existing.map((v) => v.id));
-      const keptIds = new Set<string>();
+  if (variants === undefined) {
+    const stmts: [BatchItem<"pg">] = [itemUpdate];
+    await db.batch(stmts);
+    return;
+  }
 
-      for (const v of variants) {
-        if (v.id && existingIds.has(v.id)) {
-          await tx
-            .update(catalogVariants)
-            .set({
-              label: v.label,
-              price: String(v.price),
-              active: v.active ?? true,
-            })
-            .where(eq(catalogVariants.id, v.id));
-          keptIds.add(v.id);
-        } else {
-          await tx.insert(catalogVariants).values({
-            itemId,
+  const existing = await db
+    .select({ id: catalogVariants.id })
+    .from(catalogVariants)
+    .where(eq(catalogVariants.itemId, itemId));
+  const existingIds = new Set(existing.map((v) => v.id));
+  const keptIds = new Set<string>();
+
+  const variantWrites: BatchItem<"pg">[] = [];
+
+  for (const v of variants) {
+    if (v.id && existingIds.has(v.id)) {
+      variantWrites.push(
+        db
+          .update(catalogVariants)
+          .set({
             label: v.label,
             price: String(v.price),
             active: v.active ?? true,
-          });
-        }
-      }
-
-      const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
-      if (toDelete.length > 0) {
-        await tx
-          .delete(catalogVariants)
-          .where(inArray(catalogVariants.id, toDelete));
-      }
+          })
+          .where(eq(catalogVariants.id, v.id))
+      );
+      keptIds.add(v.id);
+    } else {
+      variantWrites.push(
+        db.insert(catalogVariants).values({
+          itemId,
+          label: v.label,
+          price: String(v.price),
+          active: v.active ?? true,
+        })
+      );
     }
-  });
+  }
+
+  const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+  if (toDelete.length > 0) {
+    variantWrites.push(
+      db.delete(catalogVariants).where(inArray(catalogVariants.id, toDelete))
+    );
+  }
+
+  const stmts: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [
+    itemUpdate,
+    ...variantWrites,
+  ];
+  await db.batch(stmts);
 }
 
 export async function deleteCatalogItem(itemId: string) {
