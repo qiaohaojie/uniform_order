@@ -20,6 +20,7 @@
     "@react-email/render": "^2.0.8",
     "@stripe/connect-js": "^3.3.39",
     "@stripe/stripe-js": "^9.4.0",
+    "@uploadthing/react": "^7.3.3",
     "drizzle-orm": "^0.45.2",
     "embla-carousel": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
@@ -35,7 +36,9 @@
     "recharts": "^3.8.1",
     "stripe": "^22.1.0",
     "tailwind-merge": "^3.5.0",
-    "tailwind-variants": "^3.2.2"
+    "tailwind-variants": "^3.2.2",
+    "uploadthing": "^7.7.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",

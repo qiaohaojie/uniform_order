@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCatalogByTenant, addCatalogItem, getTenant } from "@/db/queries";
+import { addCatalogItem, getCatalogByTenant } from "@/db/queries";
 import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
+import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
+import { catalogItemInputSchema } from "@/lib/schemas/catalog";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 // GET /api/catalog?tenantId=imhs
 export async function GET(req: NextRequest) {
@@ -20,73 +23,74 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/catalog — add a new item
+// POST /api/catalog — create a new item
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { tenantId, name, category, description, variants } = body;
+    // Pre-auth IP rate limit — generous, just probe-defence.
+    const preAuthRl = applyRateLimit(req, "catalog:post:anon", {
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (preAuthRl) return preAuthRl;
 
-    if (!tenantId || !name || !category) {
-      return NextResponse.json(
-        { error: "tenantId, name, and category are required" },
-        { status: 400 }
-      );
-    }
-
+    // Auth first — never leak zod schema details to unauthenticated callers.
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
 
-    const tenant = await getTenant(tenantId);
-    if (!tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
-    }
-    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
-    if (tenantAccessResponse) return tenantAccessResponse;
+    // Post-auth per-user budget — admin bulk work fits comfortably.
+    const userRl = applyRateLimit(
+      req,
+      `catalog:post:${authResult.user.id}`,
+      { limit: 30, windowMs: 60_000 },
+    );
+    if (userRl) return userRl;
 
-    if (!Array.isArray(variants) || variants.length === 0) {
+    const body = await req.json();
+    const parsed = catalogItemInputSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "At least one variant is required" },
+        { error: "validation_failed", details: parsed.error.flatten() },
         { status: 400 }
       );
     }
-    if (
-      variants.some(
-        (variant) =>
-          !variant ||
-          typeof variant.label !== "string" ||
-          !variant.label.trim() ||
-          !Number.isFinite(Number(variant.price)) ||
-          Number(variant.price) < 0
-      )
-    ) {
-      return NextResponse.json(
-        { error: "Each variant requires a label and valid price" },
-        { status: 400 }
-      );
-    }
+    const input = parsed.data;
 
-    // Generate a slug ID from the name
-    const id = name
+    const approval = await requireTenantApproved(input.tenantId);
+    if ("response" in approval) return approval.response;
+    const { tenant } = approval;
+
+    const accessDenied = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (accessDenied) return accessDenied;
+
+    const rawSlug = input.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .slice(0, 40);
-
-    const uniqueId = `${id}-${Date.now().toString(36)}`;
+    // Names with no a-z0-9 characters (e.g. CJK / Cyrillic) strip to "".
+    // Fall back to a stable token so the id stays parseable.
+    const slug = rawSlug.length > 0 ? rawSlug : "item";
+    // crypto.randomUUID avoids the same-millisecond collision risk that
+    // Date.now().toString(36) had under concurrent writes.
+    const id = `${input.tenantId}-${slug}-${crypto.randomUUID().slice(0, 8)}`;
 
     await addCatalogItem({
-      id: uniqueId,
-      tenantId,
-      name,
-      category,
-      description,
-      variants: variants.map((variant) => ({
-        label: variant.label.trim(),
-        price: Number(variant.price),
+      id,
+      tenantId: input.tenantId,
+      name: input.name,
+      category: input.category,
+      description: input.description,
+      imageUrl: input.imageUrl,
+      active: input.active,
+      sortOrder: input.sortOrder,
+      variants: input.variants.map((v) => ({
+        label: v.label,
+        price: v.price,
+        active: v.active,
       })),
     });
 
-    return NextResponse.json({ id: uniqueId }, { status: 201 });
+    return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
     console.error("POST /api/catalog error:", err);
     return NextResponse.json({ error: "Failed to add item" }, { status: 500 });
