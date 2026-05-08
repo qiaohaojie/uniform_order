@@ -59,7 +59,8 @@ export interface CatalogItem {
   id: string;
   cat: ItemCategory;
   name: string;
-  desc?: string;
+  description?: string;
+  imageUrl?: string;
   variants: ItemVariant[];
   sizeGuide?: SizeGuide;
 }
@@ -71,7 +72,7 @@ export const CATALOG: CatalogItem[] = [
     id: "shirt-ss",
     cat: "Summer",
     name: "White Shirt — Short Sleeves",
-    desc: "Embroidered school crest. Poly-cotton blend, machine wash cold.",
+    description: "Embroidered school crest. Poly-cotton blend, machine wash cold.",
     variants: [
       { label: "Boys 10–26", price: 32, sizes: SIZES_GENERIC },
       { label: "Mens 4–8", price: 43, sizes: ["4", "5", "6", "7", "8"] },
@@ -90,14 +91,14 @@ export const CATALOG: CatalogItem[] = [
     id: "cap",
     cat: "Summer",
     name: "School Cap, Navy",
-    desc: "Embroidered NSBH crest. One size, adjustable strap.",
+    description: "Embroidered NSBH crest. One size, adjustable strap.",
     variants: [{ label: "One size", price: 17, sizes: ["OS"] }],
   },
   {
     id: "sock-white",
     cat: "Summer",
     name: "White Sport Socks (cotton blend, midi)",
-    desc: "Pack of one pair.",
+    description: "Pack of one pair.",
     variants: [
       { label: "3–9", price: 5, sizes: ["3-9"] },
       { label: "7–11", price: 5, sizes: ["7-11"] },
@@ -107,7 +108,7 @@ export const CATALOG: CatalogItem[] = [
     id: "shirt-ls",
     cat: "Winter",
     name: "White Shirt — Long Sleeves",
-    desc: "Embroidered school crest. Poly-cotton blend.",
+    description: "Embroidered school crest. Poly-cotton blend.",
     variants: [
       { label: "Boys 10–24", price: 28, sizes: ["10", "12", "14", "16", "18", "20", "22", "24"] },
       { label: "Mens 5–8", price: 59, sizes: ["5", "6", "7", "8"] },
@@ -125,7 +126,7 @@ export const CATALOG: CatalogItem[] = [
     id: "jumper",
     cat: "Winter",
     name: "Jumper — Wool Blend, Crested",
-    desc: "V-neck pullover with embroidered school crest.",
+    description: "V-neck pullover with embroidered school crest.",
     variants: [
       { label: "12–16", price: 75, sizes: ["12", "14", "16"] },
       { label: "18–22", price: 77, sizes: ["18", "20", "22"] },
@@ -136,7 +137,7 @@ export const CATALOG: CatalogItem[] = [
     id: "trousers",
     cat: "Winter",
     name: "Trousers — Mid Grey, Pleated Front",
-    desc: "Poly/viscose blend with adjustable waist.",
+    description: "Poly/viscose blend with adjustable waist.",
     variants: [
       { label: "Year 7–10 short (127cm)", price: 17, sizes: ["7-10S"] },
       { label: "Year 7–10 long (137cm)", price: 18, sizes: ["7-10L"] },
@@ -166,7 +167,7 @@ export const CATALOG: CatalogItem[] = [
     id: "polo",
     cat: "Sports",
     name: "Sports Polo Shirt",
-    desc: "Breathable mesh weave with embroidered crest.",
+    description: "Breathable mesh weave with embroidered crest.",
     variants: [{ label: "10–26", price: 40, sizes: SIZES_GENERIC }],
   },
   {
@@ -200,7 +201,7 @@ export const CATALOG: CatalogItem[] = [
     id: "blazer",
     cat: "Formal",
     name: "Blazer — Crested",
-    desc: "Wool-blend, fully lined, embroidered pocket crest.",
+    description: "Wool-blend, fully lined, embroidered pocket crest.",
     variants: [
       { label: "88–95cm chest", price: 185, sizes: ["88", "92", "95"] },
       { label: "100–115cm chest", price: 210, sizes: ["100", "105", "110", "115"] },
