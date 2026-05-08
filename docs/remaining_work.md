@@ -113,7 +113,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 **Follow-ups (not v1 blockers):**
 
-1. **Delete the orphaned `/[tenant]/refund-policy` route.** No longer referenced from email after the v1 email change. Either remove the route entirely or leave it as a stub. Low priority — dead route, no harm if it sits.
+1. ~~**Delete the orphaned `/[tenant]/refund-policy` route.**~~ ✅ Done 2026-05-09. The route was still referenced from the checkout consent label (despite the doc claiming otherwise); rewrote the consent text to match the v1 email pattern (`I agree to the terms and privacy policy. For refund or exchange questions, contact {tenantName} at {shopEmail}.`) and removed `apps/web/src/app/[tenant]/refund-policy/page.tsx`. Will be re-introduced under follow-up #3 once schools author their own content via §2.2.
 
 2. **School onboarding form must capture refund-policy data** (when §2.2 super-admin portal is built):
    - Refund policy text *or* external URL (textarea or link field)

@@ -503,10 +503,6 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
           />
           <span>
             I agree to the{" "}
-            <Link href={`/${tenant.id}/refund-policy`} className="underline">
-              refund policy
-            </Link>
-            ,{" "}
             <Link href="/terms" className="underline">
               terms
             </Link>{" "}
@@ -514,6 +510,10 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
             <Link href="/privacy" className="underline">
               privacy policy
             </Link>
+            . For refund or exchange questions, contact {tenant.name} at{" "}
+            <a href={`mailto:${tenant.shopEmail}`} className="underline">
+              {tenant.shopEmail}
+            </a>
             .
           </span>
         </label>
