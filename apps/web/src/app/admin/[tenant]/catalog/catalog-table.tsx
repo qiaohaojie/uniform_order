@@ -1,49 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
 import Image from "next/image";
 import { GarmentVector } from "@/components/garment";
 import { ItemDrawer, type ItemDrawerInitial } from "./item-drawer";
 import type { Tenant, ItemCategory } from "@/lib/data";
-
-type DbVariant = { id: string; itemId: string; label: string; price: string; active: boolean };
-type DbItem = {
-  id: string;
-  tenantId: string;
-  name: string;
-  category: string;
-  description: string | null;
-  imageUrl: string | null;
-  active: boolean;
-  sortOrder: number;
-  variants: DbVariant[];
-};
+import type { CatalogItemWithVariants } from "@/db/queries";
 
 export function CatalogTable({
-  tenantId,
-  initialItems,
+  items,
+  setItems,
+  refresh,
   tenant,
 }: {
-  tenantId: string;
-  initialItems: DbItem[];
+  items: CatalogItemWithVariants[];
+  setItems: Dispatch<SetStateAction<CatalogItemWithVariants[]>>;
+  refresh: () => Promise<void>;
   tenant: Tenant;
 }) {
-  const [items, setItems] = useState<DbItem[]>(initialItems);
   const [tableError, setTableError] = useState("");
   const [drawer, setDrawer] = useState<
     | { open: false }
-    | { open: true; mode: "create" }
-    | { open: true; mode: "edit"; item: DbItem }
+    | { open: true; mode: "edit"; item: CatalogItemWithVariants }
   >({ open: false });
-
-  const refresh = async () => {
-    try {
-      const res = await fetch(`/api/catalog?tenantId=${tenantId}`);
-      if (res.ok) setItems(await res.json());
-    } catch (err) {
-      console.error("Refresh failed:", err);
-    }
-  };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Remove "${name}" from the catalog?`)) return;
@@ -63,14 +42,19 @@ export function CatalogTable({
     }
   };
 
-  const initialFromItem = (it: DbItem): ItemDrawerInitial => ({
+  const initialFromItem = (it: CatalogItemWithVariants): ItemDrawerInitial => ({
     name: it.name,
     category: it.category as ItemCategory,
     description: it.description ?? undefined,
     imageUrl: it.imageUrl ?? undefined,
     active: it.active,
     sortOrder: it.sortOrder,
-    variants: it.variants.map((v) => ({ label: v.label, price: v.price, active: v.active })),
+    variants: it.variants.map((v) => ({
+      id: v.id,
+      label: v.label,
+      price: v.price,
+      active: v.active,
+    })),
   });
 
   return (
@@ -154,12 +138,8 @@ export function CatalogTable({
         <ItemDrawer
           tenant={tenant}
           open={drawer.open}
-          mode={
-            drawer.mode === "create"
-              ? { kind: "create" }
-              : { kind: "edit", itemId: drawer.item.id }
-          }
-          initial={drawer.mode === "edit" ? initialFromItem(drawer.item) : undefined}
+          mode={{ kind: "edit", itemId: drawer.item.id }}
+          initial={initialFromItem(drawer.item)}
           onClose={() => setDrawer({ open: false })}
           onSaved={refresh}
         />

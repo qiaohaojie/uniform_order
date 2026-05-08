@@ -1,24 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { CatalogTable } from "./catalog-table";
 import { ItemDrawer } from "./item-drawer";
 import type { Tenant } from "@/lib/data";
-
-type DbVariant = { id: string; itemId: string; label: string; price: string; active: boolean };
-type DbItem = {
-  id: string;
-  tenantId: string;
-  name: string;
-  category: string;
-  description: string | null;
-  imageUrl: string | null;
-  active: boolean;
-  sortOrder: number;
-  variants: DbVariant[];
-};
+import type { CatalogItemWithVariants } from "@/db/queries";
 
 export function CatalogPageClient({
   tenantId,
@@ -27,10 +14,19 @@ export function CatalogPageClient({
 }: {
   tenantId: string;
   tenant: Tenant;
-  initialItems: DbItem[];
+  initialItems: CatalogItemWithVariants[];
 }) {
-  const router = useRouter();
+  const [items, setItems] = useState<CatalogItemWithVariants[]>(initialItems);
   const [addOpen, setAddOpen] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/catalog?tenantId=${tenantId}`);
+      if (res.ok) setItems(await res.json());
+    } catch (err) {
+      console.error("Refresh failed:", err);
+    }
+  }, [tenantId]);
 
   return (
     <>
@@ -51,13 +47,21 @@ export function CatalogPageClient({
           + Add item
         </button>
       </div>
-      <CatalogTable tenantId={tenantId} tenant={tenant} initialItems={initialItems} />
+      <CatalogTable
+        tenant={tenant}
+        items={items}
+        setItems={setItems}
+        refresh={refresh}
+      />
       <ItemDrawer
         tenant={tenant}
         open={addOpen}
         mode={{ kind: "create" }}
         onClose={() => setAddOpen(false)}
-        onSaved={() => router.refresh()}
+        onSaved={async () => {
+          await refresh();
+          setAddOpen(false);
+        }}
       />
     </>
   );

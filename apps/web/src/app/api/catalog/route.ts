@@ -3,6 +3,7 @@ import { addCatalogItem, getCatalogByTenant } from "@/db/queries";
 import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
 import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
 import { catalogItemInputSchema } from "@/lib/schemas/catalog";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 // GET /api/catalog?tenantId=nsbh
 export async function GET(req: NextRequest) {
@@ -25,9 +26,24 @@ export async function GET(req: NextRequest) {
 // POST /api/catalog — create a new item
 export async function POST(req: NextRequest) {
   try {
+    // Pre-auth IP rate limit — generous, just probe-defence.
+    const preAuthRl = applyRateLimit(req, "catalog:post:anon", {
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (preAuthRl) return preAuthRl;
+
     // Auth first — never leak zod schema details to unauthenticated callers.
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
+
+    // Post-auth per-user budget — admin bulk work fits comfortably.
+    const userRl = applyRateLimit(
+      req,
+      `catalog:post:${authResult.user.id}`,
+      { limit: 30, windowMs: 60_000 },
+    );
+    if (userRl) return userRl;
 
     const body = await req.json();
     const parsed = catalogItemInputSchema.safeParse(body);
@@ -46,12 +62,17 @@ export async function POST(req: NextRequest) {
     const accessDenied = ensureTenantAccess(authResult.user, tenant.shopEmail);
     if (accessDenied) return accessDenied;
 
-    const slug = input.name
+    const rawSlug = input.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .slice(0, 40);
-    const id = `${input.tenantId}-${slug}-${Date.now().toString(36)}`;
+    // Names with no a-z0-9 characters (e.g. CJK / Cyrillic) strip to "".
+    // Fall back to a stable token so the id stays parseable.
+    const slug = rawSlug.length > 0 ? rawSlug : "item";
+    // crypto.randomUUID avoids the same-millisecond collision risk that
+    // Date.now().toString(36) had under concurrent writes.
+    const id = `${input.tenantId}-${slug}-${crypto.randomUUID().slice(0, 8)}`;
 
     await addCatalogItem({
       id,

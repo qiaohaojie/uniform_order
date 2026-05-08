@@ -1,14 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { UploadDropzone } from "@/components/uploadthing";
 import { GarmentVector } from "@/components/garment";
 import type { Tenant } from "@/lib/data";
 import { ITEM_CATEGORIES } from "@/lib/schemas/catalog";
 
-type Variant = { label: string; price: string; active?: boolean };
+type ZodFlatten = {
+  formErrors?: string[];
+  fieldErrors?: Record<string, string[] | undefined>;
+};
+
+function formatZodErrors(details: ZodFlatten | unknown): string {
+  if (!details || typeof details !== "object") return "Invalid input.";
+  const { formErrors, fieldErrors } = details as ZodFlatten;
+  const lines: string[] = [];
+  if (Array.isArray(formErrors)) lines.push(...formErrors);
+  if (fieldErrors) {
+    for (const [field, msgs] of Object.entries(fieldErrors)) {
+      if (msgs?.length) lines.push(`${field}: ${msgs[0]}`);
+    }
+  }
+  return lines.length > 0 ? lines.join("; ") : "Invalid input.";
+}
+
+type Variant = {
+  /** Server-assigned id; present only for variants loaded from DB. */
+  id?: string;
+  label: string;
+  price: string;
+  active?: boolean;
+};
 
 type Mode = { kind: "create" } | { kind: "edit"; itemId: string };
 
@@ -35,9 +58,8 @@ export function ItemDrawer({
   mode: Mode;
   initial?: ItemDrawerInitial;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 }) {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [category, setCategory] = useState<typeof ITEM_CATEGORIES[number]>("Summer");
   const [description, setDescription] = useState("");
@@ -57,7 +79,12 @@ export function ItemDrawer({
     setActive(initial?.active ?? true);
     setVariants(
       initial?.variants?.length
-        ? initial.variants.map((v) => ({ label: v.label, price: v.price, active: v.active }))
+        ? initial.variants.map((v) => ({
+            id: v.id,
+            label: v.label,
+            price: v.price,
+            active: v.active,
+          }))
         : [{ label: "", price: "" }]
     );
     setError(null);
@@ -93,6 +120,7 @@ export function ItemDrawer({
         active,
         sortOrder: initial?.sortOrder ?? 0,
         variants: variants.map((v) => ({
+          id: v.id,
           label: v.label.trim(),
           price: Number(v.price),
           active: v.active,
@@ -117,14 +145,17 @@ export function ItemDrawer({
         const body = await res.json().catch(() => null);
         if (res.status === 403 && body?.code === "tenant_not_approved") {
           setError("This school is not yet approved on the platform.");
+        } else if (body?.error === "validation_failed" && body?.details) {
+          setError(formatZodErrors(body.details));
+        } else if (res.status === 429) {
+          setError("Too many requests. Wait a moment and try again.");
         } else {
           setError(body?.error ?? `HTTP ${res.status}`);
         }
         return;
       }
 
-      onSaved();
-      router.refresh();
+      await Promise.resolve(onSaved());
       onClose();
     } catch (err) {
       console.error("Catalog save failed:", err);

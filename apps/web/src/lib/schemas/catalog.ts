@@ -23,6 +23,9 @@ export const catalogImageUrlSchema = z
   });
 
 export const catalogVariantInputSchema = z.object({
+  // Server-assigned id from a prior fetch — present means "update this row";
+  // absent means "insert new". Omitted variants on PATCH are deleted.
+  id: z.string().uuid().optional(),
   label: z.string().trim().min(1).max(40),
   price: z.number().positive().max(10000),
   active: z.boolean().optional(),

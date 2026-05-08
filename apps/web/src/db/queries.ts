@@ -512,6 +512,12 @@ export async function addOrderRefund(data: {
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
 
+export type CatalogItemRow = typeof catalogItems.$inferSelect;
+export type CatalogVariantRow = typeof catalogVariants.$inferSelect;
+export type CatalogItemWithVariants = CatalogItemRow & {
+  variants: CatalogVariantRow[];
+};
+
 export async function getCatalogByTenant(tenantId: string) {
   const items = await db
     .select()
@@ -587,10 +593,15 @@ export async function addCatalogItem(data: {
 }
 
 /**
- * Partial item update with optional full-replace of variants.
- * If `variants` is provided, ALL existing variants are hard-deleted and the
- * supplied list is inserted. Order history is unaffected (order_lines holds
- * its own snapshots — no FK to catalog_variants).
+ * Partial item update with optional diff-based variant sync.
+ * If `variants` is provided, the variant list is reconciled by id:
+ *   - input variant with `id` matching an existing row → update that row
+ *   - input variant without `id` (or with unknown id) → insert new row
+ *   - existing rows whose id is not in the input → delete
+ * IDs are preserved across edits so cart entries keyed by variantId remain
+ * valid after a save that didn't actually change that variant. Order history
+ * is unaffected — order_lines holds its own snapshots and does not FK
+ * catalog_variants.
  */
 export async function updateCatalogItem(
   itemId: string,
@@ -602,7 +613,12 @@ export async function updateCatalogItem(
     active?: boolean;
     sortOrder?: number;
   },
-  variants?: { label: string; price: number; active?: boolean }[]
+  variants?: {
+    id?: string;
+    label: string;
+    price: number;
+    active?: boolean;
+  }[]
 ) {
   await db.transaction(async (tx) => {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -616,14 +632,39 @@ export async function updateCatalogItem(
     await tx.update(catalogItems).set(updates).where(eq(catalogItems.id, itemId));
 
     if (variants !== undefined) {
-      await tx.delete(catalogVariants).where(eq(catalogVariants.itemId, itemId));
+      const existing = await tx
+        .select({ id: catalogVariants.id })
+        .from(catalogVariants)
+        .where(eq(catalogVariants.itemId, itemId));
+      const existingIds = new Set(existing.map((v) => v.id));
+      const keptIds = new Set<string>();
+
       for (const v of variants) {
-        await tx.insert(catalogVariants).values({
-          itemId,
-          label: v.label,
-          price: String(v.price),
-          active: v.active ?? true,
-        });
+        if (v.id && existingIds.has(v.id)) {
+          await tx
+            .update(catalogVariants)
+            .set({
+              label: v.label,
+              price: String(v.price),
+              active: v.active ?? true,
+            })
+            .where(eq(catalogVariants.id, v.id));
+          keptIds.add(v.id);
+        } else {
+          await tx.insert(catalogVariants).values({
+            itemId,
+            label: v.label,
+            price: String(v.price),
+            active: v.active ?? true,
+          });
+        }
+      }
+
+      const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+      if (toDelete.length > 0) {
+        await tx
+          .delete(catalogVariants)
+          .where(inArray(catalogVariants.id, toDelete));
       }
     }
   });

@@ -7,6 +7,7 @@ import {
 import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
 import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
 import { catalogItemPatchSchema } from "@/lib/schemas/catalog";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 // PATCH /api/catalog/:itemId — partial update; if `variants` provided, replace.
 export async function PATCH(
@@ -15,9 +16,22 @@ export async function PATCH(
 ) {
   const { itemId } = await params;
   try {
+    const preAuthRl = applyRateLimit(req, "catalog:patch:anon", {
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (preAuthRl) return preAuthRl;
+
     // Auth first — never leak zod schema details to unauthenticated callers.
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
+
+    const userRl = applyRateLimit(
+      req,
+      `catalog:patch:${authResult.user.id}`,
+      { limit: 30, windowMs: 60_000 },
+    );
+    if (userRl) return userRl;
 
     const item = await getCatalogItemById(itemId);
     if (!item) {
@@ -75,13 +89,26 @@ export async function PATCH(
 // DELETE /api/catalog/:itemId — hard delete; cascade variants. No 409 path:
 // order_lines does not FK catalog_items.
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
   const { itemId } = await params;
   try {
+    const preAuthRl = applyRateLimit(req, "catalog:delete:anon", {
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (preAuthRl) return preAuthRl;
+
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
+
+    const userRl = applyRateLimit(
+      req,
+      `catalog:delete:${authResult.user.id}`,
+      { limit: 30, windowMs: 60_000 },
+    );
+    if (userRl) return userRl;
 
     const item = await getCatalogItemById(itemId);
     if (!item) {
