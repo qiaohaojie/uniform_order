@@ -58,9 +58,52 @@ The catalog management feature (PR #9 — self-service add/edit catalog items, i
 - [x] **Migration 0008 (`catalog_image_url`)** — already applied to Neon prod (verified 2026-05-08; `__drizzle_migrations` row id=10 matches journal entry for `0008_catalog_image_url`). Nothing to do.
 - [ ] **(Optional) UploadThing free-tier monitoring** — current plan covers 2 GB storage / 100 GB bandwidth. With ~16 product photos × 2 schools × <2 MB each, usage is negligible. Re-evaluate at tenant #5 or any image-heavy redesign (e.g. high-res hero shots, multi-angle product photos).
 
-**Pre-existing landmine flagged during PR #9 smoke testing — not in this PR's scope:**
+### 2.10 🔴 Latent bug — `db.transaction()` against `neon-http` driver in `/api/orders` POST
 
-- `apps/web/src/app/api/orders/route.ts:180` calls `db.transaction(async tx => …)` against the `neon-http` driver, which doesn't support interactive transactions. This was the same bug we fixed in `addCatalogItem` / `updateCatalogItem` (PR #9 commit `ac90e00` — switched to `db.batch`). The orders POST will throw `No transactions support in neon-http driver` → 500 the first time it's called in a real flow. Track as a separate follow-up before any non-Stripe-webhook order traffic hits this route.
+**Where:** `apps/web/src/app/api/orders/route.ts:180` (inside `insertOrder` helper).
+
+**Symptom (will fire on first real parent checkout post-deploy):** every POST to `/api/orders` throws `Error: No transactions support in neon-http driver` and returns 500. Parent never sees an order confirmation, the Stripe payment goes through but no `orders` row is written, refund cleanup is manual.
+
+**Root cause:** the codebase's DB client is `drizzle-orm/neon-http`, which is the HTTP-based serverless driver. It does **not** support drizzle's interactive `db.transaction(async (tx) => …)` API. Only `db.batch([stmt1, stmt2, …])` works on this driver, and it runs the listed statements atomically over a single HTTP round-trip.
+
+**Why it has never been observed in production:**
+
+- `db.transaction(...)` was added to this route in commit `1a6fa21` on 2026-05-05 (auth + idempotency + Stripe destination charges refactor).
+- The 3 orders currently in the `orders` table are all from 2026-05-01 — all pre-date the bug.
+- No parent has placed an order since 2026-05-05, so the bug has never fired in real traffic.
+
+**Why it surfaced now:** caught during PR #9 catalog-management smoke testing — the same `db.transaction(...)` pattern was used in `addCatalogItem` / `updateCatalogItem` and threw the identical error on the first Save in dev. PR #9 already fixed those two call sites (commit `ac90e00`, switched to `db.batch`). The orders POST has the same pattern but is **out of scope for that PR**.
+
+**Required fix (small, mechanical):**
+
+1. In `insertOrder` (`apps/web/src/app/api/orders/route.ts:179`) replace:
+
+   ```ts
+   await db.transaction(async (tx) => {
+     await tx.insert(orders).values({...});
+     for (const line of lines) {
+       await tx.insert(orderLines).values({...});
+     }
+   });
+   ```
+
+   with a `db.batch([...])` call mirroring the pattern in `addCatalogItem` (`apps/web/src/db/queries.ts` after commit `ac90e00`):
+
+   ```ts
+   import type { BatchItem } from "drizzle-orm/batch";
+   const orderInsert = db.insert(orders).values({...});
+   const lineInserts = lines.map((line) => db.insert(orderLines).values({...}));
+   const stmts: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [orderInsert, ...lineInserts];
+   await db.batch(stmts);
+   ```
+
+2. Run `pnpm check-types` (`drizzle-orm` 0.45.2 batch typing requires a non-empty tuple; the cast above satisfies it).
+
+3. Smoke test: place a real test-mode order end-to-end after the change. The 5-attempt collision-retry loop wrapping `insertOrder` keeps working unchanged — it just retries on PK collision, not on the transaction error.
+
+**Priority:** 🔴 Blocker for any production parent-checkout traffic. Currently masked because (a) no real parents have checked out since May 5 and (b) Stripe webhook flows write to other tables, not `orders` directly. The first real checkout post-deploy will fail.
+
+**Suggested branching strategy:** stand-alone tiny PR (≤30 LOC change), can ship independently of PR #9 or be bundled with it as a safety net before NSBH go-live.
 
 ---
 
