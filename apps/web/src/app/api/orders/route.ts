@@ -6,7 +6,6 @@ import {
   getTenant,
 } from "@/db/queries";
 import { eq } from "drizzle-orm";
-import type { BatchItem } from "drizzle-orm/batch";
 import { customAlphabet } from "nanoid";
 import {
   ensureParentEmailAccess,
@@ -200,8 +199,8 @@ export async function POST(req: NextRequest) {
         userId: authResult.user.id,
         parentNote: normalizedParentNote,
       });
-      const lineInserts = lines.map((line) =>
-        db.insert(orderLines).values({
+      const linesInsert = db.insert(orderLines).values(
+        lines.map((line) => ({
           orderId,
           itemId: line.itemId,
           itemName: line.itemName,
@@ -210,13 +209,9 @@ export async function POST(req: NextRequest) {
           qty: line.qty,
           unitPrice: String(line.unitPrice),
           lineTotal: String(line.lineTotal),
-        })
+        }))
       );
-      const stmts: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [
-        orderInsert,
-        ...lineInserts,
-      ];
-      await db.batch(stmts);
+      await db.batch([orderInsert, linesInsert]);
     };
 
     let createdOrderId: string | null = null;
