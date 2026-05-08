@@ -221,6 +221,74 @@ From the former `remaining_work.md` §5 "Suggested go-live checklist":
 3. ✅ Production env config — `next.config.ts` security headers, CSP, HSTS (code complete; ops follow-ups still in `remaining_work.md`)
 4. ✅ PostHog (error tracking + logs) + branded error/not-found pages
 
+### 4.6 Parent order detail page (`/orders/[orderId]`) ✅
+
+**Source:** former `remaining_work.md` §3.4 — completed in commit `32bcf80` (reached `main` via the PR #6 merge ancestry).
+
+A parent-facing order detail page at `/orders/[orderId]` shows the fulfillment timeline (4-step stepper Placed → Packing → Ready → Collected), line items, payment summary with refunds, and a tenant-aware support CTA. Auth via `getSessionUser` (redirect to sign-in with `callbackURL`) + `ensureParentEmailAccess` (wrong-owner / missing → `notFound`).
+
+Status block branches on `order.status`:
+- `pending_payment` → amber "Payment processing" banner (no stepper).
+- `new` / `packing` / `ready` / `collected` → 4-step stepper.
+- `partially_refunded` / `refunded` → amber refund banner with total returned (no stepper, since `orders.status` is single-valued).
+
+Wire-ups (same commit):
+- `apps/web/src/app/orders/orders-list-client.tsx` — active card and past-row details wrapped in `<Link href="/orders/{id}">`; "Re-order" remains a separate sibling Link.
+- `apps/web/src/app/[tenant]/order/placed/page.tsx` — "View order details" deep-links to `/orders/{orderId}`.
+- `apps/web/src/lib/email/templates/OrderConfirmation.tsx` and `OrderReady.tsx` — added `orderUrl` prop and a "View order status" button rendered with tenant accent.
+- `apps/web/src/lib/email/index.ts` — threads `orderUrl = ${requireAppUrl()}/orders/${order.id}` into both templates.
+
+Smoke-tested against real DB: 8/8 spec scenarios pass; both transactional emails delivered via Emailit. Spec: `docs/superpowers/specs/2026-05-07-parent-order-detail-design.md`. Plan: `docs/superpowers/plans/2026-05-07-parent-order-detail.md`.
+
+### 4.7 Stripe Connect onboarding completion sync ✅
+
+**Source:** former `remaining_work.md` §3.5 — completed 2026-05-07. Folds into the `account.updated` line of §2.3 above; preserved here for the operational detail.
+
+Both push (webhook) and pull (live API fetch) paths keep `stripePayoutsEnabled` / `stripeChargesEnabled` in sync:
+
+- `account.updated` webhook handler in `apps/web/src/app/api/stripe/webhook/route.ts` updates the tenants row keyed by `stripeAccountId`, captures PostHog events (success, unmatched-account, exception), and re-throws on DB error so Stripe retries.
+- `GET /api/stripe/connect` live-fetches the account from Stripe on every call and persists fresh status, so any settings-page load reconciles state regardless of webhook delivery.
+- Settings UI renders three correct states: not connected, connected/onboarding incomplete, connected/ready.
+
+**Smoke test (no real Express account required):** with the dev server + Stripe CLI listener running, run `stripe trigger account.updated` and confirm the PostHog `stripe_account_updated` (or `stripe_account_updated_unmatched`) event fires and the DB row reflects the payload.
+
+**Remaining (ops):** verify the production Stripe webhook endpoint subscribes to `account.updated`. Tracked in `remaining_work.md` §2.8.
+
+### 4.8 "Riley wore size X last year" hint — live order history ✅
+
+**Source:** former `remaining_work.md` §4.1 + §4.9 — merged to `main` in commits `6700615`–`0d61038`.
+
+Replaces the static `"Riley wore size 14 last year"` placeholder with a real previous-size hint driven by the parent's order history.
+
+- `getPreviousSizeHint(tenantId, email, itemId)` in `apps/web/src/db/queries.ts` — joins `orders` × `order_lines`, returns the most recent matching `{studentName, variantLabel, createdAt}` or `null`.
+- `GET /api/orders/size-hint?tenantId=...&email=...&itemId=...` returns `{studentName, variantLabel}` or `null`. Auth-gated.
+- `interactive.tsx` reads parent email from `uo:student:v1` localStorage (already persisted at checkout via `writeStudentDetails()`), fetches the hint, and renders `"{studentName} wore {variantLabel} last year"` only when a real match exists. No hardcoded fallback.
+
+Code complete; type-check passing. Smoke tests T2/T3/T4/T5/T6/T7 verified via DB-injected test data. Checkout-path smoke test (T3/T4 via real Stripe payment) is blocked on NSBH's Stripe Express account onboarding — same gap as `remaining_work.md` §2.8 / §5 checklist item 4. Re-run once the Stripe Connect account is active.
+
+### 4.9 Drizzle-kit `neon_auth.*` exclusion ✅
+
+**Source:** former `remaining_work.md` §4.11 — completed 2026-05-08 in PR #8 (`chore/drizzle-tablesfilter`, commit `6d2602b`).
+
+**Resolution:** schema-file split, not a `drizzle.config.ts` flag.
+
+**Investigation finding:** both `tablesFilter` and `schemaFilter` only filter DB introspection during `pull` / `push`. Neither prevents `generate` from diffing a tracked table in the snapshot. Confirmed by probe: with `schemaFilter: ["public"]` set, adding a column to `neonAuthUsers` in `schema.ts` still emitted `ALTER TABLE "neon_auth"."user" ADD COLUMN ...`. Same with `tablesFilter: ["!neon_auth.*"]`.
+
+**Working approach:**
+
+1. Move `neonAuthUsers` + `neonAuthSchema` to `apps/web/src/db/external-schema.ts`.
+2. In `schema.ts`, import `neonAuthUsers` (do **not** re-export). The `references(() => neonAuthUsers.id, …)` callbacks still resolve at runtime.
+3. Hand-edit the latest snapshot (`apps/web/drizzle/meta/0007_snapshot.json`) to remove the `neon_auth.user` table entry and empty the `schemas` object.
+4. `drizzle.config.ts` stays unchanged — the filter flags don't help.
+
+**Why this works:** drizzle-kit enumerates exports of the file at `drizzle.config.ts:schema` (only `./src/db/schema.ts`). It does not traverse imports to discover `pgTable` / `pgSchema` symbols, so a table imported-but-not-re-exported is invisible to its diffing. FK SQL emission (`REFERENCES "neon_auth"."user"("id")`) still works because the `references()` callback returns the column object regardless of registration.
+
+**Verified:** clean-tree `drizzle-kit generate` produces "No schema changes." Probe of `neonAuthUsers` column add in `external-schema.ts` produces no migration. Sanity probe (column add in a public table) still emits the expected ALTER.
+
+### 4.10 Transactional-email webhook commit split — decision noted ✅
+
+**Source:** former `remaining_work.md` §4.10. The transactional-email plan called for splitting Task 6 Steps 3 and 4 into separate commits; commit `3ce98b1` collapsed them. Functionality is correct — only `git bisect` / history granularity is affected. Not worth rewriting history. Recorded here so the deviation is explainable from the doc trail rather than archaeology.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -230,5 +298,4 @@ The following audit items are **not** complete and are tracked in `docs/remainin
 - Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) — `remaining_work.md` §2.2.
 - "Add another child" flow on school picker — `remaining_work.md` §3.3.
 - Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) — `remaining_work.md` §3.1.
-- "Riley wore size X last year" hint driven by live order history (currently hardcoded) — `remaining_work.md` §4.1 + §4.9.
 - Dashboard "New product" and "Export" buttons not wired — `remaining_work.md` §4.2.

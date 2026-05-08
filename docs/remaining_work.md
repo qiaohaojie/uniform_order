@@ -23,6 +23,8 @@ This document lists every item that must be resolved (or explicitly deferred) be
 ## 2. 🟠 High — required for an acceptable v1
 
 > §2.1 (refund/exchange UI), §2.3 (Stripe webhook handler), §2.6 (production env config — code), and §2.7 (error handling / observability — code) are now complete and have been moved to `docs/completed.md` §4. Their leftover ops/verification follow-ups are tracked below in §2.8.
+>
+> §3.4 (parent order detail page), §3.5 (Stripe Connect onboarding sync), §4.1 + §4.9 (size hint), §4.10 (commit-split decision), and §4.11 (drizzle-kit `neon_auth.*` exclusion) are also complete — moved to `docs/completed.md` §4.6–§4.10.
 
 ### 2.2 Super-admin / platform portal — none of 4 screens exist
 
@@ -41,7 +43,7 @@ Without this, onboarding a second school requires running a SQL seed script. For
 
 The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verification items still need to happen before go-live:
 
-- **Refund E2E (from §2.1):** Once NSBH's Stripe Express account is onboarded, run smoke-test Test 3 — place order → partial refund → full refund → 409 on third attempt → idempotency replay. (See §5 checklist item 8.)
+- **Refund E2E (from §2.1):** Once NSBH's Stripe Express account is onboarded, run smoke-test Test 3 — place order → partial refund → full refund → 409 on third attempt → idempotency replay. (See §5 checklist item 4.)
 - **Production env (from §2.6):** Switch from Stripe test keys to live keys; pin production `DATABASE_URL`; configure Hostinger Node.js app env groups (preview vs production); assign production domain + TLS.
 - **Observability (from §2.7):** Verify PostHog project key is set in production Hostinger env vars (and confirm events are arriving from production after first deploy).
 - **Stripe webhook events (from §3.5):** Verify the production Stripe webhook endpoint subscribes to `account.updated` in addition to `payment_intent.succeeded` and `charge.refunded`.
@@ -74,22 +76,6 @@ Already counted in §1.5 as a blocker for the consent step. Listed again here be
 - [ ] Run a real end-to-end smoke test on staging: sign in via magic-link, add a child, place an order with a note, confirm the operator detail callout, confirm the printed pick slip includes the note, confirm the parent receipt echoes the note.
 - [ ] Run the same E2E with Google sign-in.
 - [ ] After deploy, manually run `UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh');` against production if the migration's seed UPDATE didn't apply (verify by checking the row).
-
-### 3.4 Order tracking page for parents
-
-PDP §3.1 mentions "order tracking" beyond an emailed receipt. Today the parent orders list shows status text but no per-order timeline (placed → packing → ready → collected). Add a parent-facing detail page at `/[tenant]/order/[orderId]` keyed by parent email + order ID.
-
-### 3.5 Stripe Connect onboarding completion polling / webhook ✅
-
-**Status:** Code complete (2026-05-07). Both push (webhook) and pull (live API fetch) paths keep `stripePayoutsEnabled` / `stripeChargesEnabled` in sync.
-
-- `account.updated` webhook handler in `apps/web/src/app/api/stripe/webhook/route.ts` updates the tenants row keyed by `stripeAccountId`, captures PostHog events (success, unmatched-account, exception), and re-throws on DB error so Stripe retries.
-- `GET /api/stripe/connect` live-fetches the account from Stripe on every call and persists fresh status, so any settings-page load reconciles state regardless of webhook delivery.
-- Settings UI renders three correct states: not connected, connected/onboarding incomplete, connected/ready.
-
-**Smoke test (no real Express account required):** with the dev server + Stripe CLI listener running, run `stripe trigger account.updated` and confirm the PostHog `stripe_account_updated` (or `stripe_account_updated_unmatched`) event fires and the DB row reflects the payload.
-
-**Remaining (ops):** verify the production Stripe webhook endpoint subscribes to `account.updated` (alongside `payment_intent.succeeded` and `charge.refunded`). Tracked under §2.8.
 
 ### 3.6 GST / BAS report — auditor sign-off
 
@@ -133,7 +119,6 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 | # | Item | Source |
 |---|---|---|
-| 4.1 | ~~"Riley wore size X last year" hint driven from live order history~~ **✅ Done** — see §4.9 note | Audit item 17 |
 | 4.2 | "New product" and "Export" buttons on Dashboard wired up | Audit §2 / Dashboard |
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
@@ -141,73 +126,8 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 | 4.6 | Operator audit log (who marked the order ready, who refunded) | Inferred from refund work |
 | 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
 | 4.8 | Drizzle migrations checked into the repo (currently schema is push-only) | Ops |
-| 4.9 | Implementation detail for §4.1 — replace hardcoded size hint (see below) | known_issues #1 |
-| 4.10 | Note: transactional-email webhook commit was not split as planned (`3ce98b1` collapsed Task 6 Steps 3 & 4). Functionality correct; history/bisect deviation only — not worth rewriting. | known_issues #3 |
-| 4.11 | ✅ Drizzle-kit `neon_auth.*` exclusion — DONE via schema-file split, not config | UUID drift cleanup (2026-05-08) |
 
-### 4.9 ✅ Replace hardcoded "Riley wore size X last year" hint — DONE (smoke test pending Stripe Connect)
-
-**Implemented in:** merged to `main` (commits `6700615`–`0d61038`)
-
-**Status:** Code complete, type-check passing, smoke tests T2/T3/T4/T5/T6/T7 verified via DB-injected test data. Checkout-path smoke test (T3/T4 via real Stripe payment) could not be run because the NSBH tenant's Stripe Express account is not yet onboarded — same gap as §2.8 / §5 checklist item 4. **Re-run the checkout smoke test once the Stripe Connect account is active.**
-
-**Original problem (resolved):** The size hint shown beneath the size selector on the item detail page was a static string `"Riley wore size 14 last year"`. It did not reflect the actual parent's order history or their child's name.
-
-**Proper fix — three pieces:**
-
-#### 1. New db query (`apps/web/src/db/queries.ts`)
-
-```ts
-export async function getPreviousSizeHint(tenantId: string, email: string, itemId: string) {
-  const rows = await db
-    .select({ studentName: orders.studentName, variantLabel: orderLines.variantLabel, createdAt: orders.createdAt })
-    .from(orders)
-    .innerJoin(orderLines, eq(orderLines.orderId, orders.id))
-    .where(and(eq(orders.tenantId, tenantId), eq(orders.parentEmail, email), eq(orderLines.itemId, itemId)))
-    .orderBy(desc(orders.createdAt))
-    .limit(1);
-  return rows[0] ?? null;
-}
-```
-
-#### 2. New API route
-
-`GET /api/orders/size-hint?tenantId=...&email=...&itemId=...`
-
-Returns `{ studentName, variantLabel }` or `null`. A dedicated route is cleaner than extending the existing orders route.
-
-#### 3. Wire `interactive.tsx`
-
-Add a `useEffect` that:
-1. Calls `readStudentDetails()` (from `@/lib/order-store`) to get the parent's email from `uo:student:v1` localStorage
-2. Fetches `/api/orders/size-hint?tenantId=...&email=...&itemId=${item.id}`
-3. If a result is returned, renders `"{studentName} wore {variantLabel} last year"` dynamically
-4. If no result (first-time buyer or item never ordered), hides the hint entirely
-
-**Notes:**
-- The email and student name are already persisted to localStorage during checkout via `writeStudentDetails()` — no new storage needed
-- The hint should only appear when there is a real match; don't fall back to any hardcoded value
-
----
-
-### 4.11 ✅ Lock drizzle-kit out of `neon_auth.*` — DONE
-
-**Resolution:** schema-file split, not a `drizzle.config.ts` flag.
-
-**Investigation finding:** both `tablesFilter` and `schemaFilter` only filter DB introspection during `pull`/`push`. Neither prevents `generate` from diffing a tracked table in the snapshot. Confirmed by probe: with `schemaFilter: ["public"]` set, adding a column to `neonAuthUsers` in `schema.ts` still emitted `ALTER TABLE "neon_auth"."user" ADD COLUMN ...`. Same with `tablesFilter: ["!neon_auth.*"]`.
-
-**Working approach:**
-
-1. Move `neonAuthUsers` + `neonAuthSchema` to `apps/web/src/db/external-schema.ts`.
-2. In `schema.ts`, import `neonAuthUsers` (do **not** re-export). The `references(() => neonAuthUsers.id, …)` callbacks still resolve at runtime.
-3. Hand-edit the latest snapshot (`apps/web/drizzle/meta/0007_snapshot.json`) to remove the `neon_auth.user` table entry and empty the `schemas` object.
-4. `drizzle.config.ts` stays unchanged — the filter flags don't help.
-
-**Why this works:** drizzle-kit enumerates exports of the file at `drizzle.config.ts:schema` (only `./src/db/schema.ts`). It does not traverse imports to discover `pgTable`/`pgSchema` symbols, so a table imported-but-not-re-exported is invisible to its diffing. FK SQL emission (`REFERENCES "neon_auth"."user"("id")`) still works because the `references()` callback returns the column object regardless of registration.
-
-**Verified:** clean-tree `drizzle-kit generate` produces "No schema changes." Probe of `neonAuthUsers` column add in `external-schema.ts` produces no migration. Sanity probe (column add in a public table) still emits the expected ALTER.
-
-**Reference:** spec for the original drift fix at `docs/superpowers/specs/2026-05-08-uuid-drift-fix-design.md`.
+> §4.1 (size hint), §4.9 (size-hint implementation), §4.10 (commit-split note), §4.11 (drizzle-kit `neon_auth.*` exclusion) are complete — moved to `docs/completed.md` §4.6–§4.10. IDs preserved for cross-reference; no renumbering.
 
 ---
 
@@ -232,9 +152,9 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 | Audit item | Tracked in |
 |---|---|
 | "Add another child" button on school picker | §3.3 |
-| "Riley wore size X last year" hint (hardcoded) | §4.1 + §4.9 (implementation detail) |
+| "Riley wore size X last year" hint (hardcoded) | ✅ Done — `completed.md` §4.8 |
 | Dashboard "New product" button not wired | §4.2 |
 | Dashboard "Export" button not wired | §4.2 |
-| Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 4 |
+| Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 3 |
 | Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) | §2.2 |
 | Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) | §3.1 |
