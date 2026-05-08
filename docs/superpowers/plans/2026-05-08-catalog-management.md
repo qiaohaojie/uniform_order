@@ -453,12 +453,43 @@ Expected: zero errors in this file. Errors may still be present in `[itemId]/rou
 
 ---
 
-## Task 6: Rewrite `PATCH` and `DELETE` `/api/catalog/[itemId]`
+## Task 6: Rewrite `PATCH` and `DELETE` `/api/catalog/[itemId]` (+ create `uploadthing-cleanup` helper)
 
 **Files:**
+- Create: `apps/web/src/lib/uploadthing-cleanup.ts`
 - Modify: `apps/web/src/app/api/catalog/[itemId]/route.ts` (replace entirely)
 
-- [ ] **Step 1: Replace the file contents**
+- [ ] **Step 0: Create the cleanup helper first (so DELETE can statically import it)**
+
+Write `apps/web/src/lib/uploadthing-cleanup.ts`:
+
+```ts
+import { UTApi } from "uploadthing/server";
+
+const utapi = new UTApi();
+
+/**
+ * Best-effort delete of an UploadThing file by its public URL.
+ * Throws on failure; callers should catch + log + continue.
+ */
+export async function deleteUploadthingFileByUrl(url: string): Promise<void> {
+  // UploadThing public URLs look like https://utfs.io/f/<fileKey>
+  const match = /https?:\/\/[^/]+\/f\/([^/?#]+)/.exec(url);
+  if (!match) throw new Error(`Unrecognized UploadThing URL: ${url}`);
+  const fileKey = match[1];
+  await utapi.deleteFiles(fileKey);
+}
+```
+
+This depends on the `uploadthing` package. If it isn't yet installed (Task 7 hasn't run), install it now and continue:
+
+```bash
+pnpm --filter web add uploadthing @uploadthing/react
+```
+
+The duplicate `pnpm add` in Task 7 is then a harmless no-op.
+
+- [ ] **Step 1: Replace the route file contents**
 
 Overwrite `apps/web/src/app/api/catalog/[itemId]/route.ts` with:
 
@@ -472,6 +503,7 @@ import {
 import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
 import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
 import { catalogItemPatchSchema } from "@/lib/schemas/catalog";
+import { deleteUploadthingFileByUrl } from "@/lib/uploadthing-cleanup";
 
 // PATCH /api/catalog/:itemId — partial update; if `variants` provided, replace.
 export async function PATCH(
@@ -540,10 +572,9 @@ export async function DELETE(
 
     const [deleted] = await deleteCatalogItem(itemId);
 
-    // Best-effort UploadThing file delete — see Task 9 for the helper.
+    // Best-effort UploadThing file delete (helper from Step 0).
     if (deleted?.imageUrl) {
       try {
-        const { deleteUploadthingFileByUrl } = await import("@/lib/uploadthing-cleanup");
         await deleteUploadthingFileByUrl(deleted.imageUrl);
       } catch (cleanupErr) {
         console.warn(`UploadThing cleanup failed for ${deleted.imageUrl}:`, cleanupErr);
@@ -564,13 +595,13 @@ export async function DELETE(
 pnpm check-types:web
 ```
 
-Expected: a "Cannot find module `@/lib/uploadthing-cleanup`" error — that's intentional; it's added in Task 9. Until Task 9 lands the dynamic import is a soft dependency that fails at runtime, not at type-check (because of the `await import(...)` form). If your TS strict settings flag the dynamic import, comment out the `if (deleted?.imageUrl)` block until Task 9 lands and uncomment then. Otherwise zero errors.
+Expected: zero errors. The cleanup helper from Step 0 satisfies the static import, and Task 7 has already installed the `uploadthing` package.
 
 - [ ] **Step 3: Commit (combined with Tasks 4 + 5)**
 
 ```bash
-git add apps/web/src/db/queries.ts apps/web/src/app/api/catalog/route.ts apps/web/src/app/api/catalog/[itemId]/route.ts
-git commit -m "feat(catalog): rewrite POST/PATCH/DELETE /api/catalog with image_url, approval gate, zod validation"
+git add apps/web/src/db/queries.ts apps/web/src/app/api/catalog/route.ts apps/web/src/app/api/catalog/[itemId]/route.ts apps/web/src/lib/uploadthing-cleanup.ts
+git commit -m "feat(catalog): rewrite POST/PATCH/DELETE /api/catalog with image_url, approval gate, zod validation, uploadthing cleanup"
 ```
 
 ---
@@ -632,7 +663,8 @@ git commit -m "chore(deps): add uploadthing + @uploadthing/react"
 - Create: `apps/web/src/lib/uploadthing.ts`
 - Create: `apps/web/src/app/api/uploadthing/route.ts`
 - Create: `apps/web/src/components/uploadthing.ts`
-- Create: `apps/web/src/lib/uploadthing-cleanup.ts`
+
+(`apps/web/src/lib/uploadthing-cleanup.ts` was created in Task 6 Step 0.)
 
 - [ ] **Step 1: Create the FileRouter**
 
@@ -709,29 +741,7 @@ export const UploadButton = generateUploadButton<UploadRouter>();
 export const UploadDropzone = generateUploadDropzone<UploadRouter>();
 ```
 
-- [ ] **Step 4: Add the cleanup helper for DELETE**
-
-Write `apps/web/src/lib/uploadthing-cleanup.ts`:
-
-```ts
-import { UTApi } from "uploadthing/server";
-
-const utapi = new UTApi();
-
-/**
- * Best-effort delete of an UploadThing file by its public URL.
- * Throws on failure; callers should catch + log + continue.
- */
-export async function deleteUploadthingFileByUrl(url: string): Promise<void> {
-  // UploadThing public URLs look like https://utfs.io/f/<fileKey>
-  const match = /https?:\/\/[^/]+\/f\/([^/?#]+)/.exec(url);
-  if (!match) throw new Error(`Unrecognized UploadThing URL: ${url}`);
-  const fileKey = match[1];
-  await utapi.deleteFiles(fileKey);
-}
-```
-
-- [ ] **Step 5: Type-check**
+- [ ] **Step 4: Type-check**
 
 ```bash
 pnpm check-types:web
@@ -739,11 +749,11 @@ pnpm check-types:web
 
 Expected: zero errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/lib/uploadthing.ts apps/web/src/app/api/uploadthing/route.ts apps/web/src/components/uploadthing.ts apps/web/src/lib/uploadthing-cleanup.ts
-git commit -m "feat(uploadthing): file router, route handler, typed React, cleanup helper"
+git add apps/web/src/lib/uploadthing.ts apps/web/src/app/api/uploadthing/route.ts apps/web/src/components/uploadthing.ts
+git commit -m "feat(uploadthing): file router, route handler, typed React generators"
 ```
 
 ---
@@ -869,15 +879,15 @@ git commit -m "feat(admin/catalog): pending-approval empty state"
 
 This is the largest single component. Build it in one task with focused steps.
 
-- [ ] **Step 1: Verify HeroUI Sheet availability**
+- [ ] **Step 1: Confirm Sheet comes from `@heroui-pro/react`**
 
-Run:
+`@heroui/react` (base) only ships Modal/Card/Button. `Sheet` lives in `@heroui-pro/react` (Pro), which is already in `apps/web/package.json`. Verify:
 
 ```bash
-node -e "console.log(Object.keys(require('@heroui/react')).filter(k => k.startsWith('Sheet')))"
+node -e "const r=require('@heroui-pro/react'); console.log('Sheet:',!!r.Sheet,'SheetContent:',!!r.SheetContent)"
 ```
 
-Expected: `['Sheet', 'SheetTrigger', 'SheetContent', ...]` (or similar). If `Sheet` is missing, fall back to `Modal` from `@heroui/react` for the container — note this in the file as a TODO so a future polish task can swap to `Sheet` when it lands. Do not block the task.
+Expected: `Sheet: true SheetContent: true`. If either is `false`, fall back to `Drawer` from `@heroui/react` (or `Modal` if Drawer also missing) and adjust the import + element names in Step 2 accordingly. Do not import `Sheet` from `@heroui/react` — it does not exist there.
 
 - [ ] **Step 2: Write the component**
 
@@ -889,7 +899,7 @@ Write `apps/web/src/app/admin/[tenant]/catalog/item-drawer.tsx`:
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Sheet, SheetContent } from "@heroui/react";  // see Step 1 fallback note
+import { Sheet, SheetContent } from "@heroui-pro/react";  // see Step 1 fallback note
 import { UploadDropzone } from "@/components/uploadthing";
 import { GarmentVector } from "@/components/garment";
 import type { Tenant } from "@/lib/data";
@@ -1238,7 +1248,7 @@ export function ItemDrawer({
 pnpm check-types:web
 ```
 
-Expected: zero errors. If `Sheet`/`SheetContent` aren't exported from `@heroui/react`, swap them for `Modal`/`ModalContent` and adjust the side prop accordingly — keep the rest of the component identical.
+Expected: zero errors. If `@heroui-pro/react` is missing `Sheet`/`SheetContent`, swap them for `Drawer`/`DrawerContent` from `@heroui/react` and adjust the `side` prop accordingly — keep the rest of the component identical.
 
 - [ ] **Step 4: Commit**
 
@@ -1253,15 +1263,16 @@ git commit -m "feat(admin/catalog): item drawer with image upload, variants, val
 
 **Files:**
 - Modify: `apps/web/src/app/admin/[tenant]/catalog/catalog-table.tsx`
-- Delete: `apps/web/src/app/admin/[tenant]/catalog/add-product-modal.tsx` (or whichever filename hosts the existing modal — verify with `grep -l AddProductModal`)
 
-- [ ] **Step 1: Locate the existing AddProductModal**
+The existing `AddProductModal` is currently defined as an **inline** function inside `catalog-table.tsx` (around line 36) — it is not a separate file. Step 2's rewrite replaces the entire file contents, which inherently removes the inline `AddProductModal` definition. **Do not run `git rm` on `catalog-table.tsx`** — it would delete the new implementation.
+
+- [ ] **Step 1: Confirm where `AddProductModal` currently lives**
 
 ```bash
-grep -rln "AddProductModal" apps/web/src/app/admin/[tenant]/catalog/
+grep -rln "function AddProductModal\|export function AddProductModal\|const AddProductModal" apps/web/src/app/admin/[tenant]/catalog/
 ```
 
-Note the filename returned — that file is being removed in Step 5.
+Expected output: `apps/web/src/app/admin/[tenant]/catalog/catalog-table.tsx` (and no other file). If the grep returns a *different* file (e.g., a separate `add-product-modal.tsx`), then that separate file is what Step 5 removes. If the grep returns only `catalog-table.tsx`, there is no separate file — skip Step 5 entirely.
 
 - [ ] **Step 2: Rewrite `catalog-table.tsx`**
 
@@ -1290,30 +1301,21 @@ type DbItem = {
 };
 
 export function CatalogTable({
-  tenantId,
-  initialItems,
   tenant,
+  items,
+  setItems,
+  refresh,
 }: {
-  tenantId: string;
-  initialItems: DbItem[];
   tenant: Tenant;
+  items: DbItem[];
+  setItems: React.Dispatch<React.SetStateAction<DbItem[]>>;
+  refresh: () => Promise<void>;
 }) {
-  const [items, setItems] = useState<DbItem[]>(initialItems);
   const [tableError, setTableError] = useState("");
   const [drawer, setDrawer] = useState<
     | { open: false }
-    | { open: true; mode: "create" }
     | { open: true; mode: "edit"; item: DbItem }
   >({ open: false });
-
-  const refresh = async () => {
-    try {
-      const res = await fetch(`/api/catalog?tenantId=${tenantId}`);
-      if (res.ok) setItems(await res.json());
-    } catch (err) {
-      console.error("Refresh failed:", err);
-    }
-  };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Remove “${name}” from the catalog?`)) return;
@@ -1424,24 +1426,14 @@ export function CatalogTable({
         <ItemDrawer
           tenant={tenant}
           open={drawer.open}
-          mode={
-            drawer.mode === "create"
-              ? { kind: "create" }
-              : { kind: "edit", itemId: drawer.item.id }
-          }
-          initial={drawer.mode === "edit" ? initialFromItem(drawer.item) : undefined}
+          mode={{ kind: "edit", itemId: drawer.item.id }}
+          initial={initialFromItem(drawer.item)}
           onClose={() => setDrawer({ open: false })}
           onSaved={refresh}
         />
       )}
     </div>
   );
-}
-
-// Exported so the parent page can open the drawer in create mode.
-export function useCatalogTableTrigger() {
-  // intentionally minimal — see Task 13 for the page-level hook-up
-  return null;
 }
 ```
 
@@ -1459,15 +1451,17 @@ Run `pnpm dev:web`, open `http://localhost:3000/admin/nsbh/catalog` in a browser
 
 Stop the dev server.
 
-- [ ] **Step 5: Delete the obsolete AddProductModal file**
+- [ ] **Step 5: Delete a *separate* AddProductModal file (only if Step 1 found one)**
 
-Use the filename from Step 1:
+Skip this step if Step 1 only returned `catalog-table.tsx` — there is no separate file to delete; the inline definition is already gone via Step 2's rewrite.
+
+If Step 1 returned a different filename (e.g. `add-product-modal.tsx`), remove only that file:
 
 ```bash
-git rm apps/web/src/app/admin/[tenant]/catalog/<filename-from-step-1>.tsx
+git rm apps/web/src/app/admin/[tenant]/catalog/<separate-filename-from-step-1>.tsx
 ```
 
-If your filesystem layout uses a different name (e.g. `add-product.tsx`), substitute accordingly.
+Never `git rm catalog-table.tsx` — it now holds the new implementation.
 
 - [ ] **Step 6: Commit**
 
@@ -1522,8 +1516,21 @@ export function CatalogPageClient({
   tenant: Tenant;
   initialItems: DbItem[];
 }) {
-  const router = useRouter();
+  // Items state lives here, NOT in CatalogTable. Both the page-level
+  // "Add item" drawer and the table-level edit drawer share this state via
+  // the `refresh` callback below. Avoids the prop-vs-useState desync that
+  // would otherwise leave the table stale after a successful add.
+  const [items, setItems] = useState<DbItem[]>(initialItems);
   const [addOpen, setAddOpen] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const res = await fetch(`/api/catalog?tenantId=${tenantId}`);
+      if (res.ok) setItems(await res.json());
+    } catch (err) {
+      console.error("Catalog refresh failed:", err);
+    }
+  };
 
   return (
     <>
@@ -1544,13 +1551,18 @@ export function CatalogPageClient({
           + Add item
         </button>
       </div>
-      <CatalogTable tenantId={tenantId} tenant={tenant} initialItems={initialItems} />
+      <CatalogTable
+        tenant={tenant}
+        items={items}
+        setItems={setItems}
+        refresh={refresh}
+      />
       <ItemDrawer
         tenant={tenant}
         open={addOpen}
         mode={{ kind: "create" }}
         onClose={() => setAddOpen(false)}
-        onSaved={() => router.refresh()}
+        onSaved={refresh}
       />
     </>
   );
@@ -2227,14 +2239,26 @@ export async function validateCartLines(
 }
 ```
 
-- [ ] **Step 2: Wire the guard into the orders route**
+- [ ] **Step 2: Wire the guard into the payment-intent route (primary gate — runs BEFORE Stripe charges)**
 
-Open `apps/web/src/app/api/orders/route.ts`. Find the spot in the `POST` handler where `lines` (the array from the request body) is destructured but **before** the `insertOrder` / `await db.transaction` block. Add the validation call:
+The current checkout flow is: `POST /api/stripe/payment-intent` → `confirmCardPayment(clientSecret)` (charges card) → `POST /api/orders`. The cart-validation gate must fire **before** the card is charged, otherwise a parent can be billed for an item they cannot actually receive. The payment-intent route is the right gate.
+
+The existing `/api/stripe/payment-intent` body is `{ tenantId, amount, currency, metadata }`. Extend it to also accept `lines: { itemId: string; variantLabel: string }[]` and validate before creating the intent.
+
+Open `apps/web/src/app/api/stripe/payment-intent/route.ts`. Add the import and validation block before `stripe.paymentIntents.create(...)`:
 
 ```ts
 import { validateCartLines } from "@/db/queries";
 
-// ...inside POST, after `lines` is extracted from the body and after auth checks:
+// ...inside POST(), after parsing the body:
+const { tenantId, amount, currency = "aud", metadata, lines } = await req.json();
+
+if (!Array.isArray(lines) || lines.length === 0) {
+  return NextResponse.json(
+    { error: "lines required" },
+    { status: 400 }
+  );
+}
 
 const invalidLines = await validateCartLines(
   tenantId,
@@ -2245,28 +2269,108 @@ const invalidLines = await validateCartLines(
 );
 if (invalidLines.length > 0) {
   return NextResponse.json(
-    {
-      code: "cart_items_unavailable",
-      items: invalidLines,
+    { code: "cart_items_unavailable", items: invalidLines },
+    { status: 409 }
+  );
+}
+
+// ...existing tenant lookup, approval gate, and stripe.paymentIntents.create(...) follows
+```
+
+- [ ] **Step 3: Update checkout to send `lines` to payment-intent**
+
+Open `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`. Find the `fetch("/api/stripe/payment-intent", ...)` call (around line 187) and add `lines` to the POST body:
+
+```ts
+const paymentIntentRes = await fetch("/api/stripe/payment-intent", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    tenantId: tenant.id,
+    amount: total,
+    currency: "aud",
+    lines: lines.map((l) => ({
+      itemId: l.itemId,
+      variantLabel: l.variantLabel,
+    })),
+    metadata: {
+      parentEmail: student.email,
+      studentName: student.studentName,
+      studentYear: student.year,
+      delivery,
     },
+  }),
+});
+```
+
+Then update the `if (!paymentIntentRes.ok)` branch to surface a 409 specifically — this is what the parent sees instead of a card prompt:
+
+```ts
+if (!paymentIntentRes.ok) {
+  if (paymentIntentRes.status === 409) {
+    const body = await paymentIntentRes.json().catch(() => null);
+    if (body?.code === "cart_items_unavailable") {
+      setPaymentError(
+        "Some items in your cart are no longer available. Please review your cart and try again."
+      );
+      setUnavailableLines(body.items ?? []);
+      setPaying(false);
+      return;
+    }
+  }
+  setPaymentError(await readApiError(paymentIntentRes, "Failed to start payment. Please try again."));
+  setPaying(false);
+  return;
+}
+```
+
+The `setUnavailableLines` state is added by Task 20.
+
+- [ ] **Step 4: Wire the guard into `/api/orders` as defense-in-depth**
+
+The payment-intent guard is the primary gate. Add a duplicate check in `/api/orders` so that:
+
+1. A direct API caller (bypassing the checkout flow) can't write order rows for inactive items.
+2. A race window where an item is deactivated between intent creation and order POST is still caught.
+
+Open `apps/web/src/app/api/orders/route.ts`. Add before the `insertOrder`/`await db.transaction` block:
+
+```ts
+import { validateCartLines } from "@/db/queries";
+
+// ...after `lines` is extracted from the body and after auth checks:
+
+const invalidLines = await validateCartLines(
+  tenantId,
+  lines.map((l: { itemId: string; variantLabel: string }) => ({
+    itemId: l.itemId,
+    variantLabel: l.variantLabel,
+  }))
+);
+if (invalidLines.length > 0) {
+  // Note: by this point Stripe has already charged the parent. We still
+  // reject the order to avoid persisting a snapshot for an unavailable
+  // item; checkout-screen surfaces a refund-needed message in this case.
+  return NextResponse.json(
+    { code: "cart_items_unavailable", items: invalidLines },
     { status: 409 }
   );
 }
 ```
 
-- [ ] **Step 3: Type-check**
+- [ ] **Step 5: Type-check**
 
 ```bash
 pnpm check-types:web
 ```
 
-Expected: zero errors. If `lines` lacks an explicit shape from the existing code, the inline `(l: { itemId: string; variantLabel: string }) =>` cast above is sufficient.
+Expected: zero errors.
 
-- [ ] **Step 4: Smoke test**
+- [ ] **Step 6: Smoke test (primary gate — no charge happens)**
 
 Run `pnpm dev:web`.
 
-Open a private browser window. Visit `/nsbh`, add an item to the cart, proceed to checkout but do **not** click Pay yet.
+Open a private browser window. Visit `/nsbh`, add an item to the cart, navigate to checkout but **do not** enter card details yet.
 
 In a SQL shell, deactivate the cart item:
 
@@ -2274,7 +2378,13 @@ In a SQL shell, deactivate the cart item:
 UPDATE catalog_items SET active = false WHERE id = '<the-item-id>';
 ```
 
-Now click Pay. Expect a 409 response with `cart_items_unavailable` in the network tab. The order is **not** created (verify with `SELECT * FROM orders ORDER BY created_at DESC LIMIT 5`).
+Click Pay. Expect:
+
+1. The `/api/stripe/payment-intent` request in the network tab returns **409** with `cart_items_unavailable`.
+2. **No** Stripe `confirmCardPayment` call is made (no card-prompt UI, no Stripe network calls).
+3. The cart-screen banner from Task 20 shows the offending item.
+4. `SELECT * FROM orders ORDER BY created_at DESC LIMIT 5` shows no new row.
+5. Stripe Dashboard (test mode) shows no PaymentIntent created.
 
 Restore:
 
@@ -2284,11 +2394,11 @@ UPDATE catalog_items SET active = true WHERE id = '<the-item-id>';
 
 Stop the dev server.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/db/queries.ts apps/web/src/app/api/orders/route.ts
-git commit -m "feat(orders): stale-cart guard — revalidate item/variant active before insert"
+git add apps/web/src/db/queries.ts apps/web/src/app/api/stripe/payment-intent/route.ts apps/web/src/app/[tenant]/checkout/checkout-screen.tsx apps/web/src/app/api/orders/route.ts
+git commit -m "feat(checkout): stale-cart guard before stripe charge + defense-in-depth at orders"
 ```
 
 ---
@@ -2296,36 +2406,13 @@ git commit -m "feat(orders): stale-cart guard — revalidate item/variant active
 ## Task 20: Cart UI surface for `cart_items_unavailable`
 
 **Files:**
-- Modify: `apps/web/src/app/[tenant]/cart/cart-screen.tsx` (add 409 handling on the place-order fetch)
-- Modify: `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` (same — wherever the order POST is called)
+- Modify: `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` (add `unavailableLines` state used by Task 19's payment-intent 409 branch + by the orders POST 409 branch)
 
-- [ ] **Step 1: Locate the order POST**
+The 409 from Task 19 fires in two places: the **payment-intent** call (primary gate, no charge) and the **orders** call (defense-in-depth, charge already happened). Both need to surface the same UI banner. The Task 19 patch already wires the payment-intent 409 to call `setUnavailableLines`; this task adds the state + banner + the orders-POST branch.
 
-```bash
-grep -rn "fetch.*\/api\/orders\b" apps/web/src/app/\[tenant\]/
-```
+- [ ] **Step 1: Add `unavailableLines` state**
 
-Note all matches. Each one needs the 409 handler added.
-
-- [ ] **Step 2: Add 409 handling at each call site**
-
-For each `await fetch("/api/orders", ...)` call, replace any plain `if (!res.ok) throw new Error(...)` block with:
-
-```ts
-if (!res.ok) {
-  const body = await res.json().catch(() => null);
-  if (res.status === 409 && body?.code === "cart_items_unavailable") {
-    setOrderError(
-      "Some items in your cart are no longer available. Please review your cart and try again."
-    );
-    setUnavailableLines(body.items ?? []);
-    return;
-  }
-  throw new Error(body?.error ?? "Order placement failed");
-}
-```
-
-Add the `unavailableLines` state to the component:
+In `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`, near the other `useState` declarations, add:
 
 ```ts
 const [unavailableLines, setUnavailableLines] = useState<{
@@ -2335,7 +2422,31 @@ const [unavailableLines, setUnavailableLines] = useState<{
 }[]>([]);
 ```
 
-And render an inline notice above the cart line list when non-empty:
+- [ ] **Step 2: Add 409 handling at the orders POST call (defense-in-depth surface)**
+
+Find the existing `fetch("/api/orders", ...)` call (around line 281). Replace its `if (!res.ok)` branch with:
+
+```ts
+if (!res.ok) {
+  const body = await res.json().catch(() => null);
+  if (res.status === 409 && body?.code === "cart_items_unavailable") {
+    setUnavailableLines(body.items ?? []);
+    setPaymentError(
+      `Some items in your cart became unavailable after payment. Your card was charged ${
+        confirmedPaymentIntentId ? `(Stripe ref ${confirmedPaymentIntentId})` : ""
+      }. The shop has been notified — please contact ${tenant.shopEmail} for a refund.`
+    );
+    return;
+  }
+  const message = await readApiError(res, "Failed to place order.");
+  setPaymentError(`${message} Your payment was confirmed. Do not retry payment. Contact the shop with Stripe reference ${confirmedPaymentIntentId}.`);
+  return;
+}
+```
+
+- [ ] **Step 3: Render the banner above the cart line list**
+
+Find the cart-line list section in the checkout screen and prepend:
 
 ```tsx
 {unavailableLines.length > 0 && (
@@ -2351,12 +2462,12 @@ And render an inline notice above the cart line list when non-empty:
         </li>
       ))}
     </ul>
-    <div className="mt-1">Remove these items to continue.</div>
+    <div className="mt-1">Remove these items from your cart to continue.</div>
   </div>
 )}
 ```
 
-- [ ] **Step 3: Type-check**
+- [ ] **Step 4: Type-check**
 
 ```bash
 pnpm check-types:web
@@ -2364,15 +2475,26 @@ pnpm check-types:web
 
 Expected: zero errors.
 
-- [ ] **Step 4: Smoke test**
+- [ ] **Step 5: Smoke test (primary gate — repeat Task 19 Step 6)**
 
-Repeat Task 19's stale-cart smoke test — instead of just seeing 409 in the network tab, verify the cart UI now shows the warning banner with the offending item listed.
+After Task 19's primary-gate smoke test, the checkout screen should show the red banner with the offending item — this is what the parent actually sees. No card prompt appeared, no charge happened.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Smoke test (defense-in-depth gate — race scenario)**
+
+To exercise the orders-POST 409 path (extremely rare, but verify):
+
+1. In a debugger or by adding a temporary `await new Promise(r => setTimeout(r, 5000))` between `confirmedPaymentIntentId = paymentIntent.id;` and the `fetch("/api/orders", ...)` call, create a 5-second window.
+2. Add an item to the cart, click Pay, enter a Stripe test card.
+3. During the 5-second pause: `UPDATE catalog_items SET active = false WHERE id = '<id>';`
+4. After the pause, the orders POST returns 409. UI shows the red banner *and* the "your card was charged, contact the shop" message.
+
+Remove the temporary delay before committing.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/app/[tenant]/cart/cart-screen.tsx apps/web/src/app/[tenant]/checkout/checkout-screen.tsx
-git commit -m "feat(cart): surface cart_items_unavailable 409 with per-line detail"
+git add apps/web/src/app/[tenant]/checkout/checkout-screen.tsx
+git commit -m "feat(checkout): surface cart_items_unavailable 409 with banner + post-charge fallback"
 ```
 
 ---
@@ -2415,7 +2537,7 @@ In dev (`pnpm dev:web`) with a fresh dev branch + approved tenant:
 | 8 | Image too big: try 3MB upload → drawer shows UploadThing error | Pass |
 | 9 | Parent grid + detail render correctly with seed-only data | Pass |
 | 10 | Inactive item: `UPDATE catalog_items SET active = false WHERE id = '...'` → parent direct URL → 404; admin still loads drawer | Pass |
-| 11 | Stale-cart guard: add to cart → deactivate → Pay → 409 + UI banner; order **not** created | Pass |
+| 11 | Stale-cart guard (primary): add to cart → deactivate → Pay → `/api/stripe/payment-intent` returns 409; **no** Stripe charge; UI banner; no order row | Pass |
 
 If any test fails, the failing task must be re-opened and patched.
 
@@ -2441,8 +2563,6 @@ gh pr create --title "feat(catalog): self-service catalog management (§3.1)" --
 
 - [x] Type-check passes
 - [x] Smoke tests 1-11 from spec §13 pass
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
