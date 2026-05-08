@@ -63,6 +63,23 @@ export function HomeClient(props: Props) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
 
+  // Clear stale uo:active-child cookie on mount / props change
+  useEffect(() => {
+    const cookieId = readActiveChildCookieClient();
+    if (!cookieId) return;
+
+    if (props.mode === "logged-out") {
+      clearActiveChildCookieClient();
+      return;
+    }
+
+    // logged-in: clear if cookie points at a child the parent no longer owns
+    const owned = props.children.some((c) => c.id === cookieId);
+    if (!owned) {
+      clearActiveChildCookieClient();
+    }
+  }, [props]);
+
   useEffect(() => {
     if (props.mode !== "logged-in") return;
     if (searchParams.get("action") === "add-child") {
