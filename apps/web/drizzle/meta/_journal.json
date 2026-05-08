@@ -57,6 +57,13 @@
       "when": 1778211565161,
       "tag": "0007_fix_user_id_uuid_drift",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778233791425,
+      "tag": "0008_catalog_image_url",
+      "breakpoints": true
     }
   ]
 }
