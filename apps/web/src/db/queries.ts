@@ -558,38 +558,82 @@ export async function addCatalogItem(data: {
   name: string;
   category: string;
   description?: string;
-  variants: { label: string; price: number }[];
+  imageUrl?: string;
+  active?: boolean;
+  sortOrder?: number;
+  variants: { label: string; price: number; active?: boolean }[];
 }) {
-  await db.insert(catalogItems).values({
-    id: data.id,
-    tenantId: data.tenantId,
-    name: data.name,
-    category: data.category,
-    description: data.description,
-  });
-
-  for (const v of data.variants) {
-    await db.insert(catalogVariants).values({
-      itemId: data.id,
-      label: v.label,
-      price: String(v.price),
+  await db.transaction(async (tx) => {
+    await tx.insert(catalogItems).values({
+      id: data.id,
+      tenantId: data.tenantId,
+      name: data.name,
+      category: data.category,
+      description: data.description ?? null,
+      imageUrl: data.imageUrl ?? null,
+      active: data.active ?? true,
+      sortOrder: data.sortOrder ?? 0,
     });
-  }
+
+    for (const v of data.variants) {
+      await tx.insert(catalogVariants).values({
+        itemId: data.id,
+        label: v.label,
+        price: String(v.price),
+        active: v.active ?? true,
+      });
+    }
+  });
 }
 
-export async function updateCatalogItemName(itemId: string, name: string) {
-  return db
-    .update(catalogItems)
-    .set({ name, updatedAt: new Date() })
-    .where(eq(catalogItems.id, itemId))
-    .returning({ id: catalogItems.id });
+/**
+ * Partial item update with optional full-replace of variants.
+ * If `variants` is provided, ALL existing variants are hard-deleted and the
+ * supplied list is inserted. Order history is unaffected (order_lines holds
+ * its own snapshots — no FK to catalog_variants).
+ */
+export async function updateCatalogItem(
+  itemId: string,
+  fields: {
+    name?: string;
+    category?: string;
+    description?: string | null;
+    imageUrl?: string | null;
+    active?: boolean;
+    sortOrder?: number;
+  },
+  variants?: { label: string; price: number; active?: boolean }[]
+) {
+  await db.transaction(async (tx) => {
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (fields.name !== undefined) updates.name = fields.name;
+    if (fields.category !== undefined) updates.category = fields.category;
+    if (fields.description !== undefined) updates.description = fields.description;
+    if (fields.imageUrl !== undefined) updates.imageUrl = fields.imageUrl;
+    if (fields.active !== undefined) updates.active = fields.active;
+    if (fields.sortOrder !== undefined) updates.sortOrder = fields.sortOrder;
+
+    await tx.update(catalogItems).set(updates).where(eq(catalogItems.id, itemId));
+
+    if (variants !== undefined) {
+      await tx.delete(catalogVariants).where(eq(catalogVariants.itemId, itemId));
+      for (const v of variants) {
+        await tx.insert(catalogVariants).values({
+          itemId,
+          label: v.label,
+          price: String(v.price),
+          active: v.active ?? true,
+        });
+      }
+    }
+  });
 }
 
 export async function deleteCatalogItem(itemId: string) {
   return db
     .delete(catalogItems)
     .where(eq(catalogItems.id, itemId))
-    .returning({ id: catalogItems.id });
+    .returning({ id: catalogItems.id, imageUrl: catalogItems.imageUrl });
 }
 
 // ─── Tenants ─────────────────────────────────────────────────────────────────

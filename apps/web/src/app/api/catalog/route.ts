@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCatalogByTenant, addCatalogItem, getTenant } from "@/db/queries";
+import { addCatalogItem, getCatalogByTenant } from "@/db/queries";
 import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
+import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
+import { catalogItemInputSchema } from "@/lib/schemas/catalog";
 
 // GET /api/catalog?tenantId=nsbh
 export async function GET(req: NextRequest) {
@@ -20,73 +22,53 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/catalog — add a new item
+// POST /api/catalog — create a new item
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { tenantId, name, category, description, variants } = body;
-
-    if (!tenantId || !name || !category) {
+    const parsed = catalogItemInputSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "tenantId, name, and category are required" },
+        { error: "validation_failed", details: parsed.error.flatten() },
         { status: 400 }
       );
     }
+    const input = parsed.data;
 
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
 
-    const tenant = await getTenant(tenantId);
-    if (!tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
-    }
-    const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
-    if (tenantAccessResponse) return tenantAccessResponse;
+    const approval = await requireTenantApproved(input.tenantId);
+    if ("response" in approval) return approval.response;
+    const { tenant } = approval;
 
-    if (!Array.isArray(variants) || variants.length === 0) {
-      return NextResponse.json(
-        { error: "At least one variant is required" },
-        { status: 400 }
-      );
-    }
-    if (
-      variants.some(
-        (variant) =>
-          !variant ||
-          typeof variant.label !== "string" ||
-          !variant.label.trim() ||
-          !Number.isFinite(Number(variant.price)) ||
-          Number(variant.price) < 0
-      )
-    ) {
-      return NextResponse.json(
-        { error: "Each variant requires a label and valid price" },
-        { status: 400 }
-      );
-    }
+    const accessDenied = ensureTenantAccess(authResult.user, tenant.shopEmail);
+    if (accessDenied) return accessDenied;
 
-    // Generate a slug ID from the name
-    const id = name
+    const slug = input.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .slice(0, 40);
-
-    const uniqueId = `${id}-${Date.now().toString(36)}`;
+    const id = `${input.tenantId}-${slug}-${Date.now().toString(36)}`;
 
     await addCatalogItem({
-      id: uniqueId,
-      tenantId,
-      name,
-      category,
-      description,
-      variants: variants.map((variant) => ({
-        label: variant.label.trim(),
-        price: Number(variant.price),
+      id,
+      tenantId: input.tenantId,
+      name: input.name,
+      category: input.category,
+      description: input.description,
+      imageUrl: input.imageUrl,
+      active: input.active,
+      sortOrder: input.sortOrder,
+      variants: input.variants.map((v) => ({
+        label: v.label,
+        price: v.price,
+        active: v.active,
       })),
     });
 
-    return NextResponse.json({ id: uniqueId }, { status: 201 });
+    return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
     console.error("POST /api/catalog error:", err);
     return NextResponse.json({ error: "Failed to add item" }, { status: 500 });
