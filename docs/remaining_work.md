@@ -143,6 +143,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 | 4.8 | Drizzle migrations checked into the repo (currently schema is push-only) | Ops |
 | 4.9 | Implementation detail for §4.1 — replace hardcoded size hint (see below) | known_issues #1 |
 | 4.10 | Note: transactional-email webhook commit was not split as planned (`3ce98b1` collapsed Task 6 Steps 3 & 4). Functionality correct; history/bisect deviation only — not worth rewriting. | known_issues #3 |
+| 4.11 | Drizzle-kit `tablesFilter`/`schemaFilter` for `neon_auth.*` exclusion (see §4.11) | UUID drift cleanup (2026-05-08) |
 
 ### 4.9 ✅ Replace hardcoded "Riley wore size X last year" hint — DONE (smoke test pending Stripe Connect)
 
@@ -186,6 +187,22 @@ Add a `useEffect` that:
 **Notes:**
 - The email and student name are already persisted to localStorage during checkout via `writeStudentDetails()` — no new storage needed
 - The hint should only appear when there is a real match; don't fall back to any hardcoded value
+
+---
+
+### 4.11 Lock drizzle-kit out of `neon_auth.*` (post-uuid-drift follow-up)
+
+After PR #6 was applied, a follow-up `0007_fix_user_id_uuid_drift` migration reconciled `schema.ts` with prod (`neon_auth.user.id` and three FK columns flipped from `text` → `uuid`). That fix kept `drizzle.config.ts` deliberately bare. Drizzle-kit will therefore continue to consider `neon_auth.user` on every future `generate` and may emit no-op ALTERs against it. Cleanup is exploratory — its safety depends on observed drizzle-kit behaviour:
+
+1. On a clean tree, add `tablesFilter: ["public.*"]` (or `schemaFilter: ["public"]`) to `apps/web/drizzle.config.ts`.
+2. Run `pnpm exec drizzle-kit generate`.
+3. **Inspect output before applying anything:**
+   - If empty → ship it.
+   - If it tries to emit `DROP TABLE neon_auth.user` (because the prior snapshot tracked it but the current schema no longer does) → revert. Try an alternative: extract `neonAuthUsers` to a separate file marked as untracked, or replace FK targets with `sql\`\`` literals so schema.ts stops declaring `neonAuthUsers` as a `pgTable` at all.
+
+**Why deferred:** the upside is purely "less noise in future migrations"; the downside (if mishandled) is dropping the foreign-managed auth table. Worth a separate, carefully-verified PR.
+
+**Reference:** spec for the original drift fix at `docs/superpowers/specs/2026-05-08-uuid-drift-fix-design.md`.
 
 ---
 
