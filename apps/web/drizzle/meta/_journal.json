@@ -36,6 +36,20 @@
       "when": 1778063736837,
       "tag": "0004_majestic_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778066674000,
+      "tag": "0005_size_hint_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778167044898,
+      "tag": "0006_parent_children_and_parent_note",
+      "breakpoints": true
     }
   ]
 }
