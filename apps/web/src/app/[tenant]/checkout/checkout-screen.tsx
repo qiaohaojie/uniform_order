@@ -170,7 +170,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
       return;
     }
     if (!acceptedPolicy) {
-      setPaymentError("Please accept the refund policy, terms, and privacy policy before paying.");
+      setPaymentError("Please accept the terms and privacy policy before paying.");
       return;
     }
 
@@ -503,10 +503,6 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
           />
           <span>
             I agree to the{" "}
-            <Link href={`/${tenant.id}/refund-policy`} className="underline">
-              refund policy
-            </Link>
-            ,{" "}
             <Link href="/terms" className="underline">
               terms
             </Link>{" "}
@@ -514,6 +510,21 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
             <Link href="/privacy" className="underline">
               privacy policy
             </Link>
+            . For refund or exchange questions, contact {tenant.name}
+            {(() => {
+              const validEmail =
+                tenant.shopEmail?.trim().includes("@") ? tenant.shopEmail.trim() : null;
+              return validEmail ? (
+                <>
+                  {" "}at{" "}
+                  <a href={`mailto:${validEmail}`} className="underline">
+                    {validEmail}
+                  </a>
+                </>
+              ) : (
+                " directly"
+              );
+            })()}
             .
           </span>
         </label>
