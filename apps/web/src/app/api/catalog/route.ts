@@ -25,6 +25,10 @@ export async function GET(req: NextRequest) {
 // POST /api/catalog — create a new item
 export async function POST(req: NextRequest) {
   try {
+    // Auth first — never leak zod schema details to unauthenticated callers.
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+
     const body = await req.json();
     const parsed = catalogItemInputSchema.safeParse(body);
     if (!parsed.success) {
@@ -34,9 +38,6 @@ export async function POST(req: NextRequest) {
       );
     }
     const input = parsed.data;
-
-    const authResult = await requireSessionUser();
-    if ("response" in authResult) return authResult.response;
 
     const approval = await requireTenantApproved(input.tenantId);
     if ("response" in approval) return approval.response;

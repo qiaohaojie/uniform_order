@@ -557,8 +557,8 @@ export async function addCatalogItem(data: {
   tenantId: string;
   name: string;
   category: string;
-  description?: string;
-  imageUrl?: string;
+  description?: string | null;
+  imageUrl?: string | null;
   active?: boolean;
   sortOrder?: number;
   variants: { label: string; price: number; active?: boolean }[];

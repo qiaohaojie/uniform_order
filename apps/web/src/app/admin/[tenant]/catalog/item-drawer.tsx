@@ -81,11 +81,15 @@ export function ItemDrawer({
     setSubmitting(true);
     setError(null);
     try {
+      // Use explicit `null` for cleared fields — `undefined` is dropped by
+      // JSON.stringify, which makes "Remove image" or a cleared description
+      // a no-op on PATCH. The API schema accepts `null | string`.
+      const trimmedDesc = description.trim();
       const basePayload = {
         name: name.trim(),
         category,
-        description: description.trim() || undefined,
-        imageUrl,
+        description: trimmedDesc.length > 0 ? trimmedDesc : null,
+        imageUrl: imageUrl ?? null,
         active,
         sortOrder: initial?.sortOrder ?? 0,
         variants: variants.map((v) => ({

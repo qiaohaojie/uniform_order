@@ -15,16 +15,7 @@ export async function PATCH(
 ) {
   const { itemId } = await params;
   try {
-    const body = await req.json();
-    const parsed = catalogItemPatchSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "validation_failed", details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-    const input = parsed.data;
-
+    // Auth first — never leak zod schema details to unauthenticated callers.
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;
 
@@ -40,8 +31,39 @@ export async function PATCH(
     const accessDenied = ensureTenantAccess(authResult.user, tenant.shopEmail);
     if (accessDenied) return accessDenied;
 
+    const body = await req.json();
+    const parsed = catalogItemPatchSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "validation_failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const input = parsed.data;
+
     const { variants, ...fields } = input;
     await updateCatalogItem(itemId, fields, variants);
+
+    // H2: clean up old image when imageUrl changed (replace or clear).
+    const oldImageUrl = item.imageUrl;
+    const newImageUrl = input.imageUrl;
+    if (
+      newImageUrl !== undefined &&
+      oldImageUrl &&
+      newImageUrl !== oldImageUrl
+    ) {
+      try {
+        const { deleteUploadthingFileByUrl } = await import(
+          "@/lib/uploadthing-cleanup"
+        );
+        await deleteUploadthingFileByUrl(oldImageUrl);
+      } catch (cleanupErr) {
+        console.warn(
+          `UploadThing cleanup failed for ${oldImageUrl}:`,
+          cleanupErr
+        );
+      }
+    }
 
     return NextResponse.json({ id: itemId, ok: true }, { status: 200 });
   } catch (err) {
