@@ -141,23 +141,30 @@ export const orders = pgTable(
     stripePaymentIntentIdUnique: uniqueIndex("orders_stripe_payment_intent_id_unique").on(
       table.stripePaymentIntentId
     ),
+    tenantParentEmailIdx: index("idx_orders_tenant_parent_email").on(table.tenantId, table.parentEmail),
   })
 );
 
 // ─── Order line items ─────────────────────────────────────────────────────────
-export const orderLines = pgTable("order_lines", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  orderId: text("order_id")
-    .notNull()
-    .references(() => orders.id, { onDelete: "cascade" }),
-  itemId: text("item_id").notNull(),
-  itemName: text("item_name").notNull(),
-  variantLabel: text("variant_label").notNull(),
-  size: text("size"),
-  qty: integer("qty").notNull().default(1),
-  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
-  lineTotal: numeric("line_total", { precision: 10, scale: 2 }).notNull(),
-});
+export const orderLines = pgTable(
+  "order_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull(),
+    itemName: text("item_name").notNull(),
+    variantLabel: text("variant_label").notNull(),
+    size: text("size"),
+    qty: integer("qty").notNull().default(1),
+    unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+    lineTotal: numeric("line_total", { precision: 10, scale: 2 }).notNull(),
+  },
+  (t) => ({
+    orderItemIdx: index("idx_order_lines_order_id_item_id").on(t.orderId, t.itemId),
+  })
+);
 
 // ─── Order refunds ───────────────────────────────────────────────────────────
 export const orderRefunds = pgTable(

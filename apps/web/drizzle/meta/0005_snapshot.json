@@ -1,6 +1,6 @@
 {
-  "id": "a6a4b91b-c3fe-4906-a60a-07b2cea2b814",
-  "prevId": "d7cc2943-ec5b-477d-aeb8-fe80cd610d94",
+  "id": "d7cc2943-ec5b-477d-aeb8-fe80cd610d94",
+  "prevId": "e75f8cb7-e460-4869-a4c0-85f0167a0908",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -537,12 +537,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "parent_note": {
-          "name": "parent_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "emails_sent": {
           "name": "emails_sent",
           "type": "jsonb",
@@ -642,115 +636,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.parent_children": {
-      "name": "parent_children",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "year": {
-          "name": "year",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "roll_class": {
-          "name": "roll_class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_confirmed_at": {
-          "name": "last_confirmed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "parent_children_parent_idx": {
-          "name": "parent_children_parent_idx",
-          "columns": [
-            {
-              "expression": "parent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "parent_children_parent_id_user_id_fk": {
-          "name": "parent_children_parent_id_user_id_fk",
-          "tableFrom": "parent_children",
-          "tableTo": "user",
-          "schemaTo": "neon_auth",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "parent_children_tenant_id_tenants_id_fk": {
-          "name": "parent_children_tenant_id_tenants_id_fk",
-          "tableFrom": "parent_children",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -818,13 +704,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "is_publicly_listed": {
-          "name": "is_publicly_listed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "stripe_account_id": {
           "name": "stripe_account_id",
