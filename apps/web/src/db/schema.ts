@@ -18,7 +18,7 @@ import {
 export const neonAuthSchema = pgSchema("neon_auth");
 
 export const neonAuthUsers = neonAuthSchema.table("user", {
-  id: text("id").primaryKey(),
+  id: uuid("id").primaryKey(),
   name: text("name"),
   email: text("email"),
   emailVerified: boolean("email_verified"),
@@ -133,7 +133,7 @@ export const orders = pgTable(
     emailsSent: jsonb("emails_sent").notNull().default(sql`'{}'::jsonb`),
     status: orderStatusEnum("status").notNull().default("pending_payment"),
     // Auth link (optional — if parent was signed in)
-    userId: text("user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
+    userId: uuid("user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -177,7 +177,7 @@ export const orderRefunds = pgTable(
     lineId: uuid("line_id").references(() => orderLines.id, { onDelete: "set null" }),
     amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
     reason: text("reason"),
-    operatorUserId: text("operator_user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
+    operatorUserId: uuid("operator_user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
     stripeRefundId: text("stripe_refund_id"),
     createdAt: timestamp("created_at").defaultNow(),
   },
@@ -193,7 +193,7 @@ export const parentChildren = pgTable(
   "parent_children",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    parentId: text("parent_id")
+    parentId: uuid("parent_id")
       .notNull()
       .references(() => neonAuthUsers.id, { onDelete: "cascade" }),
     tenantId: text("tenant_id")
