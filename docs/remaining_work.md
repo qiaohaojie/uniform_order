@@ -27,6 +27,8 @@ This document lists every item that must be resolved (or explicitly deferred) be
 > §3.4 (parent order detail page), §3.5 (Stripe Connect onboarding sync), §4.1 + §4.9 (size hint), §4.10 (commit-split decision), and §4.11 (drizzle-kit `neon_auth.*` exclusion) are also complete — moved to `docs/completed.md` §4.6–§4.10.
 >
 > §2.10 (`db.transaction` → `db.batch` fix, PR #10) and §3.3 ("add another child", PR #6) are complete — moved to `docs/completed.md` §4.11 and §4.12. §3.3 production ops verifications carried over to §2.11 below.
+>
+> §3.10 follow-up #1 (delete orphan `/[tenant]/refund-policy` route, PR #11) is complete — moved to `docs/completed.md` §4.13. Remaining §3.10 follow-ups (school-onboarding capture, v2 per-tenant policy link, deferred platform `/terms`) stay below.
 
 ### 2.2 Super-admin / platform portal — none of 4 screens exist
 
@@ -113,17 +115,15 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 **Follow-ups (not v1 blockers):**
 
-1. ~~**Delete the orphaned `/[tenant]/refund-policy` route.**~~ ✅ Done 2026-05-09. The route was still referenced from the checkout consent label (despite the doc claiming otherwise); rewrote the consent text to match the v1 email pattern (`I agree to the terms and privacy policy. For refund or exchange questions, contact {tenantName} at {shopEmail}.`) and removed `apps/web/src/app/[tenant]/refund-policy/page.tsx`. Will be re-introduced under follow-up #3 once schools author their own content via §2.2.
-
-2. **School onboarding form must capture refund-policy data** (when §2.2 super-admin portal is built):
+1. **School onboarding form must capture refund-policy data** (when §2.2 super-admin portal is built):
    - Refund policy text *or* external URL (textarea or link field)
    - Digital declaration: "We confirm this refund policy complies with Australian Consumer Law and we accept responsibility for honoring it for purchases via uniformorder.online" — name, role, date
    - Seller-of-record acknowledgement checkbox (school confirms they understand they are seller of record under Stripe Connect)
    - Store on `tenants` row (new columns) or a `tenant_legal` join table; version on update
 
-3. **Re-introduce per-tenant policy link in email (v2)** once schools have authored their own content via the onboarding form above. Footer becomes "Refund policy" link to school-authored `/[tenant]/refund-policy`.
+2. **Re-introduce per-tenant policy link in email (v2)** once schools have authored their own content via the onboarding form above. Footer becomes "Refund policy" link to school-authored `/[tenant]/refund-policy`.
 
-4. **Platform `/terms` page — deferred indefinitely.** Not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
+3. **Platform `/terms` page — deferred indefinitely.** Not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
 
 **Reference:** `my_doc/Legal/Refund_Policy/2026-05-07-refund-policy-ownership.md` for the full reasoning across Stripe Connect, marketplace practice, business, operational, and AU legal lenses, plus the v1 vs. v2 split.
 

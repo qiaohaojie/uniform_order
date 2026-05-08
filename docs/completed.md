@@ -312,6 +312,14 @@ Code complete; type-check passing. Smoke tests T2/T3/T4/T5/T6/T7 verified via DB
 
 ---
 
+### 4.13 Orphan `/[tenant]/refund-policy` route removed ✅
+
+**Source:** former `remaining_work.md` §3.10 item 1 — shipped via PR #11 (squash-merge `3e7a95c`, 2026-05-09).
+
+The `/[tenant]/refund-policy` route had been declared dead in earlier docs but was still referenced from the checkout consent label. Rewrote the consent text to inline the v1 email pattern (`I agree to the terms and privacy policy. For refund or exchange questions, contact {tenantName} at {shopEmail}.`) and deleted `apps/web/src/app/[tenant]/refund-policy/page.tsx`. Will be re-introduced under §3.10 follow-up #2 once schools author their own content via the §2.2 super-admin onboarding form.
+
+---
+
 ## Outstanding items (tracked in `docs/remaining_work.md`)
 
 The following audit items are **not** complete and are tracked in `docs/remaining_work.md`:
