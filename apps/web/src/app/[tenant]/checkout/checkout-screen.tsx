@@ -170,7 +170,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
       return;
     }
     if (!acceptedPolicy) {
-      setPaymentError("Please accept the refund policy, terms, and privacy policy before paying.");
+      setPaymentError("Please accept the terms and privacy policy before paying.");
       return;
     }
 
@@ -510,10 +510,21 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
             <Link href="/privacy" className="underline">
               privacy policy
             </Link>
-            . For refund or exchange questions, contact {tenant.name} at{" "}
-            <a href={`mailto:${tenant.shopEmail}`} className="underline">
-              {tenant.shopEmail}
-            </a>
+            . For refund or exchange questions, contact {tenant.name}
+            {(() => {
+              const validEmail =
+                tenant.shopEmail?.trim().includes("@") ? tenant.shopEmail.trim() : null;
+              return validEmail ? (
+                <>
+                  {" "}at{" "}
+                  <a href={`mailto:${validEmail}`} className="underline">
+                    {validEmail}
+                  </a>
+                </>
+              ) : (
+                " directly"
+              );
+            })()}
             .
           </span>
         </label>
