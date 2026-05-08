@@ -13,7 +13,7 @@ The catalog is currently seeded once per tenant via SQL/server-side seed and nev
 
 Every new tenant after NSBH/RGSH would require running another SQL script. That's not viable for a multi-tenant platform whose value proposition is "your school can run its own uniform shop online".
 
-Additionally, the current data shape has no product description and no product image. Items render as a hardcoded `GarmentVector` SVG keyed by item ID — fine for the 16 seeded items, useless for any item a school adds itself.
+Additionally, the current data shape has no product image, and `description` (which has existed on the DB schema since migration 0007) is not consistently populated or surfaced through any operator-facing editor. Items render as a hardcoded `GarmentVector` SVG keyed by item ID — fine for the 16 seeded items, useless for any item a school adds itself.
 
 ## 2. Goals
 
@@ -125,8 +125,8 @@ Files to update:
 
 | File | Current | After |
 |---|---|---|
-| `apps/web/src/app/[tenant]/page.tsx` | `import { CATALOG } from "@/lib/data"` then `CATALOG.filter(i => i.cat === activeCat)` | `await getCatalogByTenant(tid)` then filter by `cat === activeCat` and `active === true` in memory |
-| `apps/web/src/app/[tenant]/item/[itemId]/page.tsx` | `getItem(itemId)` (static) + `generateStaticParams` over `CATALOG` | `await getCatalogItemById(itemId)`. **Drop `generateStaticParams`** — pages render on-demand. |
+| `apps/web/src/app/[tenant]/page.tsx` | `import { CATALOG } from "@/lib/data"` then `CATALOG.filter(i => i.cat === activeCat)` | `await getCatalogByTenant(tid)` then filter by `cat === activeCat` and `active === true` in memory. Inactive items never appear on the parent grid. |
+| `apps/web/src/app/[tenant]/item/[itemId]/page.tsx` | `getItem(itemId)` (static) + `generateStaticParams` over `CATALOG` | `await getCatalogItemById(itemId)`. **Drop `generateStaticParams`** — pages render on-demand. **Inactive item rule:** if the row is missing **or** `active === false` **or** the row's `tenantId` doesn't match the route's tenant slug, call `notFound()` to render the standard 404. Admin routes remain unaffected — operators still see and can edit inactive items. |
 | `apps/web/src/app/[tenant]/cart/...`, `apps/web/src/app/[tenant]/checkout/...`, parent receipt | Wherever cart/checkout/order rendering needs the item image, prefer the line snapshot already on the order; otherwise look up via `getCatalogItemById`. | Same |
 
 Helpers `getCatalogByTenant` and `getCatalogItemById` already exist in `apps/web/src/db/queries.ts:515,539`.
@@ -188,6 +188,33 @@ Existing endpoint. Extended to also delete the associated UploadThing file (best
 
 Reads stay ungated. No change.
 
+### 6.5 Stale-cart guard at order create — `POST /api/orders` (cross-cutting)
+
+Once schools can deactivate or delete catalog items, a parent's existing cart can drift out of sync with current catalog state between add-to-cart and checkout. Today, `apps/web/src/app/api/orders/route.ts:202` inserts whatever line snapshots the client posts, with no catalog validation — fine when the catalog was static, unsafe now.
+
+**Rule:** Before inserting `order_lines`, the orders route must revalidate every line against the live catalog within the same transaction. The check is per-line:
+
+1. The `catalog_items` row matching `line.itemId` exists, belongs to the order's `tenantId`, and has `active = true`.
+2. The `catalog_variants` row whose `(item_id, label)` matches `(line.itemId, line.variantLabel)` exists and has `active = true`.
+
+If any line fails, abort the transaction and return:
+
+```http
+409 Conflict
+{
+  "code": "cart_items_unavailable",
+  "items": [
+    { "itemId": "blazer-m", "variantLabel": "Size 12", "reason": "item_inactive" }
+  ]
+}
+```
+
+Reasons: `item_not_found`, `item_inactive`, `item_wrong_tenant`, `variant_not_found`, `variant_inactive`.
+
+The cart UI must surface this as: "Some items in your cart are no longer available. Please review your cart." with the offending lines highlighted. Implementation of the cart-side surface lives with the parent-shop work (§5.5) so cart and order-create land together.
+
+**Price drift is explicitly out of scope for MVP.** If a line's snapshot price differs from the current variant price, the order still proceeds at the snapshot price. A future spec may add price-revalidation; doing it now compounds the surface area without strong evidence of need (catalog edits are low-frequency).
+
 ## 7. Approval-gate enforcement
 
 Tenant must have `platform_approval_status = 'approved'` to perform any of the following. Otherwise, return 403 `{ code: "tenant_not_approved", message: "This school is not yet approved on the platform." }`.
@@ -204,21 +231,50 @@ Tenant must have `platform_approval_status = 'approved'` to perform any of the f
 | `GET /api/catalog` | read | ❌ |
 | `/[tenant]/...` (parent shop) | reads | ❌ |
 
-The check is a single helper:
+The check matches the existing `authorization.ts` style — helpers return discriminated unions, never throw. Two surfaces, one shared loader:
 
 ```ts
 // apps/web/src/lib/auth/require-tenant-approved.ts
-export async function requireTenantApproved(tenantId: string) {
+import { NextResponse } from "next/server";
+import { getTenantById } from "@/db/queries";
+
+export type LoadedTenant = NonNullable<Awaited<ReturnType<typeof getTenantById>>>;
+
+/** For API routes — returns 404/403 NextResponse on failure. */
+export async function requireTenantApproved(
+  tenantId: string
+): Promise<{ tenant: LoadedTenant } | { response: NextResponse }> {
   const tenant = await getTenantById(tenantId);
-  if (!tenant) throw new HttpError(404, "tenant_not_found");
-  if (tenant.platformApprovalStatus !== "approved") {
-    throw new HttpError(403, "tenant_not_approved");
+  if (!tenant) {
+    return { response: NextResponse.json({ code: "tenant_not_found" }, { status: 404 }) };
   }
-  return tenant;
+  if (tenant.platformApprovalStatus !== "approved") {
+    return { response: NextResponse.json({ code: "tenant_not_approved" }, { status: 403 }) };
+  }
+  return { tenant };
 }
 ```
 
-Used in both the page (try/catch → render empty state) and API routes (try/catch → return 403 JSON).
+**Route usage:**
+
+```ts
+const approval = await requireTenantApproved(tenantId);
+if ("response" in approval) return approval.response;
+const { tenant } = approval;
+// proceed
+```
+
+**Page usage** (`/admin/[tenant]/catalog/page.tsx`): the page uses `getTenantById` directly and branches on the status string — no NextResponse involved:
+
+```ts
+const tenant = await getTenantById(tid);
+if (!tenant) notFound();
+if (tenant.platformApprovalStatus !== "approved") {
+  return <PendingApprovalEmptyState tenant={tenant} />;
+}
+```
+
+The UploadThing middleware (§8.2) does its own check inline because it must `throw new UploadThingError(...)` to reject; it can't return a NextResponse.
 
 **Why reads are not gated:** existing seeded NSBH/RGSH should keep functioning even if their `platform_approval_status` were ever flipped back. And public-shop reads should not depend on platform-admin state — that's a contract between platform and school, not platform and parents.
 
@@ -239,14 +295,18 @@ UploadThing's free tier (2GB) is more than enough for MVP — at 1MB average per
 
 Per UploadThing's App Router pattern (`https://docs.uploadthing.com/getting-started/appdir`), upload requests go directly client → typed `<UploadDropzone>` → `createRouteHandler` mounted at `/api/uploadthing`. Auth + approval-gate enforcement lives inside the router's `middleware()`. No separate `POST /api/upload/...` proxy.
 
+The middleware must reconcile UploadThing's "throw to reject" contract with the existing helpers in `apps/web/src/lib/auth/authorization.ts`, which return `{ user } | { response }` and `NextResponse | null` rather than throwing. The pattern below loads the tenant, unwraps each helper, and translates rejections into `UploadThingError`.
+
 1. `pnpm add uploadthing @uploadthing/react`
 2. Add `UPLOADTHING_TOKEN` to env (Hostinger production env group + `.env.local`).
 3. Create `apps/web/src/lib/uploadthing.ts` defining a `FileRouter` with one route, `catalogImage`:
 
    ```ts
    import { createUploadthing, type FileRouter } from "uploadthing/next";
-   import { requireSessionUser, ensureTenantAccess } from "@/lib/auth/...";
-   import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
+   import { UploadThingError } from "uploadthing/server";
+   import { z } from "zod";
+   import { requireSessionUser, ensureTenantAccess } from "@/lib/auth/authorization";
+   import { getTenantById } from "@/db/queries";
 
    const f = createUploadthing();
 
@@ -254,9 +314,27 @@ Per UploadThing's App Router pattern (`https://docs.uploadthing.com/getting-star
      catalogImage: f({ image: { maxFileSize: "2MB", maxFileCount: 1 } })
        .input(z.object({ tenantId: z.string().min(1) }))
        .middleware(async ({ input }) => {
-         const user = await requireSessionUser();
-         await ensureTenantAccess(user, input.tenantId);
-         await requireTenantApproved(input.tenantId);   // throws on not-approved
+         // 1. Tenant must exist
+         const tenant = await getTenantById(input.tenantId);
+         if (!tenant) throw new UploadThingError("tenant_not_found");
+
+         // 2. Auth — requireSessionUser returns { user } | { response }
+         const auth = await requireSessionUser();
+         if ("response" in auth) {
+           throw new UploadThingError("Authentication required");
+         }
+         const { user } = auth;
+
+         // 3. Tenant access — ensureTenantAccess takes the operator's email
+         //    (not the tenantId) and returns NextResponse | null
+         const denied = ensureTenantAccess(user, tenant.shopEmail);
+         if (denied) throw new UploadThingError("Forbidden");
+
+         // 4. Approval gate
+         if (tenant.platformApprovalStatus !== "approved") {
+           throw new UploadThingError("tenant_not_approved");
+         }
+
          return { tenantId: input.tenantId, userId: user.id };
        })
        .onUploadComplete(async ({ metadata, file }) => {
@@ -271,6 +349,8 @@ Per UploadThing's App Router pattern (`https://docs.uploadthing.com/getting-star
 
    export type UploadRouter = typeof uploadRouter;
    ```
+
+   Implementation note: `getTenantById` is the shared helper used by `requireTenantApproved` in the API routes (§7). If it does not yet exist, add it to `apps/web/src/db/queries.ts` as part of this work — it is also the cleanest replacement for the existing inline `db.select().from(tenants)…` calls in the catalog mutation routes.
 
 4. Mount the route handler at `apps/web/src/app/api/uploadthing/route.ts`:
 
@@ -457,6 +537,8 @@ Type-checking is the only existing gate (`pnpm check-types:web`). Smoke tests do
 7. **Validation:** submit form with name `""` → field error. Submit with no variants → "Add at least one variant" error. Submit with negative price → field error.
 8. **Image too big:** try to upload 3MB image → UploadThing rejects via maxFileSize; drawer shows the error.
 9. **Parent-shop DB-read migration:** seed-only data (no admin edits) still renders correctly on `/nsbh` and `/nsbh/item/[itemId]`. Item-detail pages no longer pre-render statically (no `generateStaticParams`). Cold-load latency on item detail acceptable (single-row query).
+10. **Inactive item parent route:** create item, deactivate it, navigate to `/nsbh/item/[id]` directly → renders 404. Visit the same id from `/admin/nsbh/catalog` → drawer opens normally for editing.
+11. **Stale-cart guard:** parent A adds item X to cart on `/nsbh`; operator deactivates (or deletes) X; parent A taps "Pay" → `POST /api/orders` returns 409 with `cart_items_unavailable` and the offending line; cart UI shows the warning; no order row written; no Stripe charge. Parent A removes the line, retries, order succeeds.
 
 ## 14. Out-of-scope follow-ups (future work)
 
@@ -466,6 +548,8 @@ Type-checking is the only existing gate (`pnpm check-types:web`). Smoke tests do
 - CSV bulk-upload extension to include image URLs.
 - Catalog audit log (§4.6 in `remaining_work.md`).
 - Drag-to-reorder catalog rows (§4.7 in `remaining_work.md`).
+- Price-drift revalidation at order create (§6.5 covers active/exists; price mismatch is deferred).
+- UploadThing orphaned-file GC job (uploads that complete but whose catalog save fails are left in storage).
 
 ## 15. Open questions
 
