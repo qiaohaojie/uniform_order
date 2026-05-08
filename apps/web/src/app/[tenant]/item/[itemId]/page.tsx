@@ -31,9 +31,9 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
         <div className="px-5 pt-4 pb-2.5">
           <Chip tone="info">{item.cat} Uniform</Chip>
           <h2 className="font-serif text-[22px] font-medium mt-2.5 mb-1.5 leading-[1.2]">{item.name}</h2>
-          {item.desc && (
+          {item.description && (
             <p className="text-[13px] leading-[1.5] m-0 mb-3.5" style={{ color: "var(--color-ink-dim)" }}>
-              {item.desc}
+              {item.description}
             </p>
           )}
         </div>

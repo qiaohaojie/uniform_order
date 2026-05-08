@@ -65,6 +65,7 @@ export const catalogItems = pgTable("catalog_items", {
   name: text("name").notNull(),
   category: text("category").notNull(), // "Winter" | "Summer" | "Sports" | "Formal" | "Bags" | "Stationery"
   description: text("description"),
+  imageUrl: text("image_url"),
   sizeGuide: jsonb("size_guide"), // array of {label, chest, waist, hip}
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
