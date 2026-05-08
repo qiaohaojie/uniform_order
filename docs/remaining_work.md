@@ -143,7 +143,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 | 4.8 | Drizzle migrations checked into the repo (currently schema is push-only) | Ops |
 | 4.9 | Implementation detail for §4.1 — replace hardcoded size hint (see below) | known_issues #1 |
 | 4.10 | Note: transactional-email webhook commit was not split as planned (`3ce98b1` collapsed Task 6 Steps 3 & 4). Functionality correct; history/bisect deviation only — not worth rewriting. | known_issues #3 |
-| 4.11 | Drizzle-kit `tablesFilter`/`schemaFilter` for `neon_auth.*` exclusion (see §4.11) | UUID drift cleanup (2026-05-08) |
+| 4.11 | ✅ Drizzle-kit `neon_auth.*` exclusion — DONE via schema-file split, not config | UUID drift cleanup (2026-05-08) |
 
 ### 4.9 ✅ Replace hardcoded "Riley wore size X last year" hint — DONE (smoke test pending Stripe Connect)
 
@@ -190,17 +190,22 @@ Add a `useEffect` that:
 
 ---
 
-### 4.11 Lock drizzle-kit out of `neon_auth.*` (post-uuid-drift follow-up)
+### 4.11 ✅ Lock drizzle-kit out of `neon_auth.*` — DONE
 
-After PR #6 was applied, a follow-up `0007_fix_user_id_uuid_drift` migration reconciled `schema.ts` with prod (`neon_auth.user.id` and three FK columns flipped from `text` → `uuid`). That fix kept `drizzle.config.ts` deliberately bare. Drizzle-kit will therefore continue to consider `neon_auth.user` on every future `generate` and may emit no-op ALTERs against it. Cleanup is exploratory — its safety depends on observed drizzle-kit behaviour:
+**Resolution:** schema-file split, not a `drizzle.config.ts` flag.
 
-1. On a clean tree, add `tablesFilter: ["public.*"]` (or `schemaFilter: ["public"]`) to `apps/web/drizzle.config.ts`.
-2. Run `pnpm exec drizzle-kit generate`.
-3. **Inspect output before applying anything:**
-   - If empty → ship it.
-   - If it tries to emit `DROP TABLE neon_auth.user` (because the prior snapshot tracked it but the current schema no longer does) → revert. Try an alternative: extract `neonAuthUsers` to a separate file marked as untracked, or replace FK targets with `sql\`\`` literals so schema.ts stops declaring `neonAuthUsers` as a `pgTable` at all.
+**Investigation finding:** both `tablesFilter` and `schemaFilter` only filter DB introspection during `pull`/`push`. Neither prevents `generate` from diffing a tracked table in the snapshot. Confirmed by probe: with `schemaFilter: ["public"]` set, adding a column to `neonAuthUsers` in `schema.ts` still emitted `ALTER TABLE "neon_auth"."user" ADD COLUMN ...`. Same with `tablesFilter: ["!neon_auth.*"]`.
 
-**Why deferred:** the upside is purely "less noise in future migrations"; the downside (if mishandled) is dropping the foreign-managed auth table. Worth a separate, carefully-verified PR.
+**Working approach:**
+
+1. Move `neonAuthUsers` + `neonAuthSchema` to `apps/web/src/db/external-schema.ts`.
+2. In `schema.ts`, import `neonAuthUsers` (do **not** re-export). The `references(() => neonAuthUsers.id, …)` callbacks still resolve at runtime.
+3. Hand-edit the latest snapshot (`apps/web/drizzle/meta/0007_snapshot.json`) to remove the `neon_auth.user` table entry and empty the `schemas` object.
+4. `drizzle.config.ts` stays unchanged — the filter flags don't help.
+
+**Why this works:** drizzle-kit enumerates exports of the file at `drizzle.config.ts:schema` (only `./src/db/schema.ts`). It does not traverse imports to discover `pgTable`/`pgSchema` symbols, so a table imported-but-not-re-exported is invisible to its diffing. FK SQL emission (`REFERENCES "neon_auth"."user"("id")`) still works because the `references()` callback returns the column object regardless of registration.
+
+**Verified:** clean-tree `drizzle-kit generate` produces "No schema changes." Probe of `neonAuthUsers` column add in `external-schema.ts` produces no migration. Sanity probe (column add in a public table) still emits the expected ALTER.
 
 **Reference:** spec for the original drift fix at `docs/superpowers/specs/2026-05-08-uuid-drift-fix-design.md`.
 
