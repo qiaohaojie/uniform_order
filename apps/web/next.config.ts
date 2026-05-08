@@ -20,7 +20,7 @@ const scriptSrc = [
 const csp = [
   "default-src 'self'",
   `script-src ${scriptSrc}`,
-  "connect-src 'self' https://api.stripe.com https://*.posthog.com https://us-assets.i.posthog.com https://api.resend.com",
+  "connect-src 'self' https://api.stripe.com https://*.posthog.com https://us-assets.i.posthog.com https://api.resend.com https://utfs.io https://*.uploadthing.com",
   "worker-src 'self' blob:",
   "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
   "img-src 'self' data: blob: https:",
@@ -60,6 +60,13 @@ const nextConfig: NextConfig = {
     "*.sg1.manus.computer",
     "*.manus.computer",
   ],
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "utfs.io" },
+      { protocol: "https", hostname: "*.utfs.io" },
+      { protocol: "https", hostname: "*.ufs.sh" },
+    ],
+  },
   async headers() {
     return [
       {
