@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   pgTable,
-  pgSchema,
   text,
   integer,
   numeric,
@@ -13,19 +12,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
-
-// ─── Neon Auth schema reference ─────────────────────────────────────────────
-export const neonAuthSchema = pgSchema("neon_auth");
-
-export const neonAuthUsers = neonAuthSchema.table("user", {
-  id: uuid("id").primaryKey(),
-  name: text("name"),
-  email: text("email"),
-  emailVerified: boolean("email_verified"),
-  image: text("image"),
-  createdAt: timestamp("created_at"),
-  updatedAt: timestamp("updated_at"),
-});
+import { neonAuthUsers } from "./external-schema";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 export const orderStatusEnum = pgEnum("order_status", [
