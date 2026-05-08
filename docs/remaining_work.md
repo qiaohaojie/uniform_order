@@ -48,6 +48,20 @@ The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verificat
 - **Observability (from §2.7):** Verify PostHog project key is set in production Hostinger env vars (and confirm events are arriving from production after first deploy).
 - **Stripe webhook events (from §3.5):** Verify the production Stripe webhook endpoint subscribes to `account.updated` in addition to `payment_intent.succeeded` and `charge.refunded`.
 
+### 2.9 Catalog management — production deployment follow-ups
+
+The catalog management feature (PR #9 — self-service add/edit catalog items, image uploads via UploadThing, approval gate) is code-complete and smoke-tested on dev. Before / during the first production deploy that includes it, the following non-code actions need to happen on Hostinger:
+
+- [ ] **`UPLOADTHING_TOKEN` env var** — get the token from `https://uploadthing.com/dashboard → API Keys` (single combined v7 token, no separate key/app id). Add via hPanel → Advanced → Node.js → Environment Variables, then **restart the Node.js app** from the same panel. Without this, image uploads silently fail.
+- [ ] **CSP / `next/image` host allowlist** — already wired in `apps/web/next.config.ts` for `utfs.io`, `*.utfs.io`, `*.ufs.sh` (commit `dd35a70`). Just confirm the deployed build serves the same headers (curl `-I` the homepage and check `Content-Security-Policy`).
+- [ ] **End-to-end smoke in production** — log in as a platform admin → `/admin/<tenant>/catalog` → add an item with an image upload → confirm a `https://utfs.io/f/...` URL lands in `catalog_items.image_url` and the parent shop renders it. The dev-mode HMR caused some intermediate `UploadDropzone` glitches that don't repeat in production builds (no Fast Refresh) but worth one full-loop verification.
+- [x] **Migration 0008 (`catalog_image_url`)** — already applied to Neon prod (verified 2026-05-08; `__drizzle_migrations` row id=10 matches journal entry for `0008_catalog_image_url`). Nothing to do.
+- [ ] **(Optional) UploadThing free-tier monitoring** — current plan covers 2 GB storage / 100 GB bandwidth. With ~16 product photos × 2 schools × <2 MB each, usage is negligible. Re-evaluate at tenant #5 or any image-heavy redesign (e.g. high-res hero shots, multi-angle product photos).
+
+**Pre-existing landmine flagged during PR #9 smoke testing — not in this PR's scope:**
+
+- `apps/web/src/app/api/orders/route.ts:180` calls `db.transaction(async tx => …)` against the `neon-http` driver, which doesn't support interactive transactions. This was the same bug we fixed in `addCatalogItem` / `updateCatalogItem` (PR #9 commit `ac90e00` — switched to `db.batch`). The orders POST will throw `No transactions support in neon-http driver` → 500 the first time it's called in a real flow. Track as a separate follow-up before any non-Stripe-webhook order traffic hits this route.
+
 ---
 
 ## 3. 🟡 Medium — required by PDP/prototype, tolerable for soft launch
