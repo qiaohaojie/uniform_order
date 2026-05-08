@@ -177,41 +177,41 @@ export async function POST(req: NextRequest) {
 
     const prefix = tenantId.toUpperCase();
     const insertOrder = async (orderId: string) => {
-      await db.transaction(async (tx) => {
-        await tx.insert(orders).values({
-          id: orderId,
-          tenantId,
-          parentName,
-          parentEmail: normalizedParentEmail,
-          parentMobile,
-          studentName,
-          studentYear,
-          studentRoll,
-          delivery: delivery ?? "pickup",
-          deliveryFee: String(deliveryFee ?? 0),
-          subtotal: String(subtotal),
-          gst: String(gst),
-          total: String(total),
-          stripePaymentIntentId: normalizedStripePaymentIntentId,
-          stripeRef: normalizedStripePaymentIntentId,
-          refundPolicyAcceptedAt: new Date(),
-          userId: authResult.user.id,
-          parentNote: normalizedParentNote,
-        });
-
-        for (const line of lines) {
-          await tx.insert(orderLines).values({
-            orderId,
-            itemId: line.itemId,
-            itemName: line.itemName,
-            variantLabel: line.variantLabel,
-            size: line.size?.trim() || null,
-            qty: line.qty,
-            unitPrice: String(line.unitPrice),
-            lineTotal: String(line.lineTotal),
-          });
-        }
+      // neon-http driver doesn't support interactive db.transaction; use db.batch
+      // which runs all statements atomically in a single HTTP round-trip.
+      const orderInsert = db.insert(orders).values({
+        id: orderId,
+        tenantId,
+        parentName,
+        parentEmail: normalizedParentEmail,
+        parentMobile,
+        studentName,
+        studentYear,
+        studentRoll,
+        delivery: delivery ?? "pickup",
+        deliveryFee: String(deliveryFee ?? 0),
+        subtotal: String(subtotal),
+        gst: String(gst),
+        total: String(total),
+        stripePaymentIntentId: normalizedStripePaymentIntentId,
+        stripeRef: normalizedStripePaymentIntentId,
+        refundPolicyAcceptedAt: new Date(),
+        userId: authResult.user.id,
+        parentNote: normalizedParentNote,
       });
+      const linesInsert = db.insert(orderLines).values(
+        lines.map((line) => ({
+          orderId,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          variantLabel: line.variantLabel,
+          size: line.size?.trim() || null,
+          qty: line.qty,
+          unitPrice: String(line.unitPrice),
+          lineTotal: String(line.lineTotal),
+        }))
+      );
+      await db.batch([orderInsert, linesInsert]);
     };
 
     let createdOrderId: string | null = null;
