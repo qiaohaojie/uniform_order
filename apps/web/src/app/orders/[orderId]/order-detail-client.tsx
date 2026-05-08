@@ -26,6 +26,7 @@ type OrderRow = {
     | "refunded";
   subtotal: string;
   total: string;
+  parentNote: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
   lines: Array<{
@@ -210,6 +211,20 @@ export function OrderDetailClient({
             </>
           )}
         </div>
+
+        {order.parentNote && (
+          <div
+            className="rounded-lg border p-3 mb-4"
+            style={{ borderColor: "var(--color-rule)", background: "var(--color-parchment)" }}
+          >
+            <div className="text-[11px] font-bold tracking-[1.2px] uppercase mb-1" style={{ color: "var(--color-gold)" }}>
+              Your note to the school
+            </div>
+            <div className="text-[13px] leading-[1.5]" style={{ color: "var(--color-ink)" }}>
+              {order.parentNote}
+            </div>
+          </div>
+        )}
 
         <div
           className="bg-white rounded-xl border p-4 mb-4"

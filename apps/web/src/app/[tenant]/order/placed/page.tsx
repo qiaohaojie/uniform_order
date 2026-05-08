@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PARENT, TENANTS, type TenantId } from "@/lib/data";
+import { TENANTS, type TenantId } from "@/lib/data";
+import { getOrderForReceipt } from "@/db/queries";
 import { Crest } from "@/components/crest";
 import { Chip } from "@/components/chip";
 import { DoubleRule } from "@/components/double-rule";
@@ -16,6 +17,8 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
   const total = typeof sp.total === "string" ? sp.total : "363.00";
   const delivery: "pickup" | "ship" = sp.delivery === "ship" ? "ship" : "pickup";
   const orderId = typeof sp.orderId === "string" ? sp.orderId : `${tid.toUpperCase()}-XXXXX`;
+  const order = await getOrderForReceipt(orderId);
+  const receiptEmail = order?.parentEmail ?? "your email";
 
   return (
     <MobileShell bg="var(--color-parchment)">
@@ -33,7 +36,7 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
           We&apos;ll have it ready soon.
         </h1>
         <p className="text-[13px] leading-[1.5] m-0 mb-5" style={{ color: "var(--color-ink-dim)" }}>
-          A receipt has been sent to <b style={{ color: "var(--color-ink)" }}>{PARENT.email}</b>.
+          A receipt has been sent to <b style={{ color: "var(--color-ink)" }}>{receiptEmail}</b>.
           You&apos;ll get another email when the order is ready{delivery === "pickup" ? " for pickup" : " to ship"}.
         </p>
       </div>

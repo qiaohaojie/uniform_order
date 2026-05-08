@@ -62,20 +62,18 @@ NSBH paper form items missing from the seed: Navy Shorts (Summer), Grey Socks (W
 
 Already counted in §1.5 as a blocker for the consent step. Listed again here because the content itself (copy, signed off by each school's bursar) is a content task, not a code task.
 
-### 3.3 "Add another child" flow on school picker
+### 3.3 "Add another child" flow on school picker ✅ (code complete)
 
-**Where:** `apps/web/src/app/page.tsx`
+**Spec:** `docs/superpowers/specs/2026-05-08-parent-account-children-design.md`
+**Plan:** `docs/superpowers/plans/2026-05-08-parent-account-children.md`
+**Status:** Code complete on `feat-parent-account`. Ops verifications remaining before merge:
 
-Button renders, has no `onClick`. Audit item 15. PDP allows ordering for multiple children — without this, families with siblings have to re-checkout per child.
-
-**Decision (2026-05-07): Path B — DB-backed parent accounts.** During brainstorming we concluded the right model is a real parent account on the platform with server-side saved children, not a localStorage-only convenience. Storing children's profiles server-side is lawful under the APPs with standard SaaS privacy hygiene (privacy notice, collection notice, edit/delete, retention rule) — see `my_doc/Legal/Parent_Children_Onboarding/2026-05-07-parent-school-linking.md` for the full reasoning. This pulls in scope beyond the original ticket; tracked dependencies:
-
-- **Parent auth** via **Neon Auth** with **magic-link email + Google sign-in** providers. Identity auto-syncs to Postgres via `neon_auth.users_sync`; FK from new `parent_children` table.
-- **`/privacy` page** (one-time content task; supersedes the deferred `/terms` page from §3.10 follow-up #4 to the extent that storage of personal data is now disclosed).
-- **`is_publicly_listed` tenant flag** so the picker only lists schools that have opted in.
-- **§3.4 (parent order tracking page)** can ride along once auth lands — same identity, same email-keyed lookup. Worth bundling.
-
-Spec: `docs/superpowers/specs/2026-05-08-parent-account-children-design.md`.
+- [ ] Verify both **magic-link email** and **Google** providers are enabled in the Neon Auth project dashboard for the production environment.
+- [ ] Verify Neon Auth dedupes by primary email when the same email signs in via both magic-link and Google. If not, surface the setting and flip it.
+- [ ] Confirm the Neon Auth account-management path linked from `/privacy` (per Task 18 Step 1) renders correctly on production-mirroring staging. If a self-service deletion path is unavailable, replace the link with the support-email fallback in `app/privacy/page.tsx` before merge.
+- [ ] Run a real end-to-end smoke test on staging: sign in via magic-link, add a child, place an order with a note, confirm the operator detail callout, confirm the printed pick slip includes the note, confirm the parent receipt echoes the note.
+- [ ] Run the same E2E with Google sign-in.
+- [ ] After deploy, manually run `UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh');` against production if the migration's seed UPDATE didn't apply (verify by checking the row).
 
 ### 3.4 Order tracking page for parents
 
