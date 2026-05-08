@@ -36,26 +36,28 @@ Additionally, the current data shape has no product description and no product i
 
 | Area | In scope |
 |---|---|
-| Schema | Add `description text` and `image_url text` to `catalog_items` (migration 0008) |
+| Schema | Add `image_url text` to `catalog_items` (migration 0008). `description` already exists on the schema since 0007 — no migration needed. |
 | Admin UI | "Add item" button + side-drawer create/edit form on `/admin/[tenant]/catalog` |
-| API | New `POST /api/catalog`, new `PATCH /api/catalog/[itemId]`, new `POST /api/upload/catalog-image`. Existing `GET` and `DELETE` extended for image cleanup. |
+| API | New `POST /api/catalog`, new `PATCH /api/catalog/[itemId]`. Existing `DELETE` extended for image cleanup. Image uploads handled through UploadThing's typed App Router handler at `/api/uploadthing` — no custom upload proxy. |
 | Storage | Image uploads via UploadThing (Next.js SDK) |
 | Approval gate | Block mutations and the catalog editor page when `platform_approval_status ≠ 'approved'` |
 | Fallback rendering | Refactor `GarmentVector` so its primary key is `category`, not `id` |
-| Parent shop | Render `<Image>` from `image_url` when present; otherwise existing `GarmentVector` (now category-keyed) |
+| Parent shop | Migrate `[tenant]/page.tsx`, `[tenant]/item/[itemId]/page.tsx`, and any other consumer of static `CATALOG` to read live from `getCatalogByTenant` / `getCatalogItemById`. Render `<Image>` from `image_url` when present; otherwise category-keyed `GarmentVector`. |
+| Type rename | Full rename `desc` → `description` across the static `CatalogItem` type, the 8 static seed entries, and the item-detail renderer — kept aligned with the DB column name. |
 | Validation | Zod schemas on all mutating routes |
 
 ## 5. Data model
 
-### 5.1 Schema delta — migration `0008_catalog_descriptions_and_images`
+### 5.1 Schema delta — migration `0008_catalog_image_url`
 
 ```sql
 ALTER TABLE catalog_items
-  ADD COLUMN description text,
   ADD COLUMN image_url text;
 ```
 
-Both columns are nullable. No data backfill. Existing 16 seeded items keep null `image_url` and fall through to `GarmentVector`. NSBH/RGSH seed inserts in `seed.ts` keep working unchanged.
+`description` is **already** defined on `catalog_items` in `apps/web/src/db/schema.ts:60` and present in `drizzle/meta/0007_snapshot.json` — no migration needed for it. Migration 0008 adds only `image_url`.
+
+`image_url` is nullable. No data backfill. Existing seeded rows keep null and fall through to `GarmentVector`.
 
 ### 5.2 Drizzle schema update — `apps/web/src/db/schema.ts`
 
@@ -67,8 +69,8 @@ export const catalogItems = pgTable("catalog_items", {
     .references(() => tenants.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   category: text("category").notNull(),
-  description: text("description"),     // NEW
-  imageUrl: text("image_url"),          // NEW
+  description: text("description"),     // already exists since 0007
+  imageUrl: text("image_url"),          // NEW in 0008
   sizeGuide: jsonb("size_guide"),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -91,21 +93,52 @@ On collision (existing item with same id within the same tenant), append `-2`, `
 
 `slugify(name)`: lowercase, ASCII-only, non-alphanumerics → `-`, collapse repeated `-`, trim leading/trailing `-`, max 40 chars.
 
-### 5.4 TypeScript types — `apps/web/src/lib/data.ts`
+### 5.4 TypeScript types — `apps/web/src/lib/data.ts` (full `desc` → `description` rename)
 
 ```ts
 export interface CatalogItem {
   id: string;
   cat: ItemCategory;
   name: string;
-  description?: string;     // RENAMED from desc, now matches DB column
-  imageUrl?: string;        // NEW
+  description?: string;     // renamed from desc, matches DB column
+  imageUrl?: string;        // NEW, matches DB column
   variants: ItemVariant[];
   sizeGuide?: SizeGuide;
 }
 ```
 
-The existing `desc` field on the type is renamed to `description`. The frontend already only reads it for display; rename is mechanical. (No schema migration of consumers needed since `desc` is currently never populated.)
+Earlier review noted `desc` is populated by 8 static seed entries (`apps/web/src/lib/data.ts:74,93,100,110,128,139,169,203`) and rendered by `apps/web/src/app/[tenant]/item/[itemId]/page.tsx:34`. Rename is therefore not no-op; it is bounded and mechanical.
+
+Required edits:
+
+1. `apps/web/src/lib/data.ts` — rename interface field `desc` → `description`; rename `desc:` → `description:` in all 8 seed entries.
+2. `apps/web/src/app/[tenant]/item/[itemId]/page.tsx:34` — rename both `item.desc &&` and `{item.desc}` to `description`.
+3. Any other reader of `item.desc` — grep before merging; expected to be the renderer above only.
+
+The static `CATALOG` keeps the same shape so it can serve as the dev-fallback type for the DB rows (see §5.5).
+
+### 5.5 Parent shop live-DB read migration
+
+The parent shop currently reads from the static `CATALOG` array. Per the goal in §2 ("schools manage their own catalog"), parent routes must move to live DB reads.
+
+Files to update:
+
+| File | Current | After |
+|---|---|---|
+| `apps/web/src/app/[tenant]/page.tsx` | `import { CATALOG } from "@/lib/data"` then `CATALOG.filter(i => i.cat === activeCat)` | `await getCatalogByTenant(tid)` then filter by `cat === activeCat` and `active === true` in memory |
+| `apps/web/src/app/[tenant]/item/[itemId]/page.tsx` | `getItem(itemId)` (static) + `generateStaticParams` over `CATALOG` | `await getCatalogItemById(itemId)`. **Drop `generateStaticParams`** — pages render on-demand. |
+| `apps/web/src/app/[tenant]/cart/...`, `apps/web/src/app/[tenant]/checkout/...`, parent receipt | Wherever cart/checkout/order rendering needs the item image, prefer the line snapshot already on the order; otherwise look up via `getCatalogItemById`. | Same |
+
+Helpers `getCatalogByTenant` and `getCatalogItemById` already exist in `apps/web/src/db/queries.ts:515,539`.
+
+The DB row shape returned from these helpers must be mapped to the UI `CatalogItem` shape used by existing components. A small adapter colocated with the queries (`mapDbItem(dbItem) → CatalogItem`) handles:
+
+- DB `description: string | null` → UI `description?: string`
+- DB `imageUrl: string | null` → UI `imageUrl?: string`
+- DB `category: string` → UI `cat: ItemCategory` (cast after enum-validate)
+- DB variant rows → UI `variants: ItemVariant[]`
+
+The static `CATALOG` is retained for tests and for local dev when the DB seed is bare. Production renders never touch it.
 
 ## 6. API surface
 
@@ -141,35 +174,17 @@ Create a new catalog item with at least one variant, in a single transaction.
 
 Partial update. Fields may include any subset of `name`, `category`, `description`, `imageUrl`, `active`, `sortOrder`, `sizeGuide`, and `variants`.
 
-**Variants strategy: replace.** If `variants` is included in the request, the entire variant array for the item is replaced. Simpler than diffing; safe because catalog editing is a low-frequency, single-operator action.
+**Variants strategy: replace (hard).** If `variants` is included in the request, the entire variant array for the item is hard-deleted and re-inserted in one transaction. No soft-delete logic is needed.
 
-Replacement logic, in one transaction:
+Why this is safe: `order_lines` does not FK to `catalog_variants` (or to `catalog_items`). Verified at `apps/web/src/db/schema.ts:120-160` — `order_lines` carries snapshots of `itemId` (text, no FK), `itemName`, `variantLabel`, `unitPrice`, `qty`, `lineTotal`. Order history is fully self-contained against catalog mutations. Confirmed at the order-creation site `apps/web/src/app/api/orders/route.ts:202` — line inserts copy strings/prices, never variant ids.
 
-1. Load the item's current variants.
-2. For each existing variant: if it is referenced by any `order_lines` row, mark `active = false` and **keep it** (do not delete). Otherwise, hard-delete it.
-3. Insert the new variants from the request body. New variants whose `label` matches a soft-deleted older variant from step 2 do not collide because variants use UUID PKs — the soft-deleted row stays as historical reference; the new row is a fresh UUID.
+If a future spec adds a real FK from `order_lines` to `catalog_variants`, that spec must reintroduce a referential-integrity strategy here.
 
-This preserves referential integrity for past orders while letting operators evolve the catalog. The implementation must confirm the FK column on `order_lines` (likely `order_lines.variant_id`) and add an `ON DELETE RESTRICT` if missing.
+### 6.3 `DELETE /api/catalog/[itemId]` (extended)
 
-### 6.3 `POST /api/upload/catalog-image`
+Existing endpoint. Extended to also delete the associated UploadThing file (best-effort, log + continue if delete fails). Item delete is hard delete; cascade deletes variants. No 409 path — `order_lines` does not FK to `catalog_items`, so item deletion never breaks past order history.
 
-Multipart form upload. Validates type and size, forwards to UploadThing, returns the resulting URL.
-
-**Request:** `multipart/form-data` with `file` field. Max 2MB. Allowed MIME: `image/jpeg`, `image/png`, `image/webp`.
-
-**Response 200:** `{ "url": "https://utfs.io/f/abc123…" }`
-
-**Response 403:** `{ "code": "tenant_not_approved" }` when the tenant is not approved.
-
-The endpoint is tenant-scoped: it reads `tenantId` from the session/route context and stores the file under `${tenantId}/${uuid}.${ext}` in UploadThing.
-
-### 6.4 `DELETE /api/catalog/[itemId]` (extended)
-
-Existing endpoint. Extended to also delete the associated UploadThing file (best-effort, log + continue if delete fails). Item delete is hard delete; cascade deletes variants.
-
-If any variant is referenced by an existing order line, return 409 with `{ "code": "item_in_use" }`. Operator must soft-delete via `active = false` instead.
-
-### 6.5 `GET /api/catalog?tenantId=…` (unchanged behavior)
+### 6.4 `GET /api/catalog?tenantId=…` (unchanged behavior)
 
 Reads stay ungated. No change.
 
@@ -185,7 +200,7 @@ Tenant must have `platform_approval_status = 'approved'` to perform any of the f
 | `POST /api/catalog` | mutation | ✅ |
 | `PATCH /api/catalog/[itemId]` | mutation | ✅ |
 | `DELETE /api/catalog/[itemId]` | mutation | ✅ |
-| `POST /api/upload/catalog-image` | mutation | ✅ |
+| UploadThing file router (`catalogImage`) at `/api/uploadthing` | mutation | ✅ — enforced inside the router's `middleware()` (see §8.2) |
 | `GET /api/catalog` | read | ❌ |
 | `/[tenant]/...` (parent shop) | reads | ❌ |
 
@@ -220,13 +235,65 @@ Used in both the page (try/catch → render empty state) and API routes (try/cat
 
 UploadThing's free tier (2GB) is more than enough for MVP — at 1MB average per image and 100 items per tenant, that's 100MB per tenant; tier covers ~20 tenants before paying.
 
-### 8.2 Integration
+### 8.2 Integration — single typed-router path (no custom proxy)
+
+Per UploadThing's App Router pattern (`https://docs.uploadthing.com/getting-started/appdir`), upload requests go directly client → typed `<UploadDropzone>` → `createRouteHandler` mounted at `/api/uploadthing`. Auth + approval-gate enforcement lives inside the router's `middleware()`. No separate `POST /api/upload/...` proxy.
 
 1. `pnpm add uploadthing @uploadthing/react`
 2. Add `UPLOADTHING_TOKEN` to env (Hostinger production env group + `.env.local`).
-3. Create `apps/web/src/lib/uploadthing.ts` with one router: `catalogImage` (max 1 file, max 2MB, image/*, callbacked to write the URL).
-4. Mount the route handler at `app/api/uploadthing/route.ts`.
-5. Use `UploadButton` (or `UploadDropzone`) from `@uploadthing/react` inside the catalog form drawer.
+3. Create `apps/web/src/lib/uploadthing.ts` defining a `FileRouter` with one route, `catalogImage`:
+
+   ```ts
+   import { createUploadthing, type FileRouter } from "uploadthing/next";
+   import { requireSessionUser, ensureTenantAccess } from "@/lib/auth/...";
+   import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
+
+   const f = createUploadthing();
+
+   export const uploadRouter = {
+     catalogImage: f({ image: { maxFileSize: "2MB", maxFileCount: 1 } })
+       .input(z.object({ tenantId: z.string().min(1) }))
+       .middleware(async ({ input }) => {
+         const user = await requireSessionUser();
+         await ensureTenantAccess(user, input.tenantId);
+         await requireTenantApproved(input.tenantId);   // throws on not-approved
+         return { tenantId: input.tenantId, userId: user.id };
+       })
+       .onUploadComplete(async ({ metadata, file }) => {
+         // Persist nothing here — the drawer captures `file.url` via
+         // onClientUploadComplete and includes it in the catalog
+         // POST/PATCH body. UploadThing keeps the file regardless of
+         // whether the catalog save succeeds; orphaned files are GC'd
+         // by a future cleanup job (out of scope for this spec).
+         return { url: file.url };
+       }),
+   } satisfies FileRouter;
+
+   export type UploadRouter = typeof uploadRouter;
+   ```
+
+4. Mount the route handler at `apps/web/src/app/api/uploadthing/route.ts`:
+
+   ```ts
+   import { createRouteHandler } from "uploadthing/next";
+   import { uploadRouter } from "@/lib/uploadthing";
+
+   export const { GET, POST } = createRouteHandler({ router: uploadRouter });
+   ```
+
+5. Generate typed React components in `apps/web/src/components/uploadthing.ts`:
+
+   ```ts
+   import { generateUploadDropzone, generateUploadButton } from "@uploadthing/react";
+   import type { UploadRouter } from "@/lib/uploadthing";
+
+   export const UploadDropzone = generateUploadDropzone<UploadRouter>();
+   export const UploadButton    = generateUploadButton<UploadRouter>();
+   ```
+
+6. Drawer uses `<UploadDropzone endpoint="catalogImage" input={{ tenantId }} onClientUploadComplete={…} />`. The returned `file.url` is held in form state and submitted with the catalog POST/PATCH body.
+
+**Failure modes from middleware** propagate to the drawer's `onUploadError` callback. The drawer shows a toast: "This school is not yet approved on the platform" for `tenant_not_approved`, generic message otherwise.
 
 ### 8.3 Constraints
 
@@ -371,23 +438,25 @@ Used by both the API routes (server) and the drawer form (client) so messages ma
 
 ## 12. Migration strategy
 
-1. **Migration `0008_catalog_descriptions_and_images`** — adds `description` and `image_url` columns. Drizzle generates the SQL; review before applying.
-2. **No data backfill** — both columns nullable; existing rows have `null`.
+1. **Migration `0008_catalog_image_url`** — adds only the `image_url text` column to `catalog_items`. `description` already exists (since 0007); no migration needed for it. Drizzle generates the SQL; review before applying.
+2. **No data backfill** — `image_url` is nullable; existing rows get `null`.
 3. **Drizzle snapshot** updates as part of the migration.
-4. **`seed.ts`** — leave NSBH/RGSH inserts as-is (no description/image yet). Adding the eight missing NSBH paper-form items can happen via the new admin UI after deploy, OR the seed can be extended with stub rows now and operators upload images post-deploy.
+4. **`seed.ts`** — leave NSBH/RGSH inserts as-is. Adding the eight missing NSBH paper-form items can happen via the new admin UI after deploy, OR the seed can be extended with stub rows now and operators upload images post-deploy.
+5. **Parent-shop DB read migration is code-only** — no DB migration. Lands in the same PR (or a PR-2 split) as part of touching the parent routes.
 
 ## 13. Test plan
 
 Type-checking is the only existing gate (`pnpm check-types:web`). Smoke tests done manually:
 
-1. **Approved tenant can edit:** `nsbh` → `/admin/nsbh/catalog` → "Add item" → fill form → upload image → save → row appears → parent shop shows new item with image.
-2. **Non-approved tenant blocked:** flip `nsbh.platform_approval_status = 'pending'` via SQL → `/admin/nsbh/catalog` shows pending-approval empty state. Direct POST to `/api/catalog` returns 403. Restore `'approved'` after.
-3. **Image fallback:** create an item without uploading an image → parent shop shows category-keyed icon.
-4. **Image replace:** edit an existing item, upload a new image → old UploadThing file deleted, new URL persisted.
-5. **Variant replace:** edit an item, remove one variant, add a new one, save → DB shows variant rows replaced.
-6. **Variant FK protection:** try to delete an item that has an order line → 409 with `item_in_use`. Mark `active = false` instead → item disappears from parent shop, persists in admin.
-7. **Validation:** submit form with name `""` → field error. Submit with no variants → "Add at least one variant" error.
-8. **Image too big:** try to upload 3MB image → UploadThing rejects with size error; form shows error.
+1. **Approved tenant end-to-end (admin → parent):** `nsbh` → `/admin/nsbh/catalog` → "Add item" → fill form → upload image → save → row appears in admin table → navigate to `/nsbh` → new item appears in the appropriate category → tap into item detail → description and image render correctly.
+2. **Non-approved tenant blocked:** flip `nsbh.platform_approval_status = 'pending'` via SQL → `/admin/nsbh/catalog` shows pending-approval empty state. Direct POST to `/api/catalog` returns 403. Direct upload via `<UploadDropzone>` shows `tenant_not_approved` error. Parent shop at `/nsbh` keeps rendering existing items normally (reads ungated). Restore `'approved'` after.
+3. **Image fallback:** create an item without uploading an image → parent shop shows category-keyed `GarmentVector` glyph.
+4. **Image replace:** edit an existing item, upload a new image → form state updates → save → catalog table shows new thumbnail. (UploadThing GC of old files is out of scope; verify only the new URL persists in DB.)
+5. **Variant replace:** edit an item, remove one variant, add a new one, save → DB shows new variant rows; old variant rows hard-deleted; existing orders that referenced the old variant label still render correctly because order line items hold their own snapshot.
+6. **Item delete keeps order history intact:** delete a catalog item that has past order lines → DELETE succeeds (no 409) → past orders keep rendering with their snapshot data; admin order detail still shows the item name and price as historically captured.
+7. **Validation:** submit form with name `""` → field error. Submit with no variants → "Add at least one variant" error. Submit with negative price → field error.
+8. **Image too big:** try to upload 3MB image → UploadThing rejects via maxFileSize; drawer shows the error.
+9. **Parent-shop DB-read migration:** seed-only data (no admin edits) still renders correctly on `/nsbh` and `/nsbh/item/[itemId]`. Item-detail pages no longer pre-render statically (no `generateStaticParams`). Cold-load latency on item detail acceptable (single-row query).
 
 ## 14. Out-of-scope follow-ups (future work)
 
