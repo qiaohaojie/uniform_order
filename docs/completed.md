@@ -289,6 +289,27 @@ Code complete; type-check passing. Smoke tests T2/T3/T4/T5/T6/T7 verified via DB
 
 **Source:** former `remaining_work.md` §4.10. The transactional-email plan called for splitting Task 6 Steps 3 and 4 into separate commits; commit `3ce98b1` collapsed them. Functionality is correct — only `git bisect` / history granularity is affected. Not worth rewriting history. Recorded here so the deviation is explainable from the doc trail rather than archaeology.
 
+### 4.11 `db.transaction()` → `db.batch()` in `/api/orders` POST ✅
+
+**Source:** former `remaining_work.md` §2.10 — fixed 2026-05-09 in PR #10.
+
+**Bug:** `apps/web/src/app/api/orders/route.ts:180` called `db.transaction(async tx => …)`. The DB client is `drizzle-orm/neon-http`, which throws `Error: No transactions support in neon-http driver` on any interactive transaction. Every real parent checkout would have 500'd with the Stripe charge already captured but no `orders` row written. Latent because no parent had checked out since the bug was introduced (commit `1a6fa21`, 2026-05-05).
+
+**Fix:** replaced `db.transaction` with `db.batch([orderInsert, ...lineInserts])`, mirroring the pattern in `addCatalogItem` (`db/queries.ts:573`). Atomic over a single HTTP round-trip. The 5-attempt collision-retry loop wrapping `insertOrder` continues to work — it retries on `orders_pkey` collisions, which now surface as standard `23505` errors from the batch instead of from inside a tx.
+
+**Verified:** `pnpm check-types:web` clean. End-to-end smoke test (real Stripe checkout → orders row + order_lines rows written) deferred until NSBH's Stripe Express account is onboarded — same gate as §5 checklist item 3.
+
+### 4.12 "Add another child" flow on school picker ✅
+
+**Source:** former `remaining_work.md` §3.3 — shipped via PR #6 (squash-merge `2f6803e`, 2026-05-08).
+
+**Spec:** `docs/superpowers/specs/2026-05-08-parent-account-children-design.md`
+**Plan:** `docs/superpowers/plans/2026-05-08-parent-account-children.md`
+
+20-task plan executed end-to-end: school picker now lets a signed-in parent add another child (name, year, roll), the child list persists per parent, and the home redirect honours multi-child state (no auto-redirect when more than one child exists). Includes parent-note plumbing through checkout → operator order detail → printed pick slip → parent confirmation receipt. PR #6 went through three rounds of code-review fixes (15 findings) before merge; post-merge follow-ups (snapshot chain repair, `HomeClient` cookie clearing) committed before squash.
+
+**Production ops verifications still owed:** tracked in `remaining_work.md` §2.11 (Neon Auth provider config, magic-link/Google dedupe, account-management link, staging E2E for both providers, `tenants.is_publicly_listed` backfill check).
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -296,6 +317,6 @@ Code complete; type-check passing. Smoke tests T2/T3/T4/T5/T6/T7 verified via DB
 The following audit items are **not** complete and are tracked in `docs/remaining_work.md`:
 
 - Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) — `remaining_work.md` §2.2.
-- "Add another child" flow on school picker — `remaining_work.md` §3.3.
 - Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) — `remaining_work.md` §3.1.
+- Parent-account ("add another child") production ops verifications — `remaining_work.md` §2.11.
 - Dashboard "New product" and "Export" buttons not wired — `remaining_work.md` §4.2.

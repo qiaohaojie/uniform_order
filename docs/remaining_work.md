@@ -25,6 +25,8 @@ This document lists every item that must be resolved (or explicitly deferred) be
 > §2.1 (refund/exchange UI), §2.3 (Stripe webhook handler), §2.6 (production env config — code), and §2.7 (error handling / observability — code) are now complete and have been moved to `docs/completed.md` §4. Their leftover ops/verification follow-ups are tracked below in §2.8.
 >
 > §3.4 (parent order detail page), §3.5 (Stripe Connect onboarding sync), §4.1 + §4.9 (size hint), §4.10 (commit-split decision), and §4.11 (drizzle-kit `neon_auth.*` exclusion) are also complete — moved to `docs/completed.md` §4.6–§4.10.
+>
+> §2.10 (`db.transaction` → `db.batch` fix, PR #10) and §3.3 ("add another child", PR #6) are complete — moved to `docs/completed.md` §4.11 and §4.12. §3.3 production ops verifications carried over to §2.11 below.
 
 ### 2.2 Super-admin / platform portal — none of 4 screens exist
 
@@ -58,52 +60,16 @@ The catalog management feature (self-service add/edit catalog items, image uploa
 - [x] **Migration 0008 (`catalog_image_url`)** — already applied to Neon prod (verified 2026-05-08; `__drizzle_migrations` row id=10 matches journal entry for `0008_catalog_image_url`). Nothing to do.
 - [ ] **(Optional) UploadThing free-tier monitoring** — current plan covers 2 GB storage / 100 GB bandwidth. With ~16 product photos × 2 schools × <2 MB each, usage is negligible. Re-evaluate at tenant #5 or any image-heavy redesign (e.g. high-res hero shots, multi-angle product photos).
 
-### 2.10 🔴 Latent bug — `db.transaction()` against `neon-http` driver in `/api/orders` POST
+### 2.11 Parent-account ("add another child") — production ops follow-ups
 
-**Where:** `apps/web/src/app/api/orders/route.ts:180` (inside `insertOrder` helper).
+The parent-account / "add another child" feature shipped via PR #6 (squash-merge `2f6803e`). Code complete; the following non-code verifications still need to happen on a production-mirroring environment before NSBH go-live:
 
-**Symptom (will fire on first real parent checkout post-deploy):** every POST to `/api/orders` throws `Error: No transactions support in neon-http driver` and returns 500. Parent never sees an order confirmation, the Stripe payment goes through but no `orders` row is written, refund cleanup is manual.
-
-**Root cause:** the codebase's DB client is `drizzle-orm/neon-http`, which is the HTTP-based serverless driver. It does **not** support drizzle's interactive `db.transaction(async (tx) => …)` API. Only `db.batch([stmt1, stmt2, …])` works on this driver, and it runs the listed statements atomically over a single HTTP round-trip.
-
-**Why it has never been observed in production:**
-
-- `db.transaction(...)` was added to this route in commit `1a6fa21` on 2026-05-05 (auth + idempotency + Stripe destination charges refactor).
-- The 3 orders currently in the `orders` table are all from 2026-05-01 — all pre-date the bug.
-- No parent has placed an order since 2026-05-05, so the bug has never fired in real traffic.
-
-**Why it surfaced now:** caught during PR #9 catalog-management smoke testing — the same `db.transaction(...)` pattern was used in `addCatalogItem` / `updateCatalogItem` and threw the identical error on the first Save in dev. PR #9 (merged as `c9237d9`) already fixed those two call sites (commit `ac90e00`, switched to `db.batch`). The orders POST has the same pattern but was **out of scope for that PR**.
-
-**Required fix (small, mechanical):**
-
-1. In `insertOrder` (`apps/web/src/app/api/orders/route.ts:179`) replace:
-
-   ```ts
-   await db.transaction(async (tx) => {
-     await tx.insert(orders).values({...});
-     for (const line of lines) {
-       await tx.insert(orderLines).values({...});
-     }
-   });
-   ```
-
-   with a `db.batch([...])` call mirroring the pattern in `addCatalogItem` (`apps/web/src/db/queries.ts` after commit `ac90e00`):
-
-   ```ts
-   import type { BatchItem } from "drizzle-orm/batch";
-   const orderInsert = db.insert(orders).values({...});
-   const lineInserts = lines.map((line) => db.insert(orderLines).values({...}));
-   const stmts: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [orderInsert, ...lineInserts];
-   await db.batch(stmts);
-   ```
-
-2. Run `pnpm check-types` (`drizzle-orm` 0.45.2 batch typing requires a non-empty tuple; the cast above satisfies it).
-
-3. Smoke test: place a real test-mode order end-to-end after the change. The 5-attempt collision-retry loop wrapping `insertOrder` keeps working unchanged — it just retries on PK collision, not on the transaction error.
-
-**Priority:** 🔴 Blocker for any production parent-checkout traffic. Currently masked because (a) no real parents have checked out since May 5 and (b) Stripe webhook flows write to other tables, not `orders` directly. The first real checkout post-deploy will fail.
-
-**Suggested branching strategy:** stand-alone tiny PR (≤30 LOC change). Must ship before NSBH go-live.
+- [ ] Verify both **magic-link email** and **Google** providers are enabled in the Neon Auth project dashboard for the production environment.
+- [ ] Verify Neon Auth dedupes by primary email when the same email signs in via both magic-link and Google. If not, surface the setting and flip it.
+- [ ] Confirm the Neon Auth account-management path linked from `/privacy` (per Task 18 Step 1) renders correctly on production-mirroring staging. If a self-service deletion path is unavailable, replace the link with the support-email fallback in `app/privacy/page.tsx`.
+- [ ] Run a real end-to-end smoke test on staging: sign in via magic-link, add a child, place an order with a note, confirm the operator detail callout, confirm the printed pick slip includes the note, confirm the parent receipt echoes the note.
+- [ ] Run the same E2E with Google sign-in.
+- [ ] After deploy, verify `tenants.is_publicly_listed = true` for `nsbh` and `rgsh` (the migration's seed UPDATE should have applied; if not, run `UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh');`).
 
 ---
 
@@ -121,18 +87,9 @@ NSBH paper form items missing from the seed: Navy Shorts (Summer), Grey Socks (W
 
 Already counted in §1.5 as a blocker for the consent step. Listed again here because the content itself (copy, signed off by each school's bursar) is a content task, not a code task.
 
-### 3.3 "Add another child" flow on school picker ✅ (code complete)
+### 3.3 "Add another child" flow on school picker ✅
 
-**Spec:** `docs/superpowers/specs/2026-05-08-parent-account-children-design.md`
-**Plan:** `docs/superpowers/plans/2026-05-08-parent-account-children.md`
-**Status:** Code complete on `feat-parent-account`. Ops verifications remaining before merge:
-
-- [ ] Verify both **magic-link email** and **Google** providers are enabled in the Neon Auth project dashboard for the production environment.
-- [ ] Verify Neon Auth dedupes by primary email when the same email signs in via both magic-link and Google. If not, surface the setting and flip it.
-- [ ] Confirm the Neon Auth account-management path linked from `/privacy` (per Task 18 Step 1) renders correctly on production-mirroring staging. If a self-service deletion path is unavailable, replace the link with the support-email fallback in `app/privacy/page.tsx` before merge.
-- [ ] Run a real end-to-end smoke test on staging: sign in via magic-link, add a child, place an order with a note, confirm the operator detail callout, confirm the printed pick slip includes the note, confirm the parent receipt echoes the note.
-- [ ] Run the same E2E with Google sign-in.
-- [ ] After deploy, manually run `UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh');` against production if the migration's seed UPDATE didn't apply (verify by checking the row).
+Done. See `docs/completed.md` §4.12. Production ops verifications carried over to §2.11 above.
 
 ### 3.6 GST / BAS report — auditor sign-off
 
@@ -208,7 +165,7 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 
 | Audit item | Tracked in |
 |---|---|
-| "Add another child" button on school picker | §3.3 |
+| "Add another child" button on school picker | ✅ Done — `completed.md` §4.12; ops verifications → §2.11 |
 | "Riley wore size X last year" hint (hardcoded) | ✅ Done — `completed.md` §4.8 |
 | Dashboard "New product" button not wired | §4.2 |
 | Dashboard "Export" button not wired | §4.2 |
