@@ -2,21 +2,25 @@
 import { useState, useTransition } from "react";
 import { disableTenant, reEnableTenant } from "../actions";
 import type { tenants } from "@/db/schema";
+import type { TenantStatus } from "@/lib/platform/queries";
 
 type TenantRow = typeof tenants.$inferSelect;
 
-export function DangerCard({ tenant, status }: { tenant: TenantRow; status: string }) {
-  const isDisabled = status === "Disabled";
+export function DangerCard({ tenant, status }: { tenant: TenantRow; status: TenantStatus }) {
+  const isDisabled = status === "disabled";
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = (fn: () => Promise<unknown>) => {
+    setError(null);
     startTransition(async () => {
       try {
         await fn();
         setConfirming(false);
-      } catch {
+      } catch (e) {
         setConfirming(false);
+        setError(e instanceof Error ? e.message : "Failed");
       }
     });
   };
@@ -77,6 +81,8 @@ export function DangerCard({ tenant, status }: { tenant: TenantRow; status: stri
           )}
         </div>
       )}
+
+      {error ? <div className="mt-3 text-xs text-alert">{error}</div> : null}
     </section>
   );
 }

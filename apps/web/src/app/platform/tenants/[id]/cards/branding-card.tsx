@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Crest } from "@/components/crest";
 import { togglePublicListing } from "../actions";
 import type { tenants } from "@/db/schema";
@@ -8,15 +8,24 @@ type TenantRow = typeof tenants.$inferSelect;
 
 export function BrandingCard({ tenant }: { tenant: TenantRow }) {
   const [listed, setListed] = useState(tenant.isPubliclyListed);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Resync local state when the RSC re-renders with a fresh tenant prop
+  // (e.g. after revalidatePath from any sibling action).
+  useEffect(() => {
+    setListed(tenant.isPubliclyListed);
+  }, [tenant.isPubliclyListed]);
+
   const onToggle = (next: boolean) => {
+    setError(null);
     setListed(next);
     startTransition(async () => {
       try {
         await togglePublicListing(tenant.id, next);
-      } catch {
+      } catch (e) {
         setListed(!next);
+        setError(e instanceof Error ? e.message : "Failed to update");
       }
     });
   };
@@ -46,6 +55,7 @@ export function BrandingCard({ tenant }: { tenant: TenantRow }) {
           <div className="text-xs text-ink-dim mt-0.5">
             When on, this tenant appears on the public school picker at uniformorder.online.
           </div>
+          {error ? <div className="text-xs text-alert mt-1">{error}</div> : null}
         </div>
         <button
           type="button"

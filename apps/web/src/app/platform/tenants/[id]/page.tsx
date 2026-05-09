@@ -1,24 +1,35 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTenant } from "@/db/queries";
+import type { TenantStatus } from "@/lib/platform/queries";
 import { BrandingCard } from "./cards/branding-card";
 import { OperatorCard } from "./cards/operator-card";
 import { StripeCard } from "./cards/stripe-card";
 import { DangerCard } from "./cards/danger-card";
+
+const STATUS_LABEL: Record<TenantStatus, string> = {
+  setup: "Setup",
+  active: "Active",
+  hidden: "Hidden",
+  disabled: "Disabled",
+};
+
+function deriveStatus(tenant: {
+  platformApprovalStatus: string;
+  stripeChargesEnabled: boolean | null;
+  isPubliclyListed: boolean;
+}): TenantStatus {
+  if (tenant.platformApprovalStatus === "rejected") return "disabled";
+  if (tenant.platformApprovalStatus !== "approved" || !tenant.stripeChargesEnabled) return "setup";
+  return tenant.isPubliclyListed ? "active" : "hidden";
+}
 
 export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
 
-  const status =
-    tenant.platformApprovalStatus === "rejected"
-      ? "Disabled"
-      : tenant.platformApprovalStatus !== "approved" || !tenant.stripeChargesEnabled
-        ? "Setup"
-        : tenant.isPubliclyListed
-          ? "Active"
-          : "Hidden";
+  const status = deriveStatus(tenant);
 
   return (
     <>
@@ -26,7 +37,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
         <div>
           <h1 className="font-serif text-2xl font-semibold">{tenant.name}</h1>
           <div className="text-sm text-ink-dim mt-1">
-            <span className="font-mono">{tenant.id}.uniformorder.online</span> · Status: <strong>{status}</strong>
+            <span className="font-mono">{tenant.id}.uniformorder.online</span> · Status: <strong>{STATUS_LABEL[status]}</strong>
           </div>
         </div>
         <Link href={`/${tenant.id}`} className="text-sm font-semibold text-navy-deep underline">
@@ -35,7 +46,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
       </header>
 
       <div className="flex-1 px-7 py-6 overflow-auto space-y-4 max-w-4xl">
-        {status === "Setup" ? (
+        {status === "setup" ? (
           <ResumeOnboarding tenant={tenant} />
         ) : (
           <>
