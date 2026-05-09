@@ -38,9 +38,9 @@ const IMHS_ORDERS: AdminOrder[] = [
     mobile: "0405 178 183",
     email: "support@uniformorder.online",
     items: [
-      { itemId: "shirt-ls", variantLabel: "Boys 10–24", size: "16", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
+      { itemId: "shirt-ls", variantLabel: "10–24", size: "16", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
       { itemId: "jumper", variantLabel: "12–16", size: "16", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },
-      { itemId: "trousers", variantLabel: "Year 7–10 long (137cm)", size: "7-10L", qty: 1, price: 18, name: "Trousers — Mid Grey" },
+      { itemId: "tie", variantLabel: "Year 7–10 long (137cm)", size: "7-10L", qty: 1, price: 18, name: "School Tie — Navy Crested" },
       { itemId: "tracks", variantLabel: "18–26", size: "20", qty: 1, price: 45, name: "Track Pants" },
       { itemId: "polo", variantLabel: "10–26", size: "16", qty: 1, price: 40, name: "Sports Polo Shirt" },
       { itemId: "sportsbag", variantLabel: "Large", size: "L", qty: 1, price: 46, name: "Sports Bag — Maroon" },
@@ -62,7 +62,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     mobile: "0400 000 000",
     email: "lin.chen@example.com",
     items: [
-      { itemId: "shirt-ss", variantLabel: "Boys 10–26", size: "12", qty: 3, price: 32, name: "White Shirt — Short Sleeves" },
+      { itemId: "shirt-ss", variantLabel: "10–26", size: "12", qty: 3, price: 32, name: "White Shirt — Short Sleeves" },
       { itemId: "shorts-sport", variantLabel: "12–24", size: "12", qty: 2, price: 30, name: "Sports Shorts" },
       { itemId: "cap", variantLabel: "One size", size: "OS", qty: 1, price: 17, name: "School Cap, Navy" },
     ],
@@ -83,7 +83,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     email: "sarah.park@example.com",
     items: [
       { itemId: "blazer", variantLabel: "88–95cm chest", size: "92", qty: 1, price: 185, name: "Blazer — Crested" },
-      { itemId: "tie", variantLabel: "One size", size: "OS", qty: 1, price: 20, name: "School Tie — Navy Crested" },
+      { itemId: "scarf", variantLabel: "One size", size: "OS", qty: 1, price: 20, name: "School Scarf" },
     ],
     total: 214.5,
     stripeRef: "pi_3OrCpQ",
@@ -120,8 +120,8 @@ const IMHS_ORDERS: AdminOrder[] = [
     mobile: "0445 333 444",
     email: "kate.thompson@example.com",
     items: [
-      { itemId: "shirt-ls", variantLabel: "Boys 10–24", size: "18", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
-      { itemId: "trousers", variantLabel: "Year 11–12 long (147cm)", size: "11-12L", qty: 1, price: 18, name: "Trousers — Mid Grey" },
+      { itemId: "shirt-ls", variantLabel: "10–24", size: "18", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
+      { itemId: "tie", variantLabel: "Year 11–12 long (147cm)", size: "11-12L", qty: 1, price: 18, name: "School Tie — Navy Crested" },
       { itemId: "jacket", variantLabel: "12–3XL", size: "L", qty: 1, price: 100, name: "Jacket — Navy with Zip" },
     ],
     total: 174,
@@ -161,7 +161,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     email: "amy.lee@example.com",
     items: [
       { itemId: "blazer", variantLabel: "100–115cm chest", size: "105", qty: 1, price: 210, name: "Blazer — Crested" },
-      { itemId: "tie", variantLabel: "One size", size: "OS", qty: 1, price: 20, name: "School Tie — Navy Crested" },
+      { itemId: "scarf", variantLabel: "One size", size: "OS", qty: 1, price: 20, name: "School Scarf" },
       { itemId: "calc", variantLabel: "N/A", size: "OS", qty: 1, price: 33, name: "Scientific Calculator" },
     ],
     total: 272.5,
@@ -180,7 +180,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     mobile: "0478 999 000",
     email: "paul.brown@example.com",
     items: [
-      { itemId: "shirt-ss", variantLabel: "Boys 10–26", size: "10", qty: 3, price: 32, name: "White Shirt — Short Sleeves" },
+      { itemId: "shirt-ss", variantLabel: "10–26", size: "10", qty: 3, price: 32, name: "White Shirt — Short Sleeves" },
       { itemId: "sock-white", variantLabel: "3–9", size: "3-9", qty: 3, price: 5, name: "White Sport Socks" },
       { itemId: "cap", variantLabel: "One size", size: "OS", qty: 1, price: 17, name: "School Cap, Navy" },
     ],
@@ -203,7 +203,7 @@ const RGSH_ORDERS: AdminOrder[] = [
     mobile: "0405 178 183",
     email: "support@uniformorder.online",
     items: [
-      { itemId: "shirt-ss", variantLabel: "Boys 10–26", size: "12", qty: 2, price: 32, name: "White Shirt — Short Sleeves" },
+      { itemId: "shirt-ss", variantLabel: "10–26", size: "12", qty: 2, price: 32, name: "White Shirt — Short Sleeves" },
       { itemId: "polo", variantLabel: "10–26", size: "12", qty: 1, price: 40, name: "Sports Polo Shirt" },
       { itemId: "backpack", variantLabel: "One size", size: "OS", qty: 1, price: 89, name: "School Backpack — Navy with Crest" },
     ],
@@ -224,7 +224,7 @@ const RGSH_ORDERS: AdminOrder[] = [
     email: "helen.wilson@example.com",
     items: [
       { itemId: "jumper", variantLabel: "12–16", size: "14", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },
-      { itemId: "trousers", variantLabel: "Year 7–10 long (137cm)", size: "7-10L", qty: 1, price: 18, name: "Trousers — Mid Grey" },
+      { itemId: "tie", variantLabel: "Year 7–10 long (137cm)", size: "7-10L", qty: 1, price: 18, name: "School Tie — Navy Crested" },
     ],
     total: 93,
     stripeRef: "pi_3OrJdE",

@@ -74,8 +74,7 @@ export const CATALOG: CatalogItem[] = [
     name: "White Shirt — Short Sleeves",
     description: "Embroidered school crest. Poly-cotton blend, machine wash cold.",
     variants: [
-      { label: "Boys 10–26", price: 32, sizes: SIZES_GENERIC },
-      { label: "Mens 4–8", price: 43, sizes: ["4", "5", "6", "7", "8"] },
+      { label: "10–26", price: 32, sizes: SIZES_GENERIC },
     ],
     sizeGuide: {
       unit: "cm",
@@ -110,8 +109,7 @@ export const CATALOG: CatalogItem[] = [
     name: "White Shirt — Long Sleeves",
     description: "Embroidered school crest. Poly-cotton blend.",
     variants: [
-      { label: "Boys 10–24", price: 28, sizes: ["10", "12", "14", "16", "18", "20", "22", "24"] },
-      { label: "Mens 5–8", price: 59, sizes: ["5", "6", "7", "8"] },
+      { label: "10–24", price: 28, sizes: ["10", "12", "14", "16", "18", "20", "22", "24"] },
     ],
     sizeGuide: {
       unit: "cm",
@@ -139,10 +137,8 @@ export const CATALOG: CatalogItem[] = [
     name: "Trousers — Mid Grey, Pleated Front",
     description: "Poly/viscose blend with adjustable waist.",
     variants: [
-      { label: "Year 7–10 short (127cm)", price: 17, sizes: ["7-10S"] },
-      { label: "Year 7–10 long (137cm)", price: 18, sizes: ["7-10L"] },
-      { label: "Year 11–12 short (137cm)", price: 17, sizes: ["11-12S"] },
-      { label: "Year 11–12 long (147cm)", price: 18, sizes: ["11-12L"] },
+      { label: "10–18", price: 57, sizes: ["10", "12", "13", "14", "15", "16", "17", "18"] },
+      { label: "Mens 5–8", price: 59, sizes: ["5", "6", "7", "8"] },
     ],
   },
   {
@@ -161,7 +157,12 @@ export const CATALOG: CatalogItem[] = [
     id: "tie",
     cat: "Winter",
     name: "School Tie — Navy Crested",
-    variants: [{ label: "One size", price: 20, sizes: ["OS"] }],
+    variants: [
+      { label: "Year 7–10 short (127cm)", price: 17, sizes: ["7-10S"] },
+      { label: "Year 7–10 long (137cm)", price: 18, sizes: ["7-10L"] },
+      { label: "Year 11–12 short (137cm)", price: 17, sizes: ["11-12S"] },
+      { label: "Year 11–12 long (147cm)", price: 18, sizes: ["11-12L"] },
+    ],
   },
   {
     id: "polo",
@@ -311,9 +312,9 @@ export interface CartLine {
 
 // Tim's saved cart (matches the paper form to make the demo feel real).
 export const SAMPLE_CART: CartLine[] = [
-  { itemId: "shirt-ls", variantLabel: "Boys 10–24", size: "16", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
+  { itemId: "shirt-ls", variantLabel: "10–24", size: "16", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
   { itemId: "jumper", variantLabel: "12–16", size: "16", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },
-  { itemId: "trousers", variantLabel: "Year 7–10 long (137cm)", size: "7-10L", qty: 1, price: 18, name: "Trousers — Mid Grey" },
+  { itemId: "tie", variantLabel: "Year 7–10 long (137cm)", size: "7-10L", qty: 1, price: 18, name: "School Tie — Navy Crested" },
   { itemId: "tracks", variantLabel: "18–26", size: "20", qty: 1, price: 45, name: "Track Pants" },
   { itemId: "polo", variantLabel: "10–26", size: "16", qty: 1, price: 40, name: "Sports Polo Shirt" },
   { itemId: "sportsbag", variantLabel: "Large", size: "L", qty: 1, price: 46, name: "Sports Bag — Maroon" },

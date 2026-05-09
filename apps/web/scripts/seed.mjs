@@ -91,32 +91,31 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
   console.log("🌱 Seeding catalog variants...");
 
   const variants = [
-    // shirt-ss
-    { itemId: "shirt-ss", label: "Boys 10–26", price: 32 },
-    { itemId: "shirt-ss", label: "Mens 4–8", price: 43 },
+    // shirt-ss (paper form has only one size row: 10–26 → $32)
+    { itemId: "shirt-ss", label: "10–26", price: 32 },
     // cap
     { itemId: "cap", label: "One size", price: 17 },
     // sock-white
     { itemId: "sock-white", label: "3–9", price: 5 },
     { itemId: "sock-white", label: "7–11", price: 5 },
-    // shirt-ls
-    { itemId: "shirt-ls", label: "Boys 10–24", price: 28 },
-    { itemId: "shirt-ls", label: "Mens 5–8", price: 59 },
+    // shirt-ls (paper form has only one size row: 10–24 → $28)
+    { itemId: "shirt-ls", label: "10–24", price: 28 },
     // jumper
     { itemId: "jumper", label: "12–16", price: 75 },
     { itemId: "jumper", label: "18–22", price: 77 },
     { itemId: "jumper", label: "24–26", price: 82 },
-    // trousers
-    { itemId: "trousers", label: "Year 7–10 short (127cm)", price: 17 },
-    { itemId: "trousers", label: "Year 7–10 long (137cm)", price: 18 },
-    { itemId: "trousers", label: "Year 11–12 short (137cm)", price: 17 },
-    { itemId: "trousers", label: "Year 11–12 long (147cm)", price: 18 },
+    // trousers (paper form: 10,12,…,18 → $57; men 5–8 → $59)
+    { itemId: "trousers", label: "10–18", price: 57 },
+    { itemId: "trousers", label: "Mens 5–8", price: 59 },
     // belt
     { itemId: "belt", label: "70–95cm", price: 15 },
     // jacket
     { itemId: "jacket", label: "12–3XL", price: 100 },
-    // tie
-    { itemId: "tie", label: "One size", price: 20 },
+    // tie (paper form: 4 length-by-year-group rows)
+    { itemId: "tie", label: "Year 7–10 short (127cm)", price: 17 },
+    { itemId: "tie", label: "Year 7–10 long (137cm)", price: 18 },
+    { itemId: "tie", label: "Year 11–12 short (137cm)", price: 17 },
+    { itemId: "tie", label: "Year 11–12 long (147cm)", price: 18 },
     // polo
     { itemId: "polo", label: "10–26", price: 40 },
     // shorts-sport
@@ -249,20 +248,20 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
 
   // Seed order lines for the first order
   const lines = [
-    { orderId: "IMHS-04298", itemId: "shirt-ls", itemName: "White Shirt — Long Sleeves", variantLabel: "Boys 10–24", qty: 2, unitPrice: 28.00, lineTotal: 56.00 },
+    { orderId: "IMHS-04298", itemId: "shirt-ls", itemName: "White Shirt — Long Sleeves", variantLabel: "10–24", qty: 2, unitPrice: 28.00, lineTotal: 56.00 },
     { orderId: "IMHS-04298", itemId: "jumper", itemName: "Jumper — Wool Blend, Crested", variantLabel: "12–16", qty: 1, unitPrice: 75.00, lineTotal: 75.00 },
-    { orderId: "IMHS-04298", itemId: "trousers", itemName: "Trousers — Mid Grey", variantLabel: "Year 7–10 long (137cm)", qty: 1, unitPrice: 18.00, lineTotal: 18.00 },
+    { orderId: "IMHS-04298", itemId: "tie", itemName: "School Tie — Navy Crested", variantLabel: "Year 7–10 long (137cm)", qty: 1, unitPrice: 18.00, lineTotal: 18.00 },
     { orderId: "IMHS-04298", itemId: "polo", itemName: "Sports Polo Shirt", variantLabel: "10–26", qty: 1, unitPrice: 40.00, lineTotal: 40.00 },
     { orderId: "IMHS-04298", itemId: "tracks", itemName: "Track Pants", variantLabel: "18–26", qty: 1, unitPrice: 45.00, lineTotal: 45.00 },
     { orderId: "IMHS-04298", itemId: "sportsbag", itemName: "Sports Bag — Maroon", variantLabel: "Large", qty: 1, unitPrice: 46.00, lineTotal: 46.00 },
     // Lines for order 2
-    { orderId: "IMHS-04297", itemId: "shirt-ss", itemName: "White Shirt — Short Sleeves", variantLabel: "Boys 10–26", qty: 2, unitPrice: 32.00, lineTotal: 64.00 },
+    { orderId: "IMHS-04297", itemId: "shirt-ss", itemName: "White Shirt — Short Sleeves", variantLabel: "10–26", qty: 2, unitPrice: 32.00, lineTotal: 64.00 },
     { orderId: "IMHS-04297", itemId: "cap", itemName: "School Cap, Navy", variantLabel: "One size", qty: 1, unitPrice: 17.00, lineTotal: 17.00 },
     { orderId: "IMHS-04297", itemId: "polo", itemName: "Sports Polo Shirt", variantLabel: "10–26", qty: 1, unitPrice: 40.00, lineTotal: 40.00 },
     { orderId: "IMHS-04297", itemId: "shorts-sport", itemName: "Sports Shorts", variantLabel: "12–24", qty: 1, unitPrice: 30.00, lineTotal: 30.00 },
     // Lines for order 3
     { orderId: "IMHS-04296", itemId: "blazer", itemName: "Blazer — Crested", variantLabel: "88–95cm chest", qty: 1, unitPrice: 185.00, lineTotal: 185.00 },
-    { orderId: "IMHS-04296", itemId: "tie", itemName: "School Tie — Navy Crested", variantLabel: "One size", qty: 1, unitPrice: 20.00, lineTotal: 20.00 },
+    { orderId: "IMHS-04296", itemId: "scarf", itemName: "School Scarf", variantLabel: "One size", qty: 1, unitPrice: 20.00, lineTotal: 20.00 },
     { orderId: "IMHS-04296", itemId: "jacket", itemName: "Jacket — Navy with Zip", variantLabel: "12–3XL", qty: 1, unitPrice: 100.00, lineTotal: 100.00 },
   ];
 
