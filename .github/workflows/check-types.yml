@@ -1,0 +1,39 @@
+name: check-types
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: check-types-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--ignore-scripts` skips postinstall hooks. Required because
+      # `@heroui-pro/react` runs a license check on postinstall that needs
+      # HEROUI_AUTH_TOKEN + libsecret. tsc --noEmit only reads `.d.ts` files,
+      # so the package's runtime postinstall is irrelevant for type-checking.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Generate Next.js route types (`.next/dev/types/routes.d.ts`) which
+      # `next-env.d.ts` references for `PageProps`/`LayoutProps`. Without this,
+      # tsc fails with "Cannot find name 'PageProps'" on every route file.
+      - run: pnpm --filter web exec next typegen
+
+      - run: pnpm check-types

@@ -1,22 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
 import Link from "next/link";
-import { TENANTS, type TenantId } from "@/lib/data";
-import { Crest } from "@/components/crest";
+import type { ParentOrderRow } from "@/db/queries";
+import { Crest, type CrestTenant } from "@/components/crest";
 import { Chip } from "@/components/chip";
-
-interface DbOrder {
-  id: string;
-  tenantId: string;
-  parentName: string;
-  parentEmail: string;
-  studentName: string;
-  studentYear: string;
-  delivery: "pickup" | "ship";
-  total: string;
-  status: "new" | "packing" | "ready" | "collected";
-  createdAt: string;
-}
 
 const STATUS_TONE: Record<string, "info" | "warn" | "success" | "neutral"> = {
   new: "info",
@@ -75,59 +61,11 @@ function StatusTrack({ accent, status }: { accent: string; status: string }) {
   );
 }
 
-export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
-  const [orders, setOrders] = useState<DbOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+function rowToCrestTenant(o: ParentOrderRow): CrestTenant {
+  return { id: o.tenantId, accent: o.tenantAccent, short: o.tenantShort };
+}
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      const normalizedEmail = parentEmail.trim().toLowerCase();
-      if (!normalizedEmail) {
-        setOrders([]);
-        setFetchError("Missing account email.");
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const tenantIds = Object.keys(TENANTS);
-        const results = await Promise.all(
-          tenantIds.map((tid) =>
-            fetch(
-              `/api/orders?tenantId=${encodeURIComponent(tid)}&email=${encodeURIComponent(normalizedEmail)}`
-            ).then(async (r) => {
-              if (!r.ok) {
-                const data = await r.json().catch(() => null);
-                throw new Error(data?.error ?? "Failed to fetch orders.");
-              }
-              return r.json();
-            })
-          )
-        );
-        setFetchError(null);
-        const all: DbOrder[] = results.flat();
-        // Sort newest first
-        all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setOrders(all);
-      } catch (err) {
-        console.error("Failed to fetch orders:", err);
-        setFetchError(err instanceof Error ? err.message : "Failed to fetch orders.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAll();
-  }, [parentEmail]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>Loading orders…</div>
-      </div>
-    );
-  }
-
+export function OrdersListClient({ orders }: { orders: ParentOrderRow[] }) {
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
@@ -136,16 +74,17 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
           className="font-serif text-[17px] font-semibold mb-1"
           style={{ color: "var(--color-ink)" }}
         >
-          {fetchError ? "Could not load orders" : "No orders yet"}
+          No orders yet
         </div>
         <div className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
-          {fetchError ?? "Your orders will appear here after you place them."}
+          Your orders will appear here after you place them.
         </div>
       </div>
     );
   }
 
   // Separate active (non-collected) from past (collected)
+  // DB already orders newest-first; preserve that within each group
   const active = orders.filter((o) => o.status !== "collected");
   const past = orders.filter((o) => o.status === "collected");
 
@@ -153,8 +92,7 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
     <div className="px-[18px] pt-3.5 pb-6">
       {/* Active orders */}
       {active.map((o) => {
-        const tenant = TENANTS[o.tenantId as TenantId];
-        if (!tenant) return null;
+        const tenant = rowToCrestTenant(o);
         return (
           <Link
             key={o.id}
@@ -166,22 +104,22 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
               <Crest tenant={tenant} size={32} />
               <div className="flex-1 min-w-0">
                 <div className="font-serif text-[13.5px] font-semibold leading-[1.2]">
-                  {tenant.short} · {o.studentName}
+                  {o.tenantShort} · {o.studentName}
                 </div>
                 <div className="text-[10.5px]" style={{ color: "var(--color-ink-dim)" }}>
-                  Placed {new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} · {o.id}
+                  Placed {o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "—"} · {o.id}
                 </div>
               </div>
               <Chip tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status]}</Chip>
             </div>
-            <StatusTrack accent={tenant.accent} status={o.status} />
+            <StatusTrack accent={o.tenantAccent} status={o.status} />
             <div
               className="mt-2.5 p-2.5 rounded-md text-[11.5px] leading-[1.5]"
               style={{ background: "var(--color-parchment)", color: "var(--color-ink-dim)" }}
             >
               ${parseFloat(o.total).toFixed(2)} ·{" "}
               {o.delivery === "pickup"
-                ? `We'll email you when it's ready for pickup at the ${tenant.short} office.`
+                ? `We'll email you when it's ready for pickup at the ${o.tenantShort} office.`
                 : "Shipping to your address."}
             </div>
           </Link>
@@ -199,8 +137,7 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
           </div>
           <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-rule)" }}>
             {past.map((o, i) => {
-              const tenant = TENANTS[o.tenantId as TenantId];
-              if (!tenant) return null;
+              const tenant = rowToCrestTenant(o);
               return (
                 <div
                   key={o.id}
@@ -217,16 +154,16 @@ export function OrdersListClient({ parentEmail }: { parentEmail: string }) {
                         {o.studentName}
                       </div>
                       <div className="text-[10.5px]" style={{ color: "var(--color-ink-dim)" }}>
-                        {new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })} · {o.id}
+                        {o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "—"} · {o.id}
                       </div>
                     </div>
                   </Link>
                   <div className="flex flex-col items-end gap-1">
                     <div className="text-[13px] font-bold tnum">${parseFloat(o.total).toFixed(2)}</div>
                     <Link
-                      href={`/${tenant.id}`}
+                      href={`/${o.tenantId}`}
                       className="text-[10.5px] font-semibold underline"
-                      style={{ color: tenant.accent }}
+                      style={{ color: o.tenantAccent }}
                     >
                       Re-order
                     </Link>

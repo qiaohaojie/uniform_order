@@ -3,12 +3,18 @@ import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
 import { OrdersListClient } from "./orders-list-client";
 import { getSessionUser } from "@/lib/auth/authorization";
+import { listOrdersForParent } from "@/db/queries";
 
 export default async function OrdersPage() {
   const user = await getSessionUser();
   if (!user) {
     redirect("/auth/sign-in?callbackURL=%2Forders");
   }
+
+  const orders = await listOrdersForParent({
+    userId: user.id,
+    email: user.email,
+  });
 
   return (
     <MobileShell bg="var(--color-paper)">
@@ -19,7 +25,7 @@ export default async function OrdersPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <OrdersListClient parentEmail={user.email} />
+        <OrdersListClient orders={orders} />
       </div>
 
       <BottomNav active="orders" />

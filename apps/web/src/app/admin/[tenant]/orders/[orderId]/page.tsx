@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { TENANTS, type TenantId } from "@/lib/data";
-import { getOrderById, getOrderRefunds, getTotalRefunded } from "@/db/queries";
+import { getOrderById, getOrderRefunds, getTotalRefunded, getTenant, toTenantBrand } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { Chip } from "@/components/chip";
 import { DoubleRule } from "@/components/double-rule";
@@ -40,8 +39,9 @@ export default async function OrderDetailPage({
   params,
 }: { params: Promise<{ tenant: string; orderId: string }> }) {
   const { tenant: tid, orderId } = await params;
-  if (!(tid in TENANTS)) notFound();
-  const tenant = TENANTS[tid as TenantId];
+  const tenantRecord = await getTenant(tid);
+  if (!tenantRecord) notFound();
+  const tenant = toTenantBrand(tenantRecord);
 
   // Fetch from live DB
   const order = await getOrderById(orderId);

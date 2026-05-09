@@ -5,7 +5,7 @@
 export type TenantId = "nsbh" | "rgsh";
 
 export interface Tenant {
-  id: TenantId;
+  id: string;
   name: string;
   short: string;
   accent: string;
