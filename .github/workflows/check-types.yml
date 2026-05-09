@@ -31,4 +31,9 @@ jobs:
       # so the package's runtime postinstall is irrelevant for type-checking.
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # Generate Next.js route types (`.next/dev/types/routes.d.ts`) which
+      # `next-env.d.ts` references for `PageProps`/`LayoutProps`. Without this,
+      # tsc fails with "Cannot find name 'PageProps'" on every route file.
+      - run: pnpm --filter web exec next typegen
+
       - run: pnpm check-types
