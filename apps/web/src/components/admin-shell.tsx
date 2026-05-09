@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { TENANTS, type TenantId } from "@/lib/data";
 import { Crest } from "./crest";
 import { PlatformMark } from "./platform-mark";
 import { authClient } from "@/lib/auth/client";
@@ -29,18 +28,21 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings", icon: "settings" },
 ] as const;
 
+type TenantBrand = { id: string; name: string; short: string; accent: string };
+
 export function AdminShell({
   tenantId,
+  tenant,
   userName,
   userEmail,
   children,
 }: {
   tenantId: string;
+  tenant: TenantBrand;
   userName?: string | null;
   userEmail: string;
   children: ReactNode;
 }) {
-  const tenant = TENANTS[tenantId as TenantId];
   const pathname = usePathname();
   const router = useRouter();
 

@@ -14,7 +14,6 @@ import {
   readActiveChildCookieClient,
   clearActiveChildCookieClient,
 } from "@/lib/active-child.client";
-import type { TenantId } from "@/lib/data";
 
 type TenantBrandRow = {
   id: string;
@@ -39,7 +38,7 @@ type Props =
 
 function tenantToBrand(t: TenantBrandRow) {
   return {
-    id: t.id as TenantId,
+    id: t.id,
     name: t.name,
     short: t.short,
     accent: t.accent,

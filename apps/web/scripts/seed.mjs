@@ -88,6 +88,25 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
     `;
   }
 
+  console.log("🌱 Seeding RGSH catalog items...");
+
+  const rgshCatalogItemsRows = items.map((it) => ({
+    ...it,
+    id: `rgsh-${it.id}`,
+    tenantId: "rgsh",
+  }));
+
+  for (const item of rgshCatalogItemsRows) {
+    await sql`
+      INSERT INTO catalog_items (id, tenant_id, name, category, description, sort_order)
+      VALUES (${item.id}, ${item.tenantId}, ${item.name}, ${item.category}, ${item.description}, ${item.sortOrder})
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name, category = EXCLUDED.category,
+        description = EXCLUDED.description, sort_order = EXCLUDED.sort_order,
+        updated_at = now()
+    `;
+  }
+
   console.log("🌱 Seeding catalog variants...");
 
   const variants = [
@@ -161,13 +180,20 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
     { itemId: "ring-binder", label: "N/A", price: 5 },
   ];
 
+  const rgshCatalogVariantsRows = variants.map((v) => ({
+    ...v,
+    itemId: `rgsh-${v.itemId}`,
+  }));
+
+  const allVariants = [...variants, ...rgshCatalogVariantsRows];
+
   // Delete existing variants for these items first (to avoid duplicates on re-seed)
-  const itemIds = [...new Set(variants.map(v => v.itemId))];
+  const itemIds = [...new Set(allVariants.map(v => v.itemId))];
   for (const itemId of itemIds) {
     await sql`DELETE FROM catalog_variants WHERE item_id = ${itemId}`;
   }
 
-  for (const v of variants) {
+  for (const v of allVariants) {
     await sql`
       INSERT INTO catalog_variants (item_id, label, price)
       VALUES (${v.itemId}, ${v.label}, ${v.price})

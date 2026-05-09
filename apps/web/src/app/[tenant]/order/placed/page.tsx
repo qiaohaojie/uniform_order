@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TENANTS, type TenantId } from "@/lib/data";
-import { getOrderForReceipt } from "@/db/queries";
+import { getTenant, toTenantBrand, getOrderForReceipt } from "@/db/queries";
 import { Crest } from "@/components/crest";
 import { Chip } from "@/components/chip";
 import { DoubleRule } from "@/components/double-rule";
@@ -10,13 +9,14 @@ import { CheckIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
 
 export default async function OrderPlacedPage({ params, searchParams }: PageProps<"/[tenant]/order/placed">) {
-  const { tenant: tid } = await params;
-  if (!(tid in TENANTS)) notFound();
-  const tenant = TENANTS[tid as TenantId];
+  const { tenant: slug } = await params;
+  const tenantRecord = await getTenant(slug);
+  if (!tenantRecord) notFound();
+  const tenant = toTenantBrand(tenantRecord);
   const sp = await searchParams;
   const total = typeof sp.total === "string" ? sp.total : "363.00";
   const delivery: "pickup" | "ship" = sp.delivery === "ship" ? "ship" : "pickup";
-  const orderId = typeof sp.orderId === "string" ? sp.orderId : `${tid.toUpperCase()}-XXXXX`;
+  const orderId = typeof sp.orderId === "string" ? sp.orderId : `${slug.toUpperCase()}-XXXXX`;
   const order = await getOrderForReceipt(orderId);
   const receiptEmail = order?.parentEmail ?? "your email";
 

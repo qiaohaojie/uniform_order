@@ -1,7 +1,12 @@
 import { shade } from "@/lib/ui";
 import type { Tenant } from "@/lib/data";
 
-export function Crest({ tenant, size = 56, ring = true }: { tenant: Tenant; size?: number; ring?: boolean }) {
+// Crest reads a minimal subset of Tenant — exposing the structural shape lets
+// callers (admin-shell, orders list) pass DB-derived rows without fabricating
+// unused fields like motto/address/shopEmail.
+export type CrestTenant = Pick<Tenant, "id" | "accent" | "short">;
+
+export function Crest({ tenant, size = 56, ring = true }: { tenant: CrestTenant; size?: number; ring?: boolean }) {
   const s = size;
   const r = s / 2;
   const gradId = `cg-${tenant.id}-${size}`;

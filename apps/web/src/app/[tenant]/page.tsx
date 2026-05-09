@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CATALOG, CATEGORIES, TENANTS, type TenantId } from "@/lib/data";
+import { CATEGORIES } from "@/lib/data";
+import { getTenant, getActiveCatalog, toTenantBrand } from "@/db/queries";
 import { getActiveChild } from "@/lib/active-child.server";
+import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
 import { CartIcon, SearchIcon } from "@/components/icons";
@@ -11,9 +13,26 @@ import { BottomNav } from "@/components/bottom-nav";
 const DEFAULT_CATEGORY = "Winter";
 
 export default async function CatalogPage({ params, searchParams }: PageProps<"/[tenant]">) {
-  const { tenant: tid } = await params;
-  if (!(tid in TENANTS)) notFound();
-  const tenant = TENANTS[tid as TenantId];
+  const { tenant: slug } = await params;
+  const [tenantRecord, catalog] = await Promise.all([
+    getTenant(slug),
+    getActiveCatalog(slug),
+  ]);
+  if (!tenantRecord) notFound();
+
+  // Browsing gate (catalog + item pages only). Hidden/pending tenants 404 for
+  // public visitors; platform admins keep access for preview. Receipt and
+  // cart/checkout routes deliberately skip this gate so parents retain access
+  // to in-flight carts and historical receipts if a tenant later goes hidden.
+  const isVisibleToPublic =
+    tenantRecord.isPubliclyListed &&
+    tenantRecord.platformApprovalStatus === "approved";
+  if (!isVisibleToPublic) {
+    const user = await getSessionUser();
+    if (!user || !isPlatformAdminEmail(user.email)) notFound();
+  }
+
+  const tenant = toTenantBrand(tenantRecord);
   const sp = await searchParams;
   const catParam = typeof sp.cat === "string" ? sp.cat : undefined;
   const activeCat = (catParam && CATEGORIES.includes(catParam as never) ? catParam : DEFAULT_CATEGORY) as string;
@@ -23,7 +42,7 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
     active && active.tenantId === tenant.id
       ? { name: active.name, year: `Year ${active.year}` }
       : null;
-  const items = CATALOG.filter((i) => i.cat === activeCat);
+  const items = catalog.filter((i) => i.cat === activeCat);
 
   return (
     <MobileShell bg="var(--color-paper)">

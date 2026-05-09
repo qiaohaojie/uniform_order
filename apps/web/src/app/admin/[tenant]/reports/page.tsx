@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
-import { TENANTS, type TenantId } from "@/lib/data";
-import { getLiveReportsData } from "@/db/queries";
+import { getLiveReportsData, getTenant, toTenantBrand } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { ExportCsvButton } from "@/components/export-csv-button";
 
 export default async function AdminReportsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
-  if (!(tid in TENANTS)) notFound();
-  const tenant = TENANTS[tid as TenantId];
+  const tenantRecord = await getTenant(tid);
+  if (!tenantRecord) notFound();
+  const tenant = toTenantBrand(tenantRecord);
   const reports = await getLiveReportsData(tid);
 
   const maxRev = Math.max(1, ...reports.monthlyRevenue.map((row) => row.revenue));
