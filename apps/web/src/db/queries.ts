@@ -1002,6 +1002,7 @@ export type ParentOrderRow = {
   tenantId: string;
   status: string;
   total: string;
+  delivery: "pickup" | "ship";
   createdAt: Date | null;
   studentName: string;
   parentEmail: string;
@@ -1034,6 +1035,7 @@ export async function listOrdersForParent(args: {
       createdAt: orders.createdAt,
       studentName: orders.studentName,
       parentEmail: orders.parentEmail,
+      delivery: orders.delivery,
       tenantName: tenants.name,
       tenantShort: tenants.short,
       tenantAccent: tenants.accent,
