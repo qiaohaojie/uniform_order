@@ -65,7 +65,7 @@ function StatusTrack({ accent, status }: { accent: string; status: string }) {
 /** Minimal shape that Crest actually reads: id, accent, short */
 function rowToCrestTenant(o: ParentOrderRow): Tenant {
   return {
-    id: o.tenantId as Tenant["id"],
+    id: o.tenantId,
     accent: o.tenantAccent,
     short: o.tenantShort,
     name: o.tenantName,

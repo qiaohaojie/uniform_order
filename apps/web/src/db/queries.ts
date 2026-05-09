@@ -983,7 +983,7 @@ export const getCatalogItem = cache(async (
  */
 export function toTenantBrand(row: typeof tenants.$inferSelect): Tenant {
   return {
-    id: row.id as Tenant["id"],
+    id: row.id,
     name: row.name,
     short: row.short,
     accent: row.accent,
