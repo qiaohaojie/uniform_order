@@ -1,6 +1,9 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds, parentChildren } from "./index";
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import { cache } from "react";
+import { CATALOG } from "@/lib/data";
+import type { CatalogItem, Tenant } from "@/lib/data";
 
 export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
 
@@ -882,4 +885,168 @@ export async function getOrderForReceipt(orderId: string) {
     .where(eq(orders.id, orderId))
     .limit(1);
   return row ?? null;
+}
+
+// ─── Parent UI adapters ───────────────────────────────────────────────────────
+
+/**
+ * v1 size-source bridge. Looks up the UI's `sizes` array from the static
+ * `CATALOG` flat array, keyed by itemId + variant label.
+ *
+ * The static CATALOG uses unprefixed item ids (e.g., 'shirt-ls'). The seed
+ * inserts those same unprefixed ids for NSBH/RGSH, so direct lookup works
+ * for the launch tenants. The wizard's clone path produces destination ids
+ * shaped `${dstTenantId}-${sourceItemId}` (e.g., 'mbg-shirt-ls') because
+ * `catalog_items.id` is a single-column PK and tenants need globally
+ * unique ids in the DB. For those cloned ids we fall back to stripping
+ * the tenantId prefix and re-searching the static CATALOG.
+ *
+ * TODO(post-launch): add a `sizes jsonb` column to `catalog_variants` and
+ * sunset this lookup. Tracked as a follow-up in remaining_work.md.
+ */
+function sizesForVariant(tenantId: string, itemId: string, variantLabel: string): string[] {
+  // Direct match — covers the launch tenants whose seed inserted unprefixed ids.
+  let item = CATALOG.find((i) => i.id === itemId);
+  // Cloned-tenant fallback — strip `${tenantId}-` prefix and retry.
+  if (!item && itemId.startsWith(`${tenantId}-`)) {
+    const stripped = itemId.slice(tenantId.length + 1);
+    item = CATALOG.find((i) => i.id === stripped);
+  }
+  const v = item?.variants.find((v) => v.label === variantLabel);
+  return v?.sizes ?? [variantLabel];
+}
+
+/**
+ * Active catalog for a tenant in the parent UI's `CatalogItem` shape.
+ * Filters items where active=true, with their active variants, sorted by
+ * sort_order. Wrapped in React cache() for request-scoped dedup.
+ */
+export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogItem[]> => {
+  const rows = await db
+    .select({
+      itemId: catalogItems.id,
+      name: catalogItems.name,
+      category: catalogItems.category,
+      description: catalogItems.description,
+      sizeGuide: catalogItems.sizeGuide,
+      sortOrder: catalogItems.sortOrder,
+      varLabel: catalogVariants.label,
+      varPrice: catalogVariants.price,
+      varActive: catalogVariants.active,
+    })
+    .from(catalogItems)
+    .leftJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
+    .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.active, true)))
+    .orderBy(catalogItems.sortOrder, catalogVariants.label);
+
+  // Group by item, building the UI's `CatalogItem` shape.
+  const map = new Map<string, CatalogItem>();
+  for (const r of rows) {
+    if (!map.has(r.itemId)) {
+      map.set(r.itemId, {
+        id: r.itemId,
+        name: r.name,
+        cat: r.category as CatalogItem["cat"],
+        description: r.description ?? "",
+        sizeGuide: (r.sizeGuide as CatalogItem["sizeGuide"]) ?? undefined,
+        variants: [],
+      } as unknown as CatalogItem);
+    }
+    if (r.varLabel != null && r.varActive) {
+      const item = map.get(r.itemId)!;
+      item.variants.push({
+        label: r.varLabel,
+        price: Number(r.varPrice),
+        sizes: sizesForVariant(tenantId, r.itemId, r.varLabel),
+      });
+    }
+  }
+  return Array.from(map.values());
+});
+
+/**
+ * Single catalog item in the parent UI's `CatalogItem` shape, or null if
+ * not found / inactive. Re-uses getActiveCatalog for request-scoped dedup.
+ */
+export const getCatalogItem = cache(async (
+  tenantId: string,
+  itemId: string,
+): Promise<CatalogItem | null> => {
+  const items = await getActiveCatalog(tenantId);
+  return items.find((i) => i.id === itemId) ?? null;
+});
+
+/**
+ * Adapt a DB tenant row to the parent UI's `Tenant` shape. Materializes
+ * `accentInk` (default white) and replaces nullable copy fields with empty
+ * strings so existing components don't need null guards.
+ */
+export function toTenantBrand(row: typeof tenants.$inferSelect): Tenant {
+  return {
+    id: row.id as Tenant["id"],
+    name: row.name,
+    short: row.short,
+    accent: row.accent,
+    accentInk: "#FFFFFF",
+    motto: row.motto ?? "",
+    address: row.address ?? "",
+    shopHours: row.shopHours ?? "",
+    shopEmail: row.shopEmail ?? "",
+  };
+}
+
+// ─── Cross-tenant parent order history ───────────────────────────────────────
+
+export type ParentOrderRow = {
+  id: string;
+  tenantId: string;
+  status: string;
+  total: string;
+  createdAt: Date | null;
+  studentName: string;
+  parentEmail: string;
+  tenantName: string;
+  tenantShort: string;
+  tenantAccent: string;
+};
+
+/**
+ * Cross-tenant order list for a parent. Dual-key match: matches on user_id when
+ * present, OR on lowercased parent_email. Required because orders.user_id is
+ * nullable (pre-auth orders, guest checkouts, FK-orphaned via onDelete:'set null').
+ *
+ * Joins tenants so historical orders for hidden/disabled tenants stay visible —
+ * those flags gate new browsing, not old receipts.
+ */
+export async function listOrdersForParent(args: {
+  userId: string | null;
+  email: string;
+}): Promise<ParentOrderRow[]> {
+  const { userId, email } = args;
+  const lowered = email.toLowerCase();
+
+  const rows = await db
+    .select({
+      id: orders.id,
+      tenantId: orders.tenantId,
+      status: orders.status,
+      total: orders.total,
+      createdAt: orders.createdAt,
+      studentName: orders.studentName,
+      parentEmail: orders.parentEmail,
+      tenantName: tenants.name,
+      tenantShort: tenants.short,
+      tenantAccent: tenants.accent,
+    })
+    .from(orders)
+    .innerJoin(tenants, eq(tenants.id, orders.tenantId))
+    .where(
+      or(
+        userId ? eq(orders.userId, userId) : sql`false`,
+        sql`lower(${orders.parentEmail}) = ${lowered}`,
+      ),
+    )
+    .orderBy(desc(orders.createdAt));
+
+  return rows;
 }
