@@ -53,6 +53,8 @@ To run a single Next.js route in isolation, use the dev server and navigate to t
 
 **Target host:** Hostinger "Cloud Startup" Node.js app — **not** Vercel. Do not add `vercel.json`, Vercel-specific config, or assume Vercel runtime features (Edge runtime, Vercel KV, Vercel Cron, `@vercel/*` packages, etc.).
 
+**Production domain:** `uniformorder.online` (TLD `.online`, **not** `.com.au`). Some older UI prototypes show `uniformorder.com.au` — that is wrong; ignore it. All copy, emails, links, subdomain references, and seller-of-record text must use `uniformorder.online`.
+
 - Security headers (HSTS, CSP, X-Frame-Options, etc.) are set in `apps/web/next.config.ts` via `async headers()` so they apply under `next start` on any host.
 - `next.config.ts` uses `output: "standalone"` so the build produces a self-contained `.next/standalone/` bundle that Hostinger's Node.js app can run directly.
 - Env vars are configured in the Hostinger Node.js app panel (hPanel → Advanced → Node.js → Environment Variables), **not** via `vercel env`. After adding/changing an env var, restart the Node.js app from the same panel for it to take effect.
