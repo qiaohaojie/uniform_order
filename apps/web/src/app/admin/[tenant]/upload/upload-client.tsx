@@ -16,8 +16,8 @@ interface PreviewRow {
 }
 
 const DEMO_ROWS: PreviewRow[] = [
-  { i: 1, sku: "SHIRT-SS-B", name: "White Shirt — Short Sleeves", cat: "Summer", variant: "Boys 10–26", sizes: "10,12,14,16,18,20,22,24,26", price: "32.00", status: "update" },
-  { i: 2, sku: "SHIRT-SS-M", name: "White Shirt — Short Sleeves", cat: "Summer", variant: "Mens 4–8", sizes: "4,5,6,7,8", price: "43.00", status: "update" },
+  { i: 1, sku: "SHIRT-SS", name: "White Shirt — Short Sleeves", cat: "Summer", variant: "10–26", sizes: "10,12,14,16,18,20,22,24,26", price: "32.00", status: "update" },
+  { i: 2, sku: "SHIRT-LS", name: "White Shirt — Long Sleeves", cat: "Winter", variant: "10–24", sizes: "10,12,14,16,18,20,22,24", price: "28.00", status: "update" },
   { i: 3, sku: "JUMPER-NEW", name: "Jumper — Merino Wool, Crested", cat: "Winter", variant: "12–26", sizes: "12,14,16,18,20,22,24,26", price: "95.00", status: "add" },
   { i: 4, sku: "POLO-NEW", name: "Sports Polo Shirt (New Design)", cat: "Sports", variant: "10–26", sizes: "10,12,14,16,18,20,22,24,26", price: "42.00", status: "add" },
   { i: 5, sku: "TRACK-NEW", name: "Track Pants (New Design)", cat: "Sports", variant: "10–26", sizes: "10,12,14,16,18,20,22,24,26", price: "47.00", status: "add" },
@@ -75,7 +75,7 @@ export function UploadClient({ tenant }: { tenant: Tenant }) {
               style={{ background: "var(--color-parchment)", color: "var(--color-ink)" }}
             >
               sku,name,category,variant_label,sizes,price<br />
-              SHIRT-SS-B,White Shirt — Short Sleeves,Summer,Boys 10–26,&quot;10,12,14,16&quot;,32.00<br />
+              SHIRT-SS,White Shirt — Short Sleeves,Summer,10–26,&quot;10,12,14,16&quot;,32.00<br />
               JUMPER-NEW,Jumper — Merino Wool,Winter,12–26,&quot;12,14,16,18&quot;,95.00
             </div>
           </div>
