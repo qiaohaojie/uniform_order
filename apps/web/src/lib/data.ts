@@ -238,7 +238,7 @@ export const CATALOG: CatalogItem[] = [
     id: "shorts-navy",
     cat: "Summer",
     name: "Navy Shorts — Adjustable Side Tabs",
-    description: "Mid-grey poly/viscose with adjustable side tabs.",
+    description: "Navy poly/viscose with adjustable side tabs.",
     variants: [
       { label: "Boys 10–16", price: 43, sizes: ["10", "12", "14", "16"] },
       { label: "Mens 4–8", price: 45, sizes: ["4", "5", "6", "7", "8"] },

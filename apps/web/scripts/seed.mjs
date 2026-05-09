@@ -66,7 +66,7 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
     { id: "calc", tenantId: "nsbh", name: "Scientific Calculator", category: "Stationery", description: null, sortOrder: 18 },
     { id: "mathset", tenantId: "nsbh", name: "Math Set", category: "Stationery", description: null, sortOrder: 19 },
     // Paper-form items not previously seeded (PDP §4)
-    { id: "shorts-navy", tenantId: "nsbh", name: "Navy Shorts — Adjustable Side Tabs", category: "Summer", description: "Mid-grey poly/viscose with adjustable side tabs.", sortOrder: 20 },
+    { id: "shorts-navy", tenantId: "nsbh", name: "Navy Shorts — Adjustable Side Tabs", category: "Summer", description: "Navy poly/viscose with adjustable side tabs.", sortOrder: 20 },
     { id: "sock-grey", tenantId: "nsbh", name: "Grey Socks (cotton blend, midi)", category: "Winter", description: "Pack of one pair.", sortOrder: 21 },
     { id: "scarf", tenantId: "nsbh", name: "School Scarf", category: "Winter", description: null, sortOrder: 22 },
     { id: "prefect-tie", tenantId: "nsbh", name: "Prefect Tie", category: "Winter", description: null, sortOrder: 23 },
