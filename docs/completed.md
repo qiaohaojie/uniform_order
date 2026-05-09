@@ -312,6 +312,30 @@ Code complete; type-check passing. Smoke tests T2/T3/T4/T5/T6/T7 verified via DB
 
 ---
 
+### 4.14 NSBH catalog seed — 8 missing paper-form items (9 SKUs) ✅
+
+**Source:** former `remaining_work.md` §3.1 — shipped via PR #12 (squash-merge `e4ef0c7`, 2026-05-09).
+
+The 8 PDP-listed missing items now exist as 9 SKUs (Exercise Books split into A4 + Math because the paper form lists them as two distinct rows):
+
+| ID | Category | Variants | Price |
+|---|---|---|---|
+| `shorts-navy` | Summer | Boys 10–16 / Mens 4–8 | \$43 / \$45 |
+| `sock-grey` | Winter | 3–9 / 7–11 | \$5 |
+| `scarf` | Winter | One size | \$20 |
+| `prefect-tie` | Winter | 147cm | \$22 |
+| `soccer-jersey` | Sports | 12–22 | \$40 |
+| `swimming-briefs` | Sports | XS–XXL | \$45 |
+| `exercise-book-a4` | Stationery | N/A | \$2 |
+| `exercise-book-math` | Stationery | N/A | \$2 |
+| `ring-binder` | Stationery | N/A | \$5 |
+
+Variants and prices come from `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf`. Both `apps/web/scripts/seed.mjs` (DB) and `apps/web/src/lib/data.ts` (`CATALOG` — the parent shop's source today) were updated; `GarmentVector` shape map (`apps/web/src/components/garment.tsx`) gained entries for the new IDs so each renders the closest silhouette instead of the generic "misc" fallback. Gemini review caught one copy-paste bug (Navy Shorts described as "Mid-grey poly/viscose" — copied from the trousers entry); fixed in `2cda22a` before merge.
+
+Smoke-tested on `pnpm dev:web`: all 9 items appear in the correct category on `/nsbh` (Summer 4, Winter 9, Sports 7, Stationery 5) and item detail pages render with correct names + prices.
+
+**Production ops + remaining gaps still owed:** tracked in `remaining_work.md` §2.12 (run prod seed once deployed, RGSH catalog needs school sign-off, pre-existing shirt-ss/shirt-ls variant gaps).
+
 ### 4.13 Orphan `/[tenant]/refund-policy` route removed ✅
 
 **Source:** former `remaining_work.md` §3.10 item 1 — shipped via PR #11 (squash-merge `3e7a95c`, 2026-05-09).

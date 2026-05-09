@@ -29,6 +29,8 @@ This document lists every item that must be resolved (or explicitly deferred) be
 > §2.10 (`db.transaction` → `db.batch` fix, PR #10) and §3.3 ("add another child", PR #6) are complete — moved to `docs/completed.md` §4.11 and §4.12. §3.3 production ops verifications carried over to §2.11 below.
 >
 > §3.10 follow-up #1 (delete orphan `/[tenant]/refund-policy` route, PR #11) is complete — moved to `docs/completed.md` §4.13. Remaining §3.10 follow-ups (school-onboarding capture, v2 per-tenant policy link, deferred platform `/terms`) stay below.
+>
+> §3.1 NSBH catalog seed (PR #12, `e4ef0c7`) is complete — moved to `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt-ss/shirt-ls variant gaps are tracked in §2.12 below.
 
 ### 2.2 Super-admin / platform portal — none of 4 screens exist
 
@@ -62,6 +64,14 @@ The catalog management feature (self-service add/edit catalog items, image uploa
 - [x] **Migration 0008 (`catalog_image_url`)** — already applied to Neon prod (verified 2026-05-08; `__drizzle_migrations` row id=10 matches journal entry for `0008_catalog_image_url`). Nothing to do.
 - [ ] **(Optional) UploadThing free-tier monitoring** — current plan covers 2 GB storage / 100 GB bandwidth. With ~16 product photos × 2 schools × <2 MB each, usage is negligible. Re-evaluate at tenant #5 or any image-heavy redesign (e.g. high-res hero shots, multi-angle product photos).
 
+### 2.12 Catalog seed (NSBH paper form) — production + RGSH follow-ups
+
+§3.1 NSBH code shipped via PR #12 (squash-merge `e4ef0c7`). Outstanding:
+
+- [ ] **Run prod NSBH seed.** `apps/web/scripts/seed.mjs` is idempotent (`ON CONFLICT DO UPDATE` for items, `DELETE + INSERT` for variants). Run against production Neon once these changes deploy: `cd apps/web && node scripts/seed.mjs` with the prod `DATABASE_URL`. Today the parent shop renders from `CATALOG` in `lib/data.ts`, so the prod seed only affects the admin catalog table — it becomes load-bearing once parent-shop DB-reads land.
+- [ ] **RGSH catalog (separate task).** Needs school sign-off on the catalog list — RGSH currently inherits NSBH-only seed entries. Capture as a school-onboarding sub-task once §2.2 super-admin portal exists.
+- [ ] **Pre-existing shirt variant gaps.** The paper form has a third White-Shirt-SS row (`men 4–8 → $45`) and a middle White-Shirt-LS variant (`10, 12, …, 18 → $57`) that the existing seed never captured. PR #12 deliberately stayed focused on the 8 missing items; fix these in a separate small PR.
+
 ### 2.11 Parent-account ("add another child") — production ops follow-ups
 
 The parent-account / "add another child" feature shipped via PR #6 (squash-merge `2f6803e`). Code complete; the following non-code verifications still need to happen on a production-mirroring environment before NSBH go-live:
@@ -77,17 +87,9 @@ The parent-account / "add another child" feature shipped via PR #6 (squash-merge
 
 ## 3. 🟡 Medium — required by PDP/prototype, tolerable for soft launch
 
-### 3.1 Missing catalog items from the paper form
+### 3.1 Missing catalog items from the paper form ✅
 
-**Where:** `apps/web/scripts/seed.mjs` (DB seed) and `apps/web/src/lib/data.ts` (`CATALOG`, the parent shop's source-of-truth today).
-
-**Status (NSBH):** code complete. The 8 PDP-listed missing items now exist as 9 SKUs (Exercise Books split into A4 + Math, both on the paper form): `shorts-navy`, `sock-grey`, `scarf`, `prefect-tie`, `soccer-jersey`, `swimming-briefs`, `exercise-book-a4`, `exercise-book-math`, `ring-binder`. Variants/prices match the paper form (`my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf`). `GarmentVector` shape map updated so each new ID renders the closest silhouette instead of the generic "misc" fallback. Smoke-tested on `pnpm dev:web` — all 9 items appear in the correct category on `/nsbh` and the item detail pages render with correct names + prices.
-
-**Remaining:**
-
-- [ ] **Run prod NSBH seed.** `apps/web/scripts/seed.mjs` is idempotent (`ON CONFLICT DO UPDATE` for items, `DELETE + INSERT` for variants). Run against the production Neon DB once these changes ship: `cd apps/web && node scripts/seed.mjs` with the prod `DATABASE_URL`. (Note: today the parent shop reads `CATALOG` from `lib/data.ts`, not the DB — the seed run only matters for the admin catalog table and once parent-shop DB-reads land.)
-- [ ] **RGSH catalog (separate task).** Needs school sign-off on the catalog list — RGSH currently inherits NSBH-only seed entries. Capture as a school-onboarding sub-task once §2.2 super-admin portal exists.
-- [ ] **Out-of-scope discrepancies flagged for follow-up:** the paper form has a third White-Shirt-SS row (`men 4–8 → $45`) and a middle White-Shirt-LS variant (`10,12,…,18 → $57`) that the existing seed never captured. Track separately so this PR stays focused.
+Done (NSBH). See `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt variant gaps carried over to §2.12 below.
 
 ### 3.2 Refund-policy *page* (the actual content)
 
