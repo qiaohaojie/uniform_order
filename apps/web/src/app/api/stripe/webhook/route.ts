@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
             details_submitted: account.details_submitted ?? false,
           });
         }
-        revalidateTag("platform-billing");
+        revalidateTag("platform-billing", "seconds");
       } catch (err) {
         console.error("stripe webhook: account.updated DB write failed", err);
         await serverCaptureException(
