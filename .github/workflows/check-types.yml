@@ -25,6 +25,10 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      # `--ignore-scripts` skips postinstall hooks. Required because
+      # `@heroui-pro/react` runs a license check on postinstall that needs
+      # HEROUI_AUTH_TOKEN + libsecret. tsc --noEmit only reads `.d.ts` files,
+      # so the package's runtime postinstall is irrelevant for type-checking.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       - run: pnpm check-types
