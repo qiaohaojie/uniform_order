@@ -1,37 +1,19 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Guidance for Codex when working in this repository.
 
-## Superpowers Framework: Execution Protocol
+## Workflow
 
-### Phase 1: Discovery & Specification (Branch: **Base Branch**)
+Use the Superpowers workflow unless the user gives a narrower instruction.
 
-- **Initialize:** Call `superpowers:brainstorming` to define the "What" and "Why."
-- **Iterate:** Propose architectural choices and edge cases; wait for my review/questions.
-- **Commit:** Once I approve the spec, save and commit the document to your current **Base Branch**.
-
-### Phase 2: Isolation & Baseline
-
-- **Isolate:** Call `superpowers:using-git-worktrees` to branch off the Base Branch into a new, isolated directory.
-- **Verify:** Run the existing test suite immediately to ensure a clean **"Green"** baseline before making changes.
-
-### Phase 3: Tactical Planning (Inside Worktree)
-
-- **Initialize:** Call `superpowers:writing-plans` within the newly created worktree.
-- **Finalize:** Present the implementation tasks for my explicit approval. Ensure all file paths are grounded in the worktree filesystem.
-
-### Phase 4: Execution (Agentic Mode)
-
-- **Directive:** Call `superpowers:subagent-driven-development` (or preferred execution skill).
-- **Autonomy:** Operate **agentically**. Chain tasks together automatically without asking for sign-off between each successful task.
-- **Pause Only If:**
-  - A terminal command or build fails.
-  - A critical architectural decision/deviation is required.
-  - The entire Phase is successfully completed.
+1. Discovery/spec on the base branch: use `superpowers:brainstorming`, iterate with the user, then commit the approved spec.
+2. Isolation/baseline: use `superpowers:using-git-worktrees`, branch from the base branch, and run the existing gates before edits.
+3. Planning in the worktree: use `superpowers:writing-plans`, ground paths in the worktree, and wait for explicit plan approval.
+4. Execution: use `superpowers:subagent-driven-development` or the preferred execution skill. Continue agentically between successful tasks; pause only for failures, major design deviations, or phase completion.
 
 ## Commands
 
-All commands run from the repo root via pnpm workspaces.
+Run from the repo root via pnpm workspaces.
 
 ```bash
 pnpm dev:web          # Start Next.js dev server (apps/web)
@@ -40,109 +22,67 @@ pnpm check-types      # TypeScript check across all packages
 pnpm check-types:web  # TypeScript check for apps/web only
 ```
 
-There is no test suite or linter configured. Type-checking (`check-types`) is the primary correctness gate.
-If `.next` has been deleted and `PageProps` / `LayoutProps` are missing, regenerate Next.js route types first:
+No test suite or linter is configured. Type-checking is the main correctness gate.
+
+If `.next` was deleted and generated route types such as `PageProps` / `LayoutProps` are missing, run:
 
 ```bash
 pnpm --filter web exec next typegen
 ```
 
-To run a single Next.js route in isolation, use the dev server and navigate to the route directly.
+To isolate a Next.js route, start the dev server and navigate to the route directly.
 
 ## Deployment
 
-**Target host:** Hostinger "Cloud Startup" Node.js app — **not** Vercel. Do not add `vercel.json`, Vercel-specific config, or assume Vercel runtime features (Edge runtime, Vercel KV, Vercel Cron, `@vercel/*` packages, etc.).
+Target host: Hostinger Cloud Startup Node.js app, not Vercel. Do not add Vercel config, Vercel runtime assumptions, Vercel KV/Cron, or `@vercel/*` packages.
 
-**Production domain:** `uniformorder.online` (TLD `.online`, **not** `.com.au`). Some older UI prototypes show `uniformorder.com.au` — that is wrong; ignore it. All copy, emails, links, subdomain references, and seller-of-record text must use `uniformorder.online`.
+Production domain: `uniformorder.online`. Older `uniformorder.com.au` prototype text is wrong and must not be reused.
 
-- Security headers (HSTS, CSP, X-Frame-Options, etc.) are set in `apps/web/next.config.ts` via `async headers()` so they apply under `next start` on any host.
-- `next.config.ts` uses `output: "standalone"` so the build produces a self-contained `.next/standalone/` bundle that Hostinger's Node.js app can run directly.
-- Env vars are configured in the Hostinger Node.js app panel (hPanel → Advanced → Node.js → Environment Variables), **not** via `vercel env`. After adding/changing an env var, restart the Node.js app from the same panel for it to take effect.
+Security headers live in `apps/web/next.config.ts` via `async headers()`. The app uses `output: "standalone"` for Hostinger Node.js deployment. Env vars are managed in Hostinger hPanel and require an app restart after changes.
 
 ## Architecture
 
-### Monorepo structure
+- Monorepo: pnpm workspace with one app, `apps/web`.
+- Parent portal: `apps/web/src/app/[tenant]/`, mobile shopping flow in `MobileShell`.
+- Admin portal: `apps/web/src/app/admin/[tenant]/`, desktop operations UI in `AdminShell`.
+- Home: `apps/web/src/app/page.tsx`, school picker and one-child auto-redirect.
+- Tenants: `[tenant]` must be `nsbh` or `rgsh`; layouts validate via `TENANTS` in `lib/data.ts`.
+- Tenant accent color is passed through props and applied inline where needed.
 
-pnpm workspace with one app: `apps/web` (Next.js). The root `package.json` only contains workspace scripts.
+## Data
 
-### Two portals, one codebase
+Neon PostgreSQL plus Drizzle backs live catalog, tenant settings, orders, and Stripe account fields.
 
-**Parent portal** — `apps/web/src/app/[tenant]/`  
-Mobile-first shopping flow: catalog → item detail → cart → checkout → order confirmation. Wrapped in `MobileShell` (max-width 430px, centered on desktop).
+- `src/db/schema.ts`: database schema.
+- `src/db/index.ts`: lazy Neon/Drizzle client. Do not create DB clients at module import time.
+- `src/db/queries.ts`: shared catalog, order, and tenant query helpers. Prefer adding DB reads/writes here.
+- `app/api/orders`, `app/api/catalog`, `app/api/tenant`, `app/api/stripe/*`: client-facing live write surfaces. Client code must check `res.ok` and surface errors.
+- `lib/data.ts`: tenant metadata, parent/child demo data, static fallback catalog, helpers.
+- `lib/admin-data.ts`: legacy mock admin orders and sales analytics.
+- `lib/cart-store.ts`: cart localStorage store, key `uo:cart:v1`.
+- `lib/order-store.ts`: legacy localStorage orders plus `uo:student:v1`; checkout now writes orders to Neon.
 
-**Admin portal** — `apps/web/src/app/admin/[tenant]/`  
-Desktop sidebar layout via `AdminShell`. Sections: Dashboard, Orders (Kanban board), Catalog, Bulk Upload, Reports, Settings.
+Known gap: dashboard recent orders, reports, and sales KPIs still use mock data. See `docs/FEATURE_AUDIT.md`.
 
-`apps/web/src/app/page.tsx` is the parent home / school picker. It auto-redirects when there is only one child in `PARENT.kids`.
+## Server/Client Pattern
 
-### Multi-tenancy
+App Router server components fetch data and pass props to interactive client companions named like `*-screen.tsx` or `*-client.tsx`. Next.js 16 generated `PageProps` / `LayoutProps` params must be awaited in async server components.
 
-Every route is scoped to a `[tenant]` slug (`nsbh` or `rgsh`). The layout files (`app/[tenant]/layout.tsx`, `app/admin/[tenant]/layout.tsx`) validate the slug against `TENANTS` in `lib/data.ts` and call `notFound()` on mismatch.
+Path alias: `@/*` maps to `apps/web/src/*`.
 
-Tenant accent colour (e.g. `#7A1F2B` for NSBH) is threaded through props into components rather than read from CSS — components apply it via inline `style` on borders, backgrounds, and text.
+## UI
 
-### Data layer
+Tailwind CSS v4 tokens live in `apps/web/src/index.css`. Core tokens include `navy-deep`, `parchment`, `paper`, `rule`, `gold`, Newsreader headings, and Inter body text.
 
-The app now has a Neon PostgreSQL backend via Drizzle ORM. Static data remains for tenant metadata, parent demo data, legacy mock orders, and UI fallbacks, but live catalog, tenant settings, and order workflows should go through the DB/API layer.
+Use `.tnum` for prices and numeric displays. HeroUI v3 and HeroUI Pro are installed; use them for new interactive elements when they fit. Existing UI is mostly bespoke Tailwind.
 
-`src/db/schema.ts` — Drizzle schema for tenants, catalog items/variants, orders/order lines, and Stripe account fields.
+`components/garment.tsx` renders SVG product vectors by item ID; product imagery is not image-based.
 
-`src/db/index.ts` — Lazy Neon/Drizzle client. Do not instantiate DB clients at module import time; production builds collect route data without runtime env vars.
+## Design References
 
-`src/db/queries.ts` — Shared query helpers for catalog, orders, and tenant settings. Prefer adding DB access here rather than duplicating query logic in route handlers.
+Read prototypes as source references only. Do not copy their internal structure into the app.
 
-`app/api/orders`, `app/api/catalog`, `app/api/tenant`, and `app/api/stripe/*` — Route handlers for live workflows. They are the client-facing write surface; client components should check `res.ok` and surface errors instead of assuming writes succeed.
-
-`lib/data.ts` — Tenant definitions (`TENANTS`), parent/child demo definitions (`PARENT`), static fallback catalog data, and helpers.
-
-`lib/admin-data.ts` — Legacy mock admin orders and sales analytics. Dashboard recent orders and sales KPIs still read this mock data.
-
-`lib/cart-store.ts` — `useCart()` hook. Persists the current cart to `localStorage` (key `uo:cart:v1`). Seeds from `SAMPLE_CART` on first visit.
-
-`lib/order-store.ts` — Legacy localStorage order helper plus student-detail persistence (`uo:student:v1`). Current checkout persists orders to Neon via `POST /api/orders`; the parent order history uses the saved student email to fetch live DB orders.
-
-**Known data gap (see `docs/FEATURE_AUDIT.md`):** Dashboard recent orders are still static (`ADMIN_ORDERS`) and do not reflect live Neon orders. Reports and sales KPIs are also mock analytics data.
-
-### Server / client split pattern
-
-Next.js App Router server components do data fetching and pass props down. Pages with interactivity are split into a server `page.tsx` + a `"use client"` companion (`*-screen.tsx` or `*-client.tsx`). Example: `app/[tenant]/checkout/page.tsx` is a thin server wrapper; `checkout-screen.tsx` owns all state.
-
-### Design system
-
-Tailwind CSS v4 (`@import "tailwindcss"`) with custom design tokens defined in `src/index.css` under `@theme`:
-
-| Token               | Value                       |
-| ------------------- | --------------------------- |
-| `--color-navy-deep` | `#081A2D` (admin sidebar)   |
-| `--color-parchment` | `#FAF6EE` (page background) |
-| `--color-paper`     | `#FDFBF6` (card background) |
-| `--color-rule`      | `#E5DFD2` (borders)         |
-| `--color-gold`      | `#B08A3E` (accents)         |
-| `--font-serif`      | Newsreader (headings)       |
-| `--font-sans`       | Inter (body)                |
-
-Add `.tnum` class (`font-feature-settings: "tnum"`) on any price or numeric display.
-
-HeroUI v3 (`@heroui/react`) and HeroUI Pro (`@heroui-pro/react`) are installed but the current UI is built primarily with bespoke Tailwind components. Use HeroUI components when adding new interactive elements.
-
-`GarmentVector` in `components/garment.tsx` renders flat-vector SVG product illustrations keyed by item ID — no images are used.
-
-### Design references
-
-**Paper form:** `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` — the original paper order form this project digitizes.
-
-**Design system:** `my_doc/UI_prototypes/project/Design System.html` — canonical tokens, typography, and component styles.
-
-**UI prototypes:** `my_doc/UI_prototypes/project/` contains HTML/JSX prototypes exported from Codex Design covering three flows:
-
-- `parent.jsx` — parent shopping flow
-- `operator.jsx` — admin/operator flow
-- `superadmin.jsx` — platform super-admin flow
-
-Read the prototype source directly; do not render or screenshot it. Match the visual output in React — do not copy the prototype's internal structure into the app. `my_doc/HeroUI/design/data.jsx` and `primitives.jsx` are supporting references used by the prototypes.
-
-### TypeScript
-
-Path alias `@/*` maps to `apps/web/src/*`. Use `@/lib/data`, `@/components/...` etc.
-
-`LayoutProps<"/[tenant]">` and `PageProps<"/[tenant]">` are Next.js 16 generated route types; `params` must be `await`ed in async server components.
+- Paper form: `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf`
+- Design system: `my_doc/UI_prototypes/project/Design System.html`
+- Parent/admin/superadmin prototypes: `my_doc/UI_prototypes/project/`
+- Supporting HeroUI references: `my_doc/HeroUI/design/data.jsx`, `my_doc/HeroUI/design/primitives.jsx`
