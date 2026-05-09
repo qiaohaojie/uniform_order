@@ -1,5 +1,6 @@
 import { permanentRedirect, notFound } from "next/navigation";
 import { getTenant, getCatalogItem, toTenantBrand } from "@/db/queries";
+import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { GarmentVector } from "@/components/garment";
 import { Chip } from "@/components/chip";
 import { MobileShell } from "@/components/mobile-shell";
@@ -12,6 +13,16 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
     getCatalogItem(slug, itemId),
   ]);
   if (!tenantRecord) notFound();
+
+  // Browsing gate — see [tenant]/page.tsx for rationale. Mirror the same
+  // visibility check; cart/checkout/order-placed deliberately skip it.
+  const isVisibleToPublic =
+    tenantRecord.isPubliclyListed &&
+    tenantRecord.platformApprovalStatus === "approved";
+  if (!isVisibleToPublic) {
+    const user = await getSessionUser();
+    if (!user || !isPlatformAdminEmail(user.email)) notFound();
+  }
 
   let resolvedItem = item;
   if (!resolvedItem) {

@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Crest } from "./crest";
-import type { Tenant } from "@/lib/data";
 import { PlatformMark } from "./platform-mark";
 import { authClient } from "@/lib/auth/client";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
@@ -98,7 +97,7 @@ export function AdminShell({
             className="flex items-center gap-2.5 p-2 rounded-lg"
             style={{ background: "rgba(255,255,255,0.04)" }}
           >
-            <Crest tenant={tenant as Tenant} size={36} />
+            <Crest tenant={tenant} size={36} />
             <div className="flex-1 min-w-0">
               <div
                 className="text-[12px] font-semibold text-white leading-[1.2] truncate"

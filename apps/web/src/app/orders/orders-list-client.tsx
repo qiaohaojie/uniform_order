@@ -1,8 +1,7 @@
 "use client";
 import Link from "next/link";
 import type { ParentOrderRow } from "@/db/queries";
-import type { Tenant } from "@/lib/data";
-import { Crest } from "@/components/crest";
+import { Crest, type CrestTenant } from "@/components/crest";
 import { Chip } from "@/components/chip";
 
 const STATUS_TONE: Record<string, "info" | "warn" | "success" | "neutral"> = {
@@ -62,19 +61,8 @@ function StatusTrack({ accent, status }: { accent: string; status: string }) {
   );
 }
 
-/** Minimal shape that Crest actually reads: id, accent, short */
-function rowToCrestTenant(o: ParentOrderRow): Tenant {
-  return {
-    id: o.tenantId,
-    accent: o.tenantAccent,
-    short: o.tenantShort,
-    name: o.tenantName,
-    accentInk: "#FFFFFF",
-    motto: "",
-    address: "",
-    shopHours: "",
-    shopEmail: "",
-  };
+function rowToCrestTenant(o: ParentOrderRow): CrestTenant {
+  return { id: o.tenantId, accent: o.tenantAccent, short: o.tenantShort };
 }
 
 export function OrdersListClient({ orders }: { orders: ParentOrderRow[] }) {

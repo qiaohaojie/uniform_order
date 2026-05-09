@@ -918,8 +918,10 @@ function sizesForVariant(tenantId: string, itemId: string, variantLabel: string)
 
 /**
  * Active catalog for a tenant in the parent UI's `CatalogItem` shape.
- * Filters items where active=true, with their active variants, sorted by
- * sort_order. Wrapped in React cache() for request-scoped dedup.
+ * Returns only items with `active=true` AND at least one `active=true` variant
+ * (innerJoin), sorted by sort_order. Items with zero active variants would
+ * render price-less in the parent UI, so they're excluded at the SQL level.
+ * Wrapped in React cache() for request-scoped dedup.
  */
 export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogItem[]> => {
   const rows = await db
@@ -932,11 +934,16 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
       sortOrder: catalogItems.sortOrder,
       varLabel: catalogVariants.label,
       varPrice: catalogVariants.price,
-      varActive: catalogVariants.active,
     })
     .from(catalogItems)
-    .leftJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
-    .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.active, true)))
+    .innerJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
+    .where(
+      and(
+        eq(catalogItems.tenantId, tenantId),
+        eq(catalogItems.active, true),
+        eq(catalogVariants.active, true),
+      ),
+    )
     .orderBy(catalogItems.sortOrder, catalogVariants.label);
 
   // Group by item, building the UI's `CatalogItem` shape.
@@ -952,14 +959,11 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
         variants: [],
       } as unknown as CatalogItem);
     }
-    if (r.varLabel != null && r.varActive) {
-      const item = map.get(r.itemId)!;
-      item.variants.push({
-        label: r.varLabel,
-        price: Number(r.varPrice),
-        sizes: sizesForVariant(tenantId, r.itemId, r.varLabel),
-      });
-    }
+    map.get(r.itemId)!.variants.push({
+      label: r.varLabel,
+      price: Number(r.varPrice),
+      sizes: sizesForVariant(tenantId, r.itemId, r.varLabel),
+    });
   }
   return Array.from(map.values());
 });
