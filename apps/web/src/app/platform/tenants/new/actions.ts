@@ -115,6 +115,15 @@ export async function createStripeStandardForTenant(id: string) {
   return { ok: true as const, accountId: acctId, onboardingUrl: link.url };
 }
 
+export async function listCloneSources(excludeId: string) {
+  await requirePlatformAdmin();
+  const rows = await db
+    .select({ id: tenants.id, name: tenants.name })
+    .from(tenants)
+    .where(eq(tenants.platformApprovalStatus, "approved"));
+  return rows.filter((r) => r.id !== excludeId);
+}
+
 export async function cloneCatalogFromTenant(
   srcTenantId: string,
   dstTenantId: string,
