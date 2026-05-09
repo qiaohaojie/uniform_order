@@ -25,11 +25,12 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      # `--ignore-scripts` skips postinstall hooks. Required because
-      # `@heroui-pro/react` runs a license check on postinstall that needs
-      # HEROUI_AUTH_TOKEN + libsecret. tsc --noEmit only reads `.d.ts` files,
-      # so the package's runtime postinstall is irrelevant for type-checking.
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # `@heroui-pro/react` runs a license-check on postinstall that fetches
+      # the gated `dist/`. HEROUI_AUTH_TOKEN is the explicit non-keychain
+      # credential the tool prompts for in CI environments.
+      - run: pnpm install --frozen-lockfile
+        env:
+          HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
 
       # Generate Next.js route types (`.next/dev/types/routes.d.ts`) which
       # `next-env.d.ts` references for `PageProps`/`LayoutProps`. Without this,
