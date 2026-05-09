@@ -27,8 +27,10 @@ jobs:
 
       # `--ignore-scripts` skips postinstall hooks. Required because
       # `@heroui-pro/react` runs a license check on postinstall that needs
-      # HEROUI_AUTH_TOKEN + libsecret. tsc --noEmit only reads `.d.ts` files,
-      # so the package's runtime postinstall is irrelevant for type-checking.
+      # a CI-scoped HEROUI_AUTH_TOKEN (the local-keychain token is rejected
+      # in CI — see qiaohaojie/uniform_order#15 build attempt). tsc --noEmit
+      # only reads `.d.ts` files, so the runtime postinstall is irrelevant
+      # for type-checking. Drop this flag once a CI token is provisioned.
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Generate Next.js route types (`.next/dev/types/routes.d.ts`) which
