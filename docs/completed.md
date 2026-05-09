@@ -334,7 +334,26 @@ Variants and prices come from `my_doc/UI_prototypes/project/uploads/Uniform_Onli
 
 Smoke-tested on `pnpm dev:web`: all 9 items appear in the correct category on `/nsbh` (Summer 4, Winter 9, Sports 7, Stationery 5) and item detail pages render with correct names + prices.
 
-**Production ops + remaining gaps still owed:** tracked in `remaining_work.md` §2.12 (run prod seed once deployed, RGSH catalog needs school sign-off, pre-existing shirt-ss/shirt-ls variant gaps).
+**Production ops + remaining gaps still owed:** tracked in `remaining_work.md` §2.12 (run prod seed once deployed, RGSH catalog needs school sign-off).
+
+### 4.15 Catalog variant misalignments — shirt-ss / shirt-ls / trousers / tie ✅
+
+**Source:** former `remaining_work.md` §2.12 third bullet — shipped via PR #13 (squash-merge `e7bccf0`, 2026-05-09).
+
+The original §2.12 bullet ("Pre-existing shirt variant gaps") had misdiagnosed the issue: the rows it flagged as "missing shirt variants" (`men 4–8 → $45` and `10,12,…,18 → $57`) are actually rows for **other products** on the paper form. Investigation against `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` revealed a chain of mis-attributions in the seed/CATALOG predating PR #12 — variant rows had been copy-pasted from neighbouring rows when the original seed was authored.
+
+Untangled to match the paper form:
+
+| Item | Before | After (paper form) |
+|---|---|---|
+| `shirt-ss` | `Boys 10–26 \$32`, `Mens 4–8 \$43` | `10–26 \$32` only |
+| `shirt-ls` | `Boys 10–24 \$28`, `Mens 5–8 \$59` | `10–24 \$28` only |
+| `trousers` | 4 × `Year X–Y short/long` (\$17/\$18) | `10–18 \$57`, `Mens 5–8 \$59` |
+| `tie` | `One size \$20` | 4 × `Year 7–10 / 11–12 × short/long` (\$17/\$18) |
+
+Mock orders that referenced the now-removed variants were re-pointed to equivalent-priced real variants so order totals stay stable: previous `trousers / Year X–Y long / \$18` lines became `tie / Year X–Y long / \$18`; previous `tie / One size / \$20` lines became `scarf / One size / \$20`. Mock CSV preview rows in the bulk-upload admin page (`upload-client.tsx`) updated to use surviving variants.
+
+Files: `apps/web/scripts/seed.mjs`, `apps/web/src/lib/data.ts`, `apps/web/src/lib/admin-data.ts`, `apps/web/src/app/admin/[tenant]/upload/upload-client.tsx`, `docs/remaining_work.md`. Type-check clean; no schema, RGSH catalog, or Stripe code touched. Gemini's bot flagged the odd sizes `13/15/17` in trousers as inconsistent — verified false positive: paper form lists those literally as `10, 12, 13, 14, 15, 16, 17 & 18` for the \$57 row.
 
 ### 4.13 Orphan `/[tenant]/refund-policy` route removed ✅
 
