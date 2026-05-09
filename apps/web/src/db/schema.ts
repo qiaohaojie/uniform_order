@@ -36,6 +36,7 @@ export const tenants = pgTable("tenants", {
   name: text("name").notNull(),
   short: text("short").notNull(),
   accent: text("accent").notNull().default("#7A1F2B"),
+  logoUrl: text("logo_url"),  // nullable; Crest renders from initials when null
   motto: text("motto"),
   address: text("address"),
   shopHours: text("shop_hours"),
