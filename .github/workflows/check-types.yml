@@ -25,12 +25,13 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      # `@heroui-pro/react` runs a license-check on postinstall that fetches
-      # the gated `dist/`. HEROUI_AUTH_TOKEN is the explicit non-keychain
-      # credential the tool prompts for in CI environments.
-      - run: pnpm install --frozen-lockfile
-        env:
-          HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
+      # `--ignore-scripts` skips postinstall hooks. Required because
+      # `@heroui-pro/react` runs a license check on postinstall that needs
+      # a CI-scoped HEROUI_AUTH_TOKEN (the local-keychain token is rejected
+      # in CI — see qiaohaojie/uniform_order#15 build attempt). tsc --noEmit
+      # only reads `.d.ts` files, so the runtime postinstall is irrelevant
+      # for type-checking. Drop this flag once a CI token is provisioned.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Generate Next.js route types (`.next/dev/types/routes.d.ts`) which
       # `next-env.d.ts` references for `PageProps`/`LayoutProps`. Without this,
