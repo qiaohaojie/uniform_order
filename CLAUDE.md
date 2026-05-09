@@ -47,7 +47,7 @@ Routes scoped to a `[tenant]` slug (`imhs`, `rgsh` today). Layout files validate
 - **UploadThing** for catalog images (`lib/uploadthing.ts` — `catalogImage` route is gated on `tenant.platformApprovalStatus === 'approved'`).
 - **PostHog:** `serverCapture()` from `lib/analytics/server`; `posthog` from `lib/analytics/client`.
 - **Cart**: `lib/cart-store.ts` is `localStorage`-only (key `uo:cart:v1`). Order placement is DB-backed via `POST /api/orders`.
-- **Static fallback:** `lib/data.ts` `TENANTS` / `CATALOG` / `PARENT` constants are still read by some route files; the platform-portal plan migrates these to DB-backed reads.
+- **Static fallback:** `lib/data.ts` `TENANTS` / `CATALOG` constants are still read by some route files; the platform-portal plan migrates these to DB-backed reads.
 
 ### Server / client split
 
