@@ -709,14 +709,14 @@ export async function deleteCatalogItem(itemId: string) {
 
 // ─── Tenants ─────────────────────────────────────────────────────────────────
 
-export async function getTenant(tenantId: string) {
+export const getTenant = cache(async (tenantId: string) => {
   const [tenant] = await db
     .select()
     .from(tenants)
     .where(eq(tenants.id, tenantId))
     .limit(1);
   return tenant ?? null;
-}
+});
 
 export async function updateTenantStripe(
   tenantId: string,
