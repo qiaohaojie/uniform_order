@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { TENANTS, type TenantId } from "@/lib/data";
 import { Crest } from "./crest";
+import type { Tenant } from "@/lib/data";
 import { PlatformMark } from "./platform-mark";
 import { authClient } from "@/lib/auth/client";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
@@ -29,18 +29,21 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings", icon: "settings" },
 ] as const;
 
+type TenantBrand = { id: string; name: string; short: string; accent: string };
+
 export function AdminShell({
   tenantId,
+  tenant,
   userName,
   userEmail,
   children,
 }: {
   tenantId: string;
+  tenant: TenantBrand;
   userName?: string | null;
   userEmail: string;
   children: ReactNode;
 }) {
-  const tenant = TENANTS[tenantId as TenantId];
   const pathname = usePathname();
   const router = useRouter();
 
@@ -95,7 +98,7 @@ export function AdminShell({
             className="flex items-center gap-2.5 p-2 rounded-lg"
             style={{ background: "rgba(255,255,255,0.04)" }}
           >
-            <Crest tenant={tenant} size={36} />
+            <Crest tenant={tenant as Tenant} size={36} />
             <div className="flex-1 min-w-0">
               <div
                 className="text-[12px] font-semibold text-white leading-[1.2] truncate"

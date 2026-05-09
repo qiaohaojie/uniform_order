@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import { TENANTS, type TenantId } from "@/lib/data";
 import { AdminShell } from "@/components/admin-shell";
 import { getTenant } from "@/db/queries";
 import {
@@ -15,24 +14,33 @@ export default async function AdminTenantLayout({
   children,
 }: { params: Promise<{ tenant: string }>; children: React.ReactNode }) {
   const { tenant } = await params;
-  if (!(tenant in TENANTS)) notFound();
+
+  const tenantRecord = await getTenant(tenant);
+  if (!tenantRecord || tenantRecord.platformApprovalStatus === "rejected") {
+    notFound();
+  }
 
   const user = await getSessionUser();
   if (!user) {
     redirect(`/auth/sign-in?callbackURL=${encodeURIComponent(`/admin/${tenant}`)}`);
   }
 
-  const tenantRecord = await getTenant(tenant);
-  if (!tenantRecord) notFound();
-
-  const tenantOperatorEmail = tenantRecord.shopEmail ?? TENANTS[tenant as TenantId].shopEmail;
   const canAccessTenant =
     isPlatformAdminEmail(user.email) ||
-    isTenantOperatorEmail(user.email, tenantOperatorEmail);
+    isTenantOperatorEmail(user.email, tenantRecord.shopEmail);
 
   if (!canAccessTenant) {
     redirect(`/${tenant}`);
   }
 
-  return <AdminShell tenantId={tenant} userName={user.name} userEmail={user.email}>{children}</AdminShell>;
+  return (
+    <AdminShell
+      tenantId={tenant}
+      tenant={{ id: tenantRecord.id, name: tenantRecord.name, short: tenantRecord.short, accent: tenantRecord.accent }}
+      userName={user.name}
+      userEmail={user.email}
+    >
+      {children}
+    </AdminShell>
+  );
 }
