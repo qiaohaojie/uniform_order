@@ -14,14 +14,16 @@ import {
 import type { ItemCategory } from "@/lib/data";
 
 const ITEM_TO_SHAPE: Record<string, string> = {
-  "shirt-ss": "shirt", "shirt-ls": "shirt", polo: "shirt",
+  "shirt-ss": "shirt", "shirt-ls": "shirt", polo: "shirt", "soccer-jersey": "shirt",
   jumper: "jumper", hoodie: "jumper", jacket: "jumper",
   trousers: "pants", "shorts-sport": "pants", tracks: "pants",
+  "shorts-navy": "pants", "swimming-briefs": "pants",
   cap: "cap",
-  "sock-white": "sock", "sock-sport": "sock",
+  "sock-white": "sock", "sock-sport": "sock", "sock-grey": "sock",
   backpack: "bag", sportsbag: "bag",
-  blazer: "blazer", tie: "tie", belt: "belt",
+  blazer: "blazer", tie: "tie", "prefect-tie": "tie", scarf: "tie", belt: "belt",
   calc: "misc", mathset: "misc",
+  "exercise-book-a4": "misc", "exercise-book-math": "misc", "ring-binder": "misc",
 };
 
 const CATEGORY_DEFAULT: Record<ItemCategory, React.FC<{ accent: string; stroke: string; size: number }>> = {
