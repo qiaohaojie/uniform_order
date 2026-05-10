@@ -198,3 +198,5 @@ export const parentChildren = pgTable(
     parentIdx: index("parent_children_parent_idx").on(t.parentId),
   })
 );
+
+export type TenantRow = typeof tenants.$inferSelect;
