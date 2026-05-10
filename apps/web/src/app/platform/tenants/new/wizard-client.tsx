@@ -4,8 +4,8 @@ import { useState } from "react";
 import type { TenantRow } from "@/db/schema";
 import { Step1Identity } from "./steps/step-1-identity";
 import { Step2Branding } from "./steps/step-2-branding";
-import { Step3Stripe } from "./steps/step-3-stripe";
-import { Step4Operator } from "./steps/step-4-operator";
+import { Step3Operator } from "./steps/step-3-operator";
+import { Step4Stripe } from "./steps/step-4-stripe";
 import { Step5Catalog } from "./steps/step-5-catalog";
 import { Step6GoLive } from "./steps/step-6-go-live";
 
@@ -48,8 +48,8 @@ export function WizardClient({
               onContinue={() => goto(3)}
             />
           )}
-          {step === 3 && tenant && <Step3Stripe tenant={tenant} onContinue={() => goto(4)} />}
-          {step === 4 && tenant && <Step4Operator tenant={tenant} onContinue={() => goto(5)} />}
+          {step === 3 && tenant && <Step3Operator tenant={tenant} onContinue={() => goto(4)} />}
+          {step === 4 && tenant && <Step4Stripe tenant={tenant} onContinue={() => goto(5)} />}
           {step === 5 && tenant && <Step5Catalog tenant={tenant} onContinue={() => goto(6)} />}
           {step === 6 && tenant && <Step6GoLive tenant={tenant} catalogCount={catalogCount} />}
         </div>
@@ -60,7 +60,7 @@ export function WizardClient({
 }
 
 function StepRail({ step }: { step: number }) {
-  const labels = ["Identity", "Branding", "Stripe", "Operator", "Catalog", "Go live"];
+  const labels = ["Identity", "Branding", "Operator", "Stripe", "Catalog", "Go live"];
   return (
     <div className="flex gap-2">
       {labels.map((l, i) => (

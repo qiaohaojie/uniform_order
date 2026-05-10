@@ -34,20 +34,24 @@ export async function createTenantDraft(input: unknown) {
   const parsed = parseInput(step1Schema, input);
   if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
-  const existing = await db.query.tenants.findFirst({ where: eq(tenants.id, parsed.data.id) });
-  if (existing) {
-    return { ok: false as const, error: `Slug "${parsed.data.id}" is already taken.` };
+  try {
+    await db.insert(tenants).values({
+      id: parsed.data.id,
+      name: parsed.data.name,
+      short: parsed.data.short,
+      motto: parsed.data.motto ?? null,
+      address: parsed.data.address ?? null,
+      platformApprovalStatus: "pending",
+      isPubliclyListed: false,
+    });
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    const msg = e instanceof Error ? e.message : String(e);
+    if (code === "23505" || /duplicate key|unique constraint/i.test(msg)) {
+      return { ok: false as const, error: `Slug "${parsed.data.id}" is already taken.` };
+    }
+    throw e;
   }
-
-  await db.insert(tenants).values({
-    id: parsed.data.id,
-    name: parsed.data.name,
-    short: parsed.data.short,
-    motto: parsed.data.motto ?? null,
-    address: parsed.data.address ?? null,
-    platformApprovalStatus: "pending",
-    isPubliclyListed: false,
-  });
 
   revalidatePath("/platform/tenants");
   await serverCapture(user.email, "platform_tenant_created", {
@@ -70,12 +74,12 @@ export async function updateTenantBranding(id: string, input: unknown) {
       updatedAt: new Date(),
     })
     .where(eq(tenants.id, id))
-    .returning({ id: tenants.id });
+    .returning({ id: tenants.id, status: tenants.platformApprovalStatus });
 
   if (!updated) return { ok: false as const, error: "Tenant not found" };
 
   revalidatePath(`/platform/tenants/${id}`);
-  revalidatePath(`/${id}`, "layout");
+  if (updated.status === "approved") revalidatePath(`/${id}`, "layout");
   return { ok: true as const };
 }
 

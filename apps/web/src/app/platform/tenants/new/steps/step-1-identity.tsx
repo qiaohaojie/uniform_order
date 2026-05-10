@@ -16,14 +16,25 @@ export function Step1Identity({
   const [id, setId] = useState(tenant?.id ?? "");
   const [motto, setMotto] = useState(tenant?.motto ?? "");
   const [address, setAddress] = useState(tenant?.address ?? "");
+  const [shortDirty, setShortDirty] = useState(!!tenant?.short);
+  const [idDirty, setIdDirty] = useState(!!tenant?.id);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  // Auto-derive on initial typing only — let user override.
   function onName(v: string) {
     setName(v);
-    if (!short || short === deriveShort(name)) setShort(deriveShort(v));
-    if (!id || id === deriveSlug(short)) setId(deriveSlug(deriveShort(v)));
+    const nextShort = shortDirty ? short : deriveShort(v);
+    if (!shortDirty) setShort(nextShort);
+    if (!idDirty) setId(deriveSlug(nextShort));
+  }
+  function onShort(v: string) {
+    setShort(v);
+    setShortDirty(true);
+    if (!idDirty) setId(deriveSlug(v));
+  }
+  function onId(v: string) {
+    setId(v);
+    setIdDirty(true);
   }
 
   async function submit(e: React.FormEvent) {
@@ -47,11 +58,11 @@ export function Step1Identity({
     <form onSubmit={submit} className="space-y-5">
       <h2 className="font-serif text-xl font-semibold">Step 1 of 6 · School identity</h2>
       <Field label="Display name" value={name} onChange={onName} required />
-      <Field label="Short code" value={short} onChange={setShort} hint="2–8 chars, used as initials in the crest." />
+      <Field label="Short code" value={short} onChange={onShort} hint="2–8 chars, used as initials in the crest." />
       <Field
         label="Slug"
         value={id}
-        onChange={setId}
+        onChange={onId}
         hint={`URL: ${id || "<slug>"}.uniformorder.online`}
         disabled={!!tenant}
       />

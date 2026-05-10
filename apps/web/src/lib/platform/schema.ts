@@ -4,7 +4,10 @@ export const slugSchema = z
   .string()
   .min(3)
   .max(16)
-  .regex(/^[a-z][a-z0-9-]{2,15}$/, "Use lowercase letters, digits, hyphens; start with a letter");
+  .regex(
+    /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/,
+    "Use lowercase letters, digits, single hyphens (no leading/trailing/consecutive); start with a letter",
+  );
 
 export const step1Schema = z.object({
   name: z.string().min(2).max(120),

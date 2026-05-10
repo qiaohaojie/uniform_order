@@ -51,35 +51,33 @@ export async function cloneCatalogFromTenantUnsafe(
     where: (v, { inArray }) => inArray(v.itemId, srcItems.map((i) => i.id)),
   });
 
+  const itemsInsert = db.insert(catalogItems).values(
+    srcItems.map((it) => ({
+      id: idMap.get(it.id)!,
+      tenantId: dstTenantId,
+      name: it.name,
+      category: it.category,
+      description: it.description,
+      imageUrl: it.imageUrl,
+      sizeGuide: it.sizeGuide,
+      active: it.active,
+      sortOrder: it.sortOrder,
+    })),
+  );
   // Guard the variants insert: drizzle .values([]) throws on empty arrays.
-  const inserts: any[] = [
-    db.insert(catalogItems).values(
-      srcItems.map((it) => ({
-        id: idMap.get(it.id)!,
-        tenantId: dstTenantId,
-        name: it.name,
-        category: it.category,
-        description: it.description,
-        imageUrl: it.imageUrl,
-        sizeGuide: it.sizeGuide,
-        active: it.active,
-        sortOrder: it.sortOrder,
-      })),
-    ),
-  ];
   if (srcVariants.length > 0) {
-    inserts.push(
-      db.insert(catalogVariants).values(
-        srcVariants.map((v) => ({
-          itemId: idMap.get(v.itemId)!,
-          label: v.label,
-          price: v.price,
-          active: v.active,
-        })),
-      ),
+    const variantsInsert = db.insert(catalogVariants).values(
+      srcVariants.map((v) => ({
+        itemId: idMap.get(v.itemId)!,
+        label: v.label,
+        price: v.price,
+        active: v.active,
+      })),
     );
+    await db.batch([itemsInsert, variantsInsert]);
+  } else {
+    await db.batch([itemsInsert]);
   }
-  await db.batch(inserts as [typeof inserts[0], ...typeof inserts]);
 
   return { ok: true, copied: srcItems.length };
 }

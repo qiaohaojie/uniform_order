@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { TenantRow } from "@/db/schema";
 import { updateTenantOperator } from "../actions";
 
-export function Step4Operator({
+export function Step3Operator({
   tenant,
   onContinue,
 }: {
@@ -31,7 +31,7 @@ export function Step4Operator({
 
   return (
     <form onSubmit={save} className="space-y-5">
-      <h2 className="font-serif text-xl font-semibold">Step 4 of 6 · Operator & shop contact</h2>
+      <h2 className="font-serif text-xl font-semibold">Step 3 of 6 · Operator & shop contact</h2>
       <div>
         <label className="block">
           <div className="text-[11px] font-bold uppercase tracking-[0.6px] mb-1.5">Shop email</div>

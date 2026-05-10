@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { TenantRow } from "@/db/schema";
 import { createStripeStandardForTenant } from "../actions";
 
-export function Step3Stripe({
+export function Step4Stripe({
   tenant,
   onContinue,
 }: {
@@ -34,7 +34,7 @@ export function Step3Stripe({
 
   return (
     <div className="space-y-5">
-      <h2 className="font-serif text-xl font-semibold">Step 3 of 6 · Stripe Connect</h2>
+      <h2 className="font-serif text-xl font-semibold">Step 4 of 6 · Stripe Connect</h2>
       <p className="text-sm text-ink-dim">
         We'll create a Stripe <strong>Standard</strong> account for {tenant.name}. Forward the onboarding link to the school's bursar.
       </p>
