@@ -21,7 +21,7 @@
 | `apps/web/src/app/platform/tenants/new/actions.ts` | Modify | Replace local helpers with imports from `action-helpers.ts` |
 | `apps/web/src/components/platform/accent-picker.tsx` | **New** | Presets + hex input, extracted from wizard step-2 |
 | `apps/web/src/components/platform/branding-preview.tsx` | **New** | Stub `MobileShell` preview (form-state-driven, no DB) |
-| `apps/web/src/app/platform/tenants/new/steps/step-2-branding.tsx` | Modify | Use `AccentPicker` + `BrandingPreview` |
+| `apps/web/src/app/platform/tenants/new/steps/step-2-branding.tsx:7,65-84` | Modify | Use `AccentPicker` (line 7 = `PRESETS` const, lines 65-84 = "Accent colour" outer `<div>`) |
 | `apps/web/src/app/platform/tenants/[id]/actions.ts` | Modify | Replace local `requirePlatformAdmin` with import; add `editTenantBranding` |
 | `apps/web/src/app/platform/tenants/[id]/cards/branding-edit-drawer.tsx` | **New** | Drawer chrome + form + `BrandingPreview` |
 | `apps/web/src/app/platform/tenants/[id]/cards/branding-card.tsx` | Modify | Add `[Edit]` button to header; render drawer when open |
@@ -185,7 +185,7 @@ EOF
 
 **Files:**
 - Create: `apps/web/src/components/platform/accent-picker.tsx`
-- Modify: `apps/web/src/app/platform/tenants/new/steps/step-2-branding.tsx:7,66-83` (replace inline preset+hex JSX with `<AccentPicker>`)
+- Modify: `apps/web/src/app/platform/tenants/new/steps/step-2-branding.tsx:7,65-84` (replace inline preset+hex JSX with `<AccentPicker>`)
 
 - [ ] **Step 1: Create the component**
 
@@ -250,7 +250,7 @@ Add the import near the top:
 import { AccentPicker } from "@/components/platform/accent-picker";
 ```
 
-Replace the entire accent JSX block (lines 65–84 — the surrounding `<div>` whose label is "Accent colour"):
+Replace the entire accent JSX block (lines 65-84 — the outer `<div>` wrapping the "Accent colour" label, the preset swatches `.map`, and the hex `<input>`):
 
 ```tsx
 <div>
@@ -480,15 +480,13 @@ Drawer is a right-side overlay (fixed positioned `<aside>` + scrim). Form state 
 // apps/web/src/app/platform/tenants/[id]/cards/branding-edit-drawer.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UploadButton } from "@/components/uploadthing";
 import { Crest } from "@/components/crest";
 import { AccentPicker } from "@/components/platform/accent-picker";
 import { BrandingPreview } from "@/components/platform/branding-preview";
 import { editTenantBranding } from "../actions";
-import type { tenants } from "@/db/schema";
-
-type TenantRow = typeof tenants.$inferSelect;
+import type { TenantRow } from "@/db/schema";
 
 export function BrandingEditDrawer({
   tenant,
@@ -510,6 +508,20 @@ export function BrandingEditDrawer({
   const [pending, setPending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Esc-to-close + lock body scroll while drawer is mounted.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  // Whitespace-only motto edits are intentionally treated as no-op
+  // (`.trim()` both sides) so we don't burn a DB write or PostHog event.
   function diffChanged(): string[] {
     const out: string[] = [];
     if (logoUrl !== initial.logoUrl) out.push("logoUrl");
@@ -557,6 +569,7 @@ export function BrandingEditDrawer({
       {/* panel */}
       <aside
         role="dialog"
+        aria-modal="true"
         aria-label="Edit branding"
         className="absolute right-0 top-0 h-full w-full max-w-[720px] bg-paper shadow-xl flex flex-col"
       >
@@ -690,7 +703,8 @@ Right-side overlay drawer. Form on left (logo upload + remove, accent
 picker, motto), live BrandingPreview on right. Save is disabled while
 UploadThing is uploading so we can't persist a stale URL. Computes
 changedFields client-side and ships them to editTenantBranding for
-PostHog.
+PostHog. A11y: aria-modal, Esc-to-close, body-scroll-lock; full focus
+trap deferred.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -715,10 +729,8 @@ Full contents of `branding-card.tsx`:
 import { useEffect, useState, useTransition } from "react";
 import { Crest } from "@/components/crest";
 import { togglePublicListing } from "../actions";
-import type { tenants } from "@/db/schema";
+import type { TenantRow } from "@/db/schema";
 import { BrandingEditDrawer } from "./branding-edit-drawer";
-
-type TenantRow = typeof tenants.$inferSelect;
 
 export function BrandingCard({ tenant }: { tenant: TenantRow }) {
   const [listed, setListed] = useState(tenant.isPubliclyListed);
@@ -870,6 +882,8 @@ In the PostHog dashboard, confirm `platform_branding_edited` events landed with 
 
 - [ ] **Step 6: Verify `revalidatePath` actually flushes**
 
+**Precondition:** the tenant must be `platformApprovalStatus = 'approved'` — the action only revalidates `/${id}` (parent-shop layout) for approved tenants. If `nsbh` is still `pending` or `rejected` locally, skip this step (the parent shop wouldn't be reachable anyway). Check with: `psql $DATABASE_URL -c "select id, platform_approval_status from tenants where id='nsbh'"`.
+
 After a Save in step 4, `/nsbh` should reflect the change without a manual refresh of any cache layer (the action calls `revalidatePath('/${id}', 'layout')`). If the parent shop still shows the old accent, that's a regression — investigate before merging.
 
 - [ ] **Step 7: Type-check + final commit if any fixes**
@@ -895,6 +909,10 @@ Expected: PASS. If smoke testing surfaced fixes, commit them now.
 - §6 testing — Task 8.
 - §7 open questions — out of scope, no task needed.
 
+**Known divergences from spec (deferred — see Out-of-plan follow-ups):**
+- §2.2 footer "success closes drawer **and toasts**" — drawer closes silently; no toast primitive in repo yet.
+- Drawer a11y — Esc-to-close, body-scroll-lock, and `aria-modal="true"` are wired in Task 6; full focus trap deferred.
+
 **Placeholder scan:** none — every step contains the actual code or command.
 
 **Type consistency:** `editTenantBranding` signature `(id, input, changedFields)` matches the call site in `BrandingEditDrawer.save()`. `brandingEditSchema` field names match what the drawer ships and what the action `.set()` writes. `AccentPicker` props (`value`, `onChange`) match wizard step-2 refactor. `BrandingPreview` prop names (`tenantName`, `short`, `accent`, `logoUrl`, `motto`) match the drawer's call site.
@@ -903,5 +921,7 @@ Expected: PASS. If smoke testing surfaced fixes, commit them now.
 
 ## Out-of-plan follow-ups
 
+- **Success toast on save** — spec §2.2 mentions toasting on success, but the codebase has no toast primitive yet (`grep -r "toast\|sonner\|addToast" apps/web/src` is empty). Drawer just closes silently on success. Wire `@heroui/react`'s toast (or whatever the team picks) in a follow-up PR; closing the drawer is sufficient feedback for now.
 - Wizard step-2 right-rail preview (parent spec §7.3 step 2 mentions a preview that the current implementation doesn't render). `BrandingPreview` is now reusable so that's a tiny follow-up PR; not in scope here.
 - Audit log — parent spec already defers this to "second platform admin joins". No task.
+- Drawer focus trap — `aria-modal` + Esc + body-scroll-lock are wired, but no `focus-trap-react`-style trap. Acceptable for an admin-only tool; revisit if non-admin surfaces adopt the same drawer.
