@@ -361,13 +361,39 @@ Files: `apps/web/scripts/seed.mjs`, `apps/web/src/lib/data.ts`, `apps/web/src/li
 
 The `/[tenant]/refund-policy` route had been declared dead in earlier docs but was still referenced from the checkout consent label. Rewrote the consent text to inline the v1 email pattern (`I agree to the terms and privacy policy. For refund or exchange questions, contact {tenantName} at {shopEmail}.`) and deleted `apps/web/src/app/[tenant]/refund-policy/page.tsx`. Will be re-introduced under §3.10 follow-up #2 once schools author their own content via the §2.2 super-admin onboarding form.
 
+### 4.16 Platform portal — DB-back tenant routes + RGSH catalog seed (Phase 1) ✅
+
+**Source:** `remaining_work.md` §2.2 prerequisite work — shipped via PR #14 (squash-merge `46fcb6e`, 2026-05-09).
+
+Migrated the `[tenant]` and `admin/[tenant]` routes from the static `TENANTS`/`CATALOG` constants in `lib/data.ts` to DB-backed lookups via `getTenant(slug)` and tenant visibility rules. Seeded RGSH catalog so the second tenant has real data instead of inheriting NSBH-only entries. Foundation for the platform-portal trio (PRs #15–#17) — without DB-backed reads, the portal's tenant list / detail / wizard would have nothing real to show.
+
+### 4.17 Platform portal — scaffold + tenant list + tenant detail (Phases 2/3/5) ✅
+
+**Source:** `remaining_work.md` §2.2 (3 of 4 super-admin screens) — shipped via PR #15 (squash-merge `dd688dc`, 2026-05-09).
+
+`/platform/*` shell with auth gate using `isPlatformAdminEmail` (driven by `PLATFORM_ADMIN_EMAILS` env var). Tenants list with KPIs (active orders, total revenue, payouts-enabled flag) plus search + status filter. Tenant detail page with read-only cards (identity, branding, billing, operator, catalog summary). Spec: `docs/superpowers/specs/2026-05-09-platform-portal-design.md` v5.
+
+### 4.18 Platform portal — provision wizard (Phase 4) ✅
+
+**Source:** `remaining_work.md` §2.2 (provision wizard screen) — shipped via PR #16 (squash-merge `0c11acc`, 2026-05-09).
+
+4-step wizard for onboarding a new tenant: identity → branding → operator → review. Uses `safeParse` for per-step validation, dirty-flag gating between steps, reactive branding preview (live parent-shop colour swatch), TOCTOU-safe slug uniqueness check on submit, slug regex enforcement, PostHog instrumentation per step. Replaces the prior process of running a SQL seed script for new schools.
+
+### 4.19 Platform portal — billing tab (Phase 6) ✅
+
+**Source:** `remaining_work.md` §2.2 (billing overview screen) — shipped via PR #17 (squash-merge `ca85cbc`, 2026-05-10).
+
+`/platform/billing` shows connected-account state, balances, and 30-day gross/net per tenant. Cached `getTenantBilling` (`lib/platform/stripe-billing.ts`) wraps `accounts.retrieve` + `balance.retrieve` + `payouts.list` + auto-paginated `balanceTransactions.list` with React `cache()` (in-request dedup) + `unstable_cache` (5-min TTL). Per-tenant tags so `account.updated` webhook revalidates only the matched tenant. Net 30d sums only `charge`/`refund` balanceTransactions (not `payout`/`transfer`, which would understate revenue). 5-way concurrency cap on cold-cache fan-out. KPI tiles + table use `Intl.NumberFormat("en-AU")` for thousands separators. AUD-only by design via `PLATFORM_CURRENCY` constant.
+
+Files: `lib/platform/stripe-billing.ts`, `app/platform/billing/page.tsx`, `app/platform/billing/billing-table.tsx`, `app/api/stripe/webhook/route.ts` (+2 lines: import + `revalidateTag` in `account.updated` branch). Iterated through 5 rounds of Gemini review feedback before merge.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
 
 The following audit items are **not** complete and are tracked in `docs/remaining_work.md`:
 
-- Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) — `remaining_work.md` §2.2.
+- Super-admin / platform portal — branding editor (3 of 4 screens shipped via PRs #15, #16, #17) — `remaining_work.md` §2.2.
 - Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) — `remaining_work.md` §3.1.
 - Parent-account ("add another child") production ops verifications — `remaining_work.md` §2.11.
 - Dashboard "New product" and "Export" buttons not wired — `remaining_work.md` §4.2.

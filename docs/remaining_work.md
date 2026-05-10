@@ -32,18 +32,20 @@ This document lists every item that must be resolved (or explicitly deferred) be
 >
 > §3.1 NSBH catalog seed (PR #12, `e4ef0c7`) is complete — moved to `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt-ss/shirt-ls variant gaps are tracked in §2.12 below.
 
-### 2.2 Super-admin / platform portal — none of 4 screens exist
+### 2.2 Super-admin / platform portal — 3 of 4 screens shipped; branding editor remaining
 
-**Where:** No `/platform` or `/superadmin` routes. Prototype lives at `my_doc/UI_prototypes/project/superadmin.jsx`.
+**Where:** `/platform/*` under `app/platform/`. Spec: `docs/superpowers/specs/2026-05-09-platform-portal-design.md`.
 
-Without this, onboarding a second school requires running a SQL seed script. For multi-tenant go-live this is a blocker for tenant #2 (RGSH already exists from seed but cannot be edited via UI).
+| Screen | Status | PR |
+|---|---|---|
+| `/platform` shell + auth gate | ✅ Shipped | #15 (`dd688dc`) |
+| Tenants list with KPIs / status badges | ✅ Shipped | #15 (`dd688dc`) |
+| Tenant detail (read-only cards) | ✅ Shipped | #15 (`dd688dc`) |
+| Provision new tenant wizard (4-step) | ✅ Shipped | #16 (`0c11acc`) |
+| Billing & payouts overview | ✅ Shipped | #17 (`ca85cbc`) |
+| Branding editor (logo upload, accent colour picker, live parent preview) | ❌ Remaining | — |
 
-**Required:**
-- `/platform` (or `/superadmin`) section gated to platform-admin role.
-- Tenants list with KPIs and status badges.
-- "Provision new tenant" 6-step wizard (identity, branding, billing/Stripe, operator, catalog import, go-live).
-- Platform-level Stripe payouts overview.
-- Branding editor (logo upload, accent colour picker, live parent preview).
+The remaining branding editor is the only super-admin screen not yet built. It's not a blocker for NSBH go-live (NSBH branding lives in seed data) but is needed before any new school can self-serve their visual identity.
 
 ### 2.8 Ops / verification follow-ups (carried over from completed code work)
 
@@ -176,5 +178,5 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 | Dashboard "New product" button not wired | §4.2 |
 | Dashboard "Export" button not wired | §4.2 |
 | Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 3 |
-| Super-admin / platform portal — all 4 screens (tenants list, provision wizard, billing overview, branding editor) | §2.2 |
+| Super-admin / platform portal — tenants list, provision wizard, billing overview ✅ shipped (PRs #15, #16, #17); branding editor remaining | §2.2 |
 | Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) | §3.1 |
