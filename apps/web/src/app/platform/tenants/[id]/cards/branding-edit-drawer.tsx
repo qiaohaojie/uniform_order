@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UploadButton } from "@/components/uploadthing";
 import { Crest } from "@/components/crest";
 import { AccentPicker } from "@/components/platform/accent-picker";
@@ -15,58 +15,44 @@ export function BrandingEditDrawer({
   tenant: TenantRow;
   onClose: () => void;
 }) {
-  const initial = {
-    logoUrl: tenant.logoUrl,
-    accent: tenant.accent,
-    motto: tenant.motto ?? "",
-  };
-
-  const [logoUrl, setLogoUrl] = useState<string | null>(initial.logoUrl);
-  const [accent, setAccent] = useState(initial.accent);
-  const [motto, setMotto] = useState<string>(initial.motto);
+  const [logoUrl, setLogoUrl] = useState<string | null>(tenant.logoUrl);
+  const [accent, setAccent] = useState(tenant.accent);
+  const [motto, setMotto] = useState<string>(tenant.motto ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Stable refs so the keydown listener isn't re-registered on every parent
+  // render (parents typically pass an inline `() => setEditing(false)`), and
+  // so async post-await setters can no-op once the drawer has unmounted.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const mountedRef = useRef(true);
+
   // Esc-to-close + lock body scroll while drawer is mounted.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRef.current();
+    };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
+      mountedRef.current = false;
     };
-  }, [onClose]);
-
-  // Whitespace-only motto edits are intentionally treated as no-op
-  // (`.trim()` both sides) so we don't burn a DB write or PostHog event.
-  function diffChanged(): string[] {
-    const out: string[] = [];
-    if (logoUrl !== initial.logoUrl) out.push("logoUrl");
-    if (accent.toLowerCase() !== initial.accent.toLowerCase()) out.push("accent");
-    if (motto.trim() !== initial.motto.trim()) out.push("motto");
-    return out;
-  }
+  }, []);
 
   async function save() {
     setError(null);
-    const changed = diffChanged();
-    if (changed.length === 0) {
-      onClose();
-      return;
-    }
     setPending(true);
-    const r = await editTenantBranding(
-      tenant.id,
-      {
-        logoUrl,
-        accent,
-        motto: motto.trim() === "" ? undefined : motto.trim(),
-      },
-      changed,
-    );
+    const r = await editTenantBranding(tenant.id, {
+      logoUrl,
+      accent,
+      motto: motto.trim() === "" ? undefined : motto.trim(),
+    });
+    if (!mountedRef.current) return;
     setPending(false);
     if (!r.ok) {
       setError(r.error);
@@ -84,7 +70,8 @@ export function BrandingEditDrawer({
         type="button"
         aria-label="Close drawer"
         onClick={onClose}
-        className="absolute inset-0 bg-black/40"
+        disabled={pending}
+        className="absolute inset-0 bg-black/40 disabled:cursor-not-allowed"
       />
       {/* panel */}
       <aside
@@ -98,8 +85,9 @@ export function BrandingEditDrawer({
           <button
             type="button"
             onClick={onClose}
+            disabled={pending}
             aria-label="Close"
-            className="text-ink-dim hover:text-ink text-xl leading-none"
+            className="text-ink-dim hover:text-ink text-xl leading-none disabled:opacity-40"
           >
             ×
           </button>
@@ -187,7 +175,8 @@ export function BrandingEditDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-4 rounded-md border border-rule text-ink"
+              disabled={pending}
+              className="h-10 px-4 rounded-md border border-rule text-ink disabled:opacity-60"
             >
               Cancel
             </button>

@@ -61,27 +61,43 @@ export async function resyncStripeStatus(id: string) {
   return { ok: true as const };
 }
 
-export async function editTenantBranding(
-  id: string,
-  input: unknown,
-  changedFields: string[],
-) {
+export async function editTenantBranding(id: string, input: unknown) {
   const user = await requirePlatformAdmin();
   const parsed = parseInput(brandingEditSchema, input);
   if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
-  const [updated] = await db
+  const [existing] = await db
+    .select({
+      logoUrl: tenants.logoUrl,
+      accent: tenants.accent,
+      motto: tenants.motto,
+      status: tenants.platformApprovalStatus,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, id))
+    .limit(1);
+
+  if (!existing) return { ok: false as const, error: "Tenant not found" };
+
+  const nextMotto = parsed.data.motto ?? null;
+  const changedFields: string[] = [];
+  if (parsed.data.logoUrl !== existing.logoUrl) changedFields.push("logoUrl");
+  if (parsed.data.accent.toLowerCase() !== existing.accent.toLowerCase()) {
+    changedFields.push("accent");
+  }
+  if ((nextMotto ?? "") !== (existing.motto ?? "")) changedFields.push("motto");
+
+  if (changedFields.length === 0) return { ok: true as const };
+
+  await db
     .update(tenants)
     .set({
       logoUrl: parsed.data.logoUrl,
       accent: parsed.data.accent,
-      motto: parsed.data.motto ?? null,
+      motto: nextMotto,
       updatedAt: new Date(),
     })
-    .where(eq(tenants.id, id))
-    .returning({ id: tenants.id, status: tenants.platformApprovalStatus });
-
-  if (!updated) return { ok: false as const, error: "Tenant not found" };
+    .where(eq(tenants.id, id));
 
   await serverCapture(user.email, "platform_branding_edited", {
     tenantId: id,
@@ -89,7 +105,7 @@ export async function editTenantBranding(
   });
 
   revalidatePath(`/platform/tenants/${id}`);
-  if (updated.status === "approved") revalidatePath(`/${id}`, "layout");
+  if (existing.status === "approved") revalidatePath(`/${id}`, "layout");
 
   return { ok: true as const };
 }
