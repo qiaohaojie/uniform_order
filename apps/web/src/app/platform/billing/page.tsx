@@ -15,6 +15,8 @@ export default async function BillingPage() {
   const totalNet30 = merged.reduce((s, m) => s + m.net30d, 0);
   const totalGross30 = merged.reduce((s, m) => s + m.gross30d, 0);
 
+  const fmtKpi = (n: number) => new Intl.NumberFormat("en-AU").format(Math.round(n));
+
   return (
     <>
       <header className="px-7 py-5 border-b border-rule">
@@ -23,9 +25,9 @@ export default async function BillingPage() {
       <div className="flex-1 px-7 py-6 overflow-auto">
         <div className="grid grid-cols-4 gap-3.5">
           <Tile label="Connected accounts" value={`${enabled} / ${list.length}`} sub="enabled" />
-          <Tile label="Total balance" value={`${PLATFORM_CURRENCY} ${totalBalance.toFixed(0)}`} sub="across tenants" />
-          <Tile label="Payouts · 30d" value={`${PLATFORM_CURRENCY} ${totalNet30.toFixed(0)}`} sub="net" />
-          <Tile label="Gross · 30d" value={`${PLATFORM_CURRENCY} ${totalGross30.toFixed(0)}`} sub="pre-fee" />
+          <Tile label="Total balance" value={`${PLATFORM_CURRENCY} ${fmtKpi(totalBalance)}`} sub="across tenants" />
+          <Tile label="Payouts · 30d" value={`${PLATFORM_CURRENCY} ${fmtKpi(totalNet30)}`} sub="net" />
+          <Tile label="Gross · 30d" value={`${PLATFORM_CURRENCY} ${fmtKpi(totalGross30)}`} sub="pre-fee" />
         </div>
         <div className="mt-6">
           <BillingTable rows={merged} />

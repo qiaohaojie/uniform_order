@@ -2,8 +2,12 @@ import type { TenantBilling } from "@/lib/platform/stripe-billing";
 
 type Row = TenantBilling & { id: string; name: string };
 
+const moneyFormatter = new Intl.NumberFormat("en-AU", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 const fmtMoney = (amount: number, currency: string) =>
-  `${currency.toUpperCase()} ${amount.toFixed(2)}`;
+  `${currency.toUpperCase()} ${moneyFormatter.format(amount)}`;
 
 export function BillingTable({ rows }: { rows: Row[] }) {
   return (
