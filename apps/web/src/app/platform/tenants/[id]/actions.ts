@@ -3,13 +3,9 @@ import { db } from "@/db";
 import { tenants } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
-
-async function requirePlatformAdmin() {
-  const user = await getSessionUser();
-  if (!user || !isPlatformAdminEmail(user.email)) throw new Error("Forbidden");
-  return user;
-}
+import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
+import { brandingEditSchema } from "@/lib/platform/schema";
+import { serverCapture } from "@/lib/analytics/server";
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
@@ -62,5 +58,54 @@ export async function resyncStripeStatus(id: string) {
     stripePayoutsEnabled: !!acct.payouts_enabled,
   });
   revalidatePath(`/platform/tenants/${id}`);
+  return { ok: true as const };
+}
+
+export async function editTenantBranding(id: string, input: unknown) {
+  const user = await requirePlatformAdmin();
+  const parsed = parseInput(brandingEditSchema, input);
+  if (!parsed.ok) return { ok: false as const, error: parsed.error };
+
+  const [existing] = await db
+    .select({
+      logoUrl: tenants.logoUrl,
+      accent: tenants.accent,
+      motto: tenants.motto,
+      status: tenants.platformApprovalStatus,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, id))
+    .limit(1);
+
+  if (!existing) return { ok: false as const, error: "Tenant not found" };
+
+  const nextMotto = parsed.data.motto ?? null;
+  const changedFields: string[] = [];
+  if (parsed.data.logoUrl !== existing.logoUrl) changedFields.push("logoUrl");
+  if (parsed.data.accent.toLowerCase() !== existing.accent.toLowerCase()) {
+    changedFields.push("accent");
+  }
+  if ((nextMotto ?? "") !== (existing.motto ?? "")) changedFields.push("motto");
+
+  if (changedFields.length === 0) return { ok: true as const };
+
+  await db
+    .update(tenants)
+    .set({
+      logoUrl: parsed.data.logoUrl,
+      accent: parsed.data.accent,
+      motto: nextMotto,
+      updatedAt: new Date(),
+    })
+    .where(eq(tenants.id, id));
+
+  await serverCapture(user.email, "platform_branding_edited", {
+    tenantId: id,
+    changedFields,
+  });
+
+  revalidatePath(`/platform/tenants/${id}`);
+  if (existing.status === "approved") revalidatePath(`/${id}`, "layout");
+
   return { ok: true as const };
 }

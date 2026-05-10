@@ -22,6 +22,12 @@ export const step2Schema = z.object({
   accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
 });
 
+export const brandingEditSchema = z.object({
+  logoUrl: z.string().url().nullable(),
+  accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+  motto: z.string().max(200).optional(),
+});
+
 export const step4Schema = z.object({
   shopEmail: z.string().email(),
   shopHours: z.string().max(200).optional(),
@@ -30,4 +36,5 @@ export const step4Schema = z.object({
 
 export type Step1 = z.infer<typeof step1Schema>;
 export type Step2 = z.infer<typeof step2Schema>;
+export type BrandingEdit = z.infer<typeof brandingEditSchema>;
 export type Step4 = z.infer<typeof step4Schema>;
