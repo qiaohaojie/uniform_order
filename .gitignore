@@ -32,10 +32,13 @@ my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
 
 # git worktrees
 .worktrees/
+.claude/worktrees/
+.claire/
 
 # superpowers runtime state
 .superpowers/
 .claude/skills/integration-nextjs-app-router/references
+.claude/scheduled_tasks.lock
 
 # playwright-cli artifacts
 .playwright-cli/
