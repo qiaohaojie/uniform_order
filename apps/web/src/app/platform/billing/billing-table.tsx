@@ -3,7 +3,7 @@ import type { TenantBilling } from "@/lib/platform/stripe-billing";
 type Row = TenantBilling & { id: string; name: string };
 
 const fmtMoney = (amount: number, currency: string) =>
-  `${currency.toUpperCase()} ${amount.toFixed(0)}`;
+  `${currency.toUpperCase()} ${amount.toFixed(2)}`;
 
 export function BillingTable({ rows }: { rows: Row[] }) {
   return (

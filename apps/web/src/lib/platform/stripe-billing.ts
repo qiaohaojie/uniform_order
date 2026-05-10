@@ -63,18 +63,24 @@ async function fetchTenantBilling(tenantId: string, accountId: string | null): P
     ]);
 
     // Sum cents as integers to avoid float drift over many transactions.
+    // Net = volume after Stripe fees, excluding payout/transfer entries which
+    // represent funds leaving the Stripe balance (not revenue).
     let grossCents = 0;
     let netCents = 0;
     // Auto-paginate so totals don't silently cap at one page when tenants exceed ~100 tx/30d.
     for await (const t of stripe.balanceTransactions
       .list({ created: { gte: since }, limit: 100 }, stripeOpts)) {
       if (t.type === "charge") grossCents += t.amount;
-      netCents += t.net;
+      if (t.type === "charge" || t.type === "refund") netCents += t.net;
     }
 
-    const available = (balance.available[0]?.amount ?? 0) / 100;
-    const pending = (balance.pending[0]?.amount ?? 0) / 100;
-    const currency = balance.available[0]?.currency ?? FALLBACK_CURRENCY;
+    // Stripe Connect AU accounts return a single-currency balance today, but
+    // .find() is cheap insurance against a future multi-currency Stripe response.
+    const availableEntry = balance.available.find((b) => b.currency === FALLBACK_CURRENCY) ?? balance.available[0];
+    const pendingEntry = balance.pending.find((b) => b.currency === FALLBACK_CURRENCY) ?? balance.pending[0];
+    const available = (availableEntry?.amount ?? 0) / 100;
+    const pending = (pendingEntry?.amount ?? 0) / 100;
+    const currency = availableEntry?.currency ?? FALLBACK_CURRENCY;
     const last = payouts.data[0];
 
     return {
