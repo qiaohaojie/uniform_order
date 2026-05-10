@@ -1,13 +1,13 @@
 import { db } from "@/db";
 import { tenants } from "@/db/schema";
-import { getTenantBilling } from "@/lib/platform/stripe-billing";
+import { getTenantBilling, mapTenantBilling, PLATFORM_CURRENCY } from "@/lib/platform/stripe-billing";
 import { BillingTable } from "./billing-table";
 
 export default async function BillingPage() {
   const list = await db
     .select({ id: tenants.id, name: tenants.name, accountId: tenants.stripeAccountId })
     .from(tenants);
-  const billing = await Promise.all(list.map((t) => getTenantBilling(t.id, t.accountId)));
+  const billing = await mapTenantBilling(list, (t) => getTenantBilling(t.id, t.accountId));
   const merged = list.map((t, i) => ({ ...t, ...billing[i] }));
 
   const enabled = merged.filter((m) => m.chargesEnabled).length;
@@ -23,9 +23,9 @@ export default async function BillingPage() {
       <div className="flex-1 px-7 py-6 overflow-auto">
         <div className="grid grid-cols-4 gap-3.5">
           <Tile label="Connected accounts" value={`${enabled} / ${list.length}`} sub="enabled" />
-          <Tile label="Total balance" value={`AUD ${totalBalance.toFixed(0)}`} sub="across tenants" />
-          <Tile label="Payouts · 30d" value={`AUD ${totalNet30.toFixed(0)}`} sub="net" />
-          <Tile label="Gross · 30d" value={`AUD ${totalGross30.toFixed(0)}`} sub="pre-fee" />
+          <Tile label="Total balance" value={`${PLATFORM_CURRENCY} ${totalBalance.toFixed(0)}`} sub="across tenants" />
+          <Tile label="Payouts · 30d" value={`${PLATFORM_CURRENCY} ${totalNet30.toFixed(0)}`} sub="net" />
+          <Tile label="Gross · 30d" value={`${PLATFORM_CURRENCY} ${totalGross30.toFixed(0)}`} sub="pre-fee" />
         </div>
         <div className="mt-6">
           <BillingTable rows={merged} />

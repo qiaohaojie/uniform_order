@@ -18,6 +18,30 @@ export type TenantBilling = {
 export const PLATFORM_BILLING_TAG = "platform-billing";
 export const tenantBillingTag = (tenantId: string) => `platform-billing:${tenantId}`;
 
+// AUD is the platform-wide currency. Stripe Connect accounts are AU-only; KPI
+// aggregation assumes a single currency. Revisit if non-AU tenants are added.
+export const PLATFORM_CURRENCY = "AUD";
+
+// Cap parallel Stripe fan-out so a cold-cache load of N tenants doesn't burst
+// past Stripe's 100 req/s limit (each tenant fires 4 calls + paginated tx list).
+export async function mapTenantBilling<T>(
+  items: T[],
+  fn: (item: T) => Promise<TenantBilling>,
+  concurrency = 5,
+): Promise<TenantBilling[]> {
+  const out = new Array<TenantBilling>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 async function fetchTenantBilling(tenantId: string, accountId: string | null): Promise<TenantBilling> {
   if (!accountId) {
     return {
