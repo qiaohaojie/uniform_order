@@ -3,7 +3,9 @@ import { db } from "@/db";
 import { tenants } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requirePlatformAdmin } from "@/lib/platform/action-helpers";
+import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
+import { brandingEditSchema } from "@/lib/platform/schema";
+import { serverCapture } from "@/lib/analytics/server";
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
@@ -56,5 +58,38 @@ export async function resyncStripeStatus(id: string) {
     stripePayoutsEnabled: !!acct.payouts_enabled,
   });
   revalidatePath(`/platform/tenants/${id}`);
+  return { ok: true as const };
+}
+
+export async function editTenantBranding(
+  id: string,
+  input: unknown,
+  changedFields: string[],
+) {
+  const user = await requirePlatformAdmin();
+  const parsed = parseInput(brandingEditSchema, input);
+  if (!parsed.ok) return { ok: false as const, error: parsed.error };
+
+  const [updated] = await db
+    .update(tenants)
+    .set({
+      logoUrl: parsed.data.logoUrl,
+      accent: parsed.data.accent,
+      motto: parsed.data.motto ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(tenants.id, id))
+    .returning({ id: tenants.id, status: tenants.platformApprovalStatus });
+
+  if (!updated) return { ok: false as const, error: "Tenant not found" };
+
+  await serverCapture(user.email, "platform_branding_edited", {
+    tenantId: id,
+    changedFields,
+  });
+
+  revalidatePath(`/platform/tenants/${id}`);
+  if (updated.status === "approved") revalidatePath(`/${id}`, "layout");
+
   return { ok: true as const };
 }
