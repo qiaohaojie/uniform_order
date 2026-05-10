@@ -3,13 +3,7 @@ import { db } from "@/db";
 import { tenants } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
-
-async function requirePlatformAdmin() {
-  const user = await getSessionUser();
-  if (!user || !isPlatformAdminEmail(user.email)) throw new Error("Forbidden");
-  return user;
-}
+import { requirePlatformAdmin } from "@/lib/platform/action-helpers";
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
