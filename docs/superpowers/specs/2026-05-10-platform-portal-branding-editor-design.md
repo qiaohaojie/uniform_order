@@ -41,7 +41,11 @@ Two-pane, right-side drawer (matches catalog-management drawer from PR #9):
 
 ### 2.3 No PostHog deep-instrumentation
 
-One event on save: `platform_branding_edited` with `{ tenantId, changedFields: string[] }`. Matches the wizard's instrumentation cadence; deeper analytics aren't justified for an admin action that runs maybe twice per tenant lifetime.
+One event on save: `platform_branding_edited` with `{ tenantId, changedFields: string[] }` where `changedFields` is computed by diffing form state against the initial tenant prop. Matches the wizard's instrumentation cadence; deeper analytics aren't justified for an admin action that runs maybe twice per tenant lifetime.
+
+### 2.4 Save while logo upload is in flight
+
+`UploadButton`'s lifecycle gives us `onUploadBegin` and `onClientUploadComplete`. The drawer tracks an `isUploading` boolean: while true, **Save** is disabled and shows "Uploading…". Prevents the user from saving a stale `logoUrl` while a new image is mid-flight.
 
 ---
 
@@ -52,14 +56,18 @@ One event on save: `platform_branding_edited` with `{ tenantId, changedFields: s
 | File | Change |
 |---|---|
 | `apps/web/src/app/platform/tenants/[id]/cards/branding-card.tsx` | Add `[Edit]` button to header; wire to drawer state |
-| `apps/web/src/app/platform/tenants/[id]/cards/branding-edit-drawer.tsx` | **New** — drawer + form + preview |
+| `apps/web/src/app/platform/tenants/[id]/cards/branding-edit-drawer.tsx` | **New** — drawer chrome + form + preview |
 | `apps/web/src/components/platform/branding-preview.tsx` | **New** — stub `MobileShell` preview, reusable |
 | `apps/web/src/components/platform/accent-picker.tsx` | **New** — extracted from wizard step-2 (presets + hex input) |
 | `apps/web/src/app/platform/tenants/[id]/actions.ts` | Add `editTenantBranding(id, input)` server action |
 | `apps/web/src/lib/platform/schema.ts` | Add `brandingEditSchema = { logoUrl, accent, motto? }` |
+| `apps/web/src/lib/platform/action-helpers.ts` | **New** — extract `requirePlatformAdmin()` and `parseInput()` from `new/actions.ts` so both `[id]/actions.ts` and `new/actions.ts` import them |
+| `apps/web/src/app/platform/tenants/new/actions.ts` | Replace local `requirePlatformAdmin` / `parseInput` with imports from the shared helper |
 | `apps/web/src/app/platform/tenants/new/steps/step-2-branding.tsx` | Refactor to use new `accent-picker.tsx` + `branding-preview.tsx` |
 
 The two extracted components (`accent-picker`, `branding-preview`) are the reuse story: wizard step-2 and the post-creation editor share the same swatches and the same preview frame, so a future tweak to either flows to both.
+
+**Drawer chrome — bespoke, not shared.** The catalog-management drawer (`apps/web/src/app/admin/[tenant]/catalog/item-drawer.tsx`, 399 lines) is catalog-specific (variants, categories, GarmentVector) — not a generic shareable component. The branding drawer is a fresh component that **matches the visual pattern** (right-side overlay, header with title + close, body, footer with Cancel/Save) without trying to share code. If a third drawer-using surface lands later, that's the right time to extract.
 
 ### 3.2 Why a new server action (not reuse `updateTenantBranding`)
 
@@ -67,8 +75,16 @@ The wizard's existing `updateTenantBranding(id, step2Schema)` writes `logoUrl + 
 
 ```ts
 // apps/web/src/app/platform/tenants/[id]/actions.ts
-export async function editTenantBranding(id: string, input: unknown) {
-  await requirePlatformAdmin();
+import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
+import { serverCapture } from "@/lib/analytics/server";
+import { brandingEditSchema } from "@/lib/platform/schema";
+
+export async function editTenantBranding(
+  id: string,
+  input: unknown,
+  changedFields: string[],
+) {
+  const user = await requirePlatformAdmin();
   const parsed = parseInput(brandingEditSchema, input);
   if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
@@ -85,14 +101,19 @@ export async function editTenantBranding(id: string, input: unknown) {
 
   if (!updated) return { ok: false as const, error: "Tenant not found" };
 
-  serverCapture("platform_branding_edited", { tenantId: id });
+  await serverCapture(user.email, "platform_branding_edited", {
+    tenantId: id,
+    changedFields,
+  });
   revalidatePath(`/platform/tenants/${id}`);
   if (updated.status === "approved") revalidatePath(`/${id}`, "layout");
   return { ok: true as const };
 }
 ```
 
-Same revalidation pattern as `updateTenantBranding`: only flush parent-shop layout cache when the tenant is approved (pending tenants don't render publicly).
+`changedFields` is computed client-side by diffing form state against the initial tenant values, then passed in (e.g. `["accent", "motto"]`). The action trusts the client list — it's analytics, not authorization.
+
+Same revalidation pattern as `updateTenantBranding`. **Note on the path:** `tenants.id` is `text("id").primaryKey()` (e.g. `"nsbh"`) — the slug *is* the primary key. So `revalidatePath(\`/${id}\`, "layout")` correctly hits `/nsbh`. The wizard's existing `updateTenantBranding` uses the same pattern; not a bug.
 
 ### 3.3 Zod schema
 
@@ -115,11 +136,13 @@ export const brandingEditSchema = z.object({
 Drawer open
   └─ form state seeded from tenant prop (logoUrl, accent, motto)
        └─ user edits → form state updates → preview re-renders
-            └─ Save → editTenantBranding(id, form) → DB write
-                 ├─ revalidatePath(`/platform/tenants/${id}`)   # tenant detail
-                 ├─ revalidatePath(`/${id}`, 'layout')          # parent shop layout (if approved)
-                 ├─ serverCapture('platform_branding_edited')  # PostHog
-                 └─ drawer closes, toast on success
+            └─ Save (disabled while isUploading)
+                 → editTenantBranding(id, form, changedFields) → DB write
+                    ├─ revalidatePath(`/platform/tenants/${id}`)              # tenant detail
+                    ├─ revalidatePath(`/${id}`, 'layout')                     # parent shop layout (if approved)
+                    ├─ serverCapture(user.email, 'platform_branding_edited',  # PostHog
+                    │                { tenantId, changedFields })
+                    └─ drawer closes, toast on success
 ```
 
 UploadThing flow is unchanged from the wizard: `UploadButton` posts to `tenantLogo` route, returns a `https://utfs.io/...` URL, form state stores it. Image only persists to `tenants.logo_url` once **Save** is pressed — orphaned uploads are acceptable (UploadThing free tier is generous; cleanup is a post-launch concern).
@@ -131,7 +154,8 @@ UploadThing flow is unchanged from the wizard: `UploadButton` posts to `tenantLo
 | Failure | Behaviour |
 |---|---|
 | Zod validation (e.g. invalid hex, motto too long) | Inline error above footer; drawer stays open |
-| UploadThing upload fails | UploadButton's `onUploadError` surfaces message inline; logoUrl unchanged |
+| UploadThing upload fails | UploadButton's `onUploadError` surfaces message inline; logoUrl unchanged; `isUploading` clears |
+| Save clicked while upload in flight | Save button disabled; "Uploading…" affordance until upload resolves |
 | `editTenantBranding` returns `ok:false` | Inline error above footer; form preserved; user can retry |
 | Network/throw | Caught at the form level; same inline error surface |
 | Non-admin user reaches the drawer somehow | `requirePlatformAdmin()` throws server-side; client gets generic error toast |
@@ -152,6 +176,7 @@ No optimistic UI — Save is a one-click confirm. The drawer closes only after t
   6. Edit motto → save → confirm motto persists on detail card and any place it renders.
   7. Submit invalid hex (`#zzz`) → inline validation error; no DB write.
   8. Submit motto > 200 chars → inline error.
+  9. Click `Upload new` and immediately mash `Save` mid-upload → Save is disabled, shows "Uploading…", then re-enables once upload resolves; subsequent Save persists the new logo URL (not the stale one).
 - **PostHog:** confirm one `platform_branding_edited` event lands per save with the right `tenantId`.
 
 No automated tests added — this repo has no test suite (per CLAUDE.md, `check-types` is the correctness gate).
