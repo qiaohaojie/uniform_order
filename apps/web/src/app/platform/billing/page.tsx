@@ -23,9 +23,9 @@ export default async function BillingPage() {
       <div className="flex-1 px-7 py-6 overflow-auto">
         <div className="grid grid-cols-4 gap-3.5">
           <Tile label="Connected accounts" value={`${enabled} / ${list.length}`} sub="enabled" />
-          <Tile label="Total balance" value={`$${totalBalance.toFixed(0)}`} sub="across tenants" />
-          <Tile label="Payouts · 30d" value={`$${totalNet30.toFixed(0)}`} sub="net" />
-          <Tile label="Gross · 30d" value={`$${totalGross30.toFixed(0)}`} sub="pre-fee" />
+          <Tile label="Total balance" value={`AUD ${totalBalance.toFixed(0)}`} sub="across tenants" />
+          <Tile label="Payouts · 30d" value={`AUD ${totalNet30.toFixed(0)}`} sub="net" />
+          <Tile label="Gross · 30d" value={`AUD ${totalGross30.toFixed(0)}`} sub="pre-fee" />
         </div>
         <div className="mt-6">
           <BillingTable rows={merged} />

@@ -11,43 +11,44 @@ export type TenantBilling = {
   lastPayout: { date: Date; amount: number; currency: string } | null;
   gross30d: number;
   net30d: number;
+  currency: string;
   error: string | null;
 };
+
+export const PLATFORM_BILLING_TAG = "platform-billing";
+export const tenantBillingTag = (tenantId: string) => `platform-billing:${tenantId}`;
 
 async function fetchTenantBilling(tenantId: string, accountId: string | null): Promise<TenantBilling> {
   if (!accountId) {
     return {
       tenantId, accountId: null, chargesEnabled: null, payoutsEnabled: null,
-      balance: null, lastPayout: null, gross30d: 0, net30d: 0, error: null,
+      balance: null, lastPayout: null, gross30d: 0, net30d: 0, currency: "aud", error: null,
     };
   }
   try {
     const stripe = getStripe();
     const stripeOpts = { stripeAccount: accountId };
-    const [acct, balance, payouts, txs] = await Promise.all([
+    const since = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+
+    const [acct, balance, payouts] = await Promise.all([
       stripe.accounts.retrieve(accountId),
       stripe.balance.retrieve(undefined, stripeOpts),
       stripe.payouts.list({ limit: 1 }, stripeOpts),
-      stripe.balanceTransactions.list(
-        {
-          created: { gte: Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000) },
-          limit: 100,
-        },
-        stripeOpts,
-      ),
     ]);
+
+    let gross = 0;
+    let net = 0;
+    // Auto-paginate so totals don't silently cap at one page when tenants exceed ~100 tx/30d.
+    for await (const t of stripe.balanceTransactions
+      .list({ created: { gte: since }, limit: 100 }, stripeOpts)) {
+      if (t.type === "charge") gross += t.amount / 100;
+      net += t.net / 100;
+    }
 
     const available = (balance.available[0]?.amount ?? 0) / 100;
     const pending = (balance.pending[0]?.amount ?? 0) / 100;
     const currency = balance.available[0]?.currency ?? "aud";
     const last = payouts.data[0];
-
-    let gross = 0;
-    let net = 0;
-    for (const t of txs.data) {
-      if (t.type === "charge") gross += t.amount / 100;
-      net += t.net / 100;
-    }
 
     return {
       tenantId,
@@ -58,12 +59,13 @@ async function fetchTenantBilling(tenantId: string, accountId: string | null): P
       lastPayout: last ? { date: new Date(last.arrival_date * 1000), amount: last.amount / 100, currency: last.currency } : null,
       gross30d: gross,
       net30d: net,
+      currency,
       error: null,
     };
   } catch (err) {
     return {
       tenantId, accountId, chargesEnabled: null, payoutsEnabled: null,
-      balance: null, lastPayout: null, gross30d: 0, net30d: 0,
+      balance: null, lastPayout: null, gross30d: 0, net30d: 0, currency: "aud",
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -73,6 +75,6 @@ export const getTenantBilling = cache((tenantId: string, accountId: string | nul
   unstable_cache(
     () => fetchTenantBilling(tenantId, accountId),
     [`tenant-billing:${tenantId}`],
-    { revalidate: 300, tags: ["platform-billing"] },
+    { revalidate: 300, tags: [PLATFORM_BILLING_TAG, tenantBillingTag(tenantId)] },
   )()
 );
