@@ -2,10 +2,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { Crest } from "@/components/crest";
 import { togglePublicListing } from "../actions";
-import type { tenants } from "@/db/schema";
+import type { TenantRow } from "@/db/schema";
 import { BrandingEditDrawer } from "./branding-edit-drawer";
-
-type TenantRow = typeof tenants.$inferSelect;
 
 export function BrandingCard({ tenant }: { tenant: TenantRow }) {
   const [listed, setListed] = useState(tenant.isPubliclyListed);
