@@ -42,11 +42,13 @@ export async function mapTenantBilling<T>(
   return out;
 }
 
+const FALLBACK_CURRENCY = PLATFORM_CURRENCY.toLowerCase();
+
 async function fetchTenantBilling(tenantId: string, accountId: string | null): Promise<TenantBilling> {
   if (!accountId) {
     return {
       tenantId, accountId: null, chargesEnabled: null, payoutsEnabled: null,
-      balance: null, lastPayout: null, gross30d: 0, net30d: 0, currency: "aud", error: null,
+      balance: null, lastPayout: null, gross30d: 0, net30d: 0, currency: FALLBACK_CURRENCY, error: null,
     };
   }
   try {
@@ -60,18 +62,19 @@ async function fetchTenantBilling(tenantId: string, accountId: string | null): P
       stripe.payouts.list({ limit: 1 }, stripeOpts),
     ]);
 
-    let gross = 0;
-    let net = 0;
+    // Sum cents as integers to avoid float drift over many transactions.
+    let grossCents = 0;
+    let netCents = 0;
     // Auto-paginate so totals don't silently cap at one page when tenants exceed ~100 tx/30d.
     for await (const t of stripe.balanceTransactions
       .list({ created: { gte: since }, limit: 100 }, stripeOpts)) {
-      if (t.type === "charge") gross += t.amount / 100;
-      net += t.net / 100;
+      if (t.type === "charge") grossCents += t.amount;
+      netCents += t.net;
     }
 
     const available = (balance.available[0]?.amount ?? 0) / 100;
     const pending = (balance.pending[0]?.amount ?? 0) / 100;
-    const currency = balance.available[0]?.currency ?? "aud";
+    const currency = balance.available[0]?.currency ?? FALLBACK_CURRENCY;
     const last = payouts.data[0];
 
     return {
@@ -81,24 +84,26 @@ async function fetchTenantBilling(tenantId: string, accountId: string | null): P
       payoutsEnabled: acct.payouts_enabled,
       balance: { available, pending, currency },
       lastPayout: last ? { date: new Date(last.arrival_date * 1000), amount: last.amount / 100, currency: last.currency } : null,
-      gross30d: gross,
-      net30d: net,
+      gross30d: grossCents / 100,
+      net30d: netCents / 100,
       currency,
       error: null,
     };
   } catch (err) {
     return {
       tenantId, accountId, chargesEnabled: null, payoutsEnabled: null,
-      balance: null, lastPayout: null, gross30d: 0, net30d: 0, currency: "aud",
+      balance: null, lastPayout: null, gross30d: 0, net30d: 0, currency: FALLBACK_CURRENCY,
       error: err instanceof Error ? err.message : String(err),
     };
   }
 }
 
+// `accountId` is part of the cache key so onboarding (null → real ID) doesn't
+// keep returning the stale "no account" stub until the next webhook flush.
 export const getTenantBilling = cache((tenantId: string, accountId: string | null) =>
   unstable_cache(
     () => fetchTenantBilling(tenantId, accountId),
-    [`tenant-billing:${tenantId}`],
+    [`tenant-billing:${tenantId}`, accountId ?? "none"],
     { revalidate: 300, tags: [PLATFORM_BILLING_TAG, tenantBillingTag(tenantId)] },
   )()
 );
