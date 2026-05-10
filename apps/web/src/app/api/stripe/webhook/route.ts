@@ -6,6 +6,8 @@ import { orders, tenants, orderRefunds } from "@/db/schema";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { getStripe } from "@/lib/stripe";
+import { revalidateTag } from "next/cache";
+import { tenantBillingTag } from "@/lib/platform/stripe-billing";
 
 export const runtime = "nodejs"; // required: edge runtime can't read raw body for Stripe sig
 
@@ -114,6 +116,7 @@ export async function POST(req: NextRequest) {
             charges_enabled: account.charges_enabled ?? false,
             details_submitted: account.details_submitted ?? false,
           });
+          revalidateTag(tenantBillingTag(updated[0].id), "max");
         }
       } catch (err) {
         console.error("stripe webhook: account.updated DB write failed", err);
