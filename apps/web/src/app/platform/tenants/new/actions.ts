@@ -8,6 +8,8 @@ import { step1Schema, step2Schema, step4Schema } from "@/lib/platform/schema";
 import { getStripe } from "@/lib/stripe";
 import { updateTenantStripe } from "@/db/queries";
 import { cloneCatalogFromTenantUnsafe, type CloneResult } from "@/lib/platform/clone-catalog";
+import { serverCapture } from "@/lib/analytics/server";
+import type { ZodSchema } from "zod";
 
 async function requirePlatformAdmin() {
   const user = await getSessionUser();
@@ -17,41 +19,60 @@ async function requirePlatformAdmin() {
   return user;
 }
 
-export async function createTenantDraft(input: unknown) {
-  await requirePlatformAdmin();
-  const parsed = step1Schema.parse(input);
+function parseInput<T>(schema: ZodSchema<T>, input: unknown):
+  | { ok: true; data: T }
+  | { ok: false; error: string } {
+  const r = schema.safeParse(input);
+  if (r.success) return { ok: true, data: r.data };
+  const first = r.error.issues[0];
+  const path = first?.path.join(".");
+  return { ok: false, error: path ? `${path}: ${first.message}` : (first?.message ?? "Invalid input") };
+}
 
-  const existing = await db.query.tenants.findFirst({ where: eq(tenants.id, parsed.id) });
+export async function createTenantDraft(input: unknown) {
+  const user = await requirePlatformAdmin();
+  const parsed = parseInput(step1Schema, input);
+  if (!parsed.ok) return { ok: false as const, error: parsed.error };
+
+  const existing = await db.query.tenants.findFirst({ where: eq(tenants.id, parsed.data.id) });
   if (existing) {
-    return { ok: false as const, error: `Slug "${parsed.id}" is already taken.` };
+    return { ok: false as const, error: `Slug "${parsed.data.id}" is already taken.` };
   }
 
   await db.insert(tenants).values({
-    id: parsed.id,
-    name: parsed.name,
-    short: parsed.short,
-    motto: parsed.motto ?? null,
-    address: parsed.address ?? null,
+    id: parsed.data.id,
+    name: parsed.data.name,
+    short: parsed.data.short,
+    motto: parsed.data.motto ?? null,
+    address: parsed.data.address ?? null,
     platformApprovalStatus: "pending",
     isPubliclyListed: false,
   });
 
   revalidatePath("/platform/tenants");
-  return { ok: true as const, id: parsed.id };
+  await serverCapture(user.email, "platform_tenant_created", {
+    tenantId: parsed.data.id,
+    name: parsed.data.name,
+  });
+  return { ok: true as const, id: parsed.data.id };
 }
 
 export async function updateTenantBranding(id: string, input: unknown) {
   await requirePlatformAdmin();
-  const parsed = step2Schema.parse(input);
+  const parsed = parseInput(step2Schema, input);
+  if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
-  await db
+  const [updated] = await db
     .update(tenants)
     .set({
-      logoUrl: parsed.logoUrl,
-      accent: parsed.accent,
+      logoUrl: parsed.data.logoUrl,
+      accent: parsed.data.accent,
       updatedAt: new Date(),
     })
-    .where(eq(tenants.id, id));
+    .where(eq(tenants.id, id))
+    .returning({ id: tenants.id });
+
+  if (!updated) return { ok: false as const, error: "Tenant not found" };
 
   revalidatePath(`/platform/tenants/${id}`);
   revalidatePath(`/${id}`, "layout");
@@ -60,24 +81,28 @@ export async function updateTenantBranding(id: string, input: unknown) {
 
 export async function updateTenantOperator(id: string, input: unknown) {
   await requirePlatformAdmin();
-  const parsed = step4Schema.parse(input);
+  const parsed = parseInput(step4Schema, input);
+  if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
-  await db
+  const [updated] = await db
     .update(tenants)
     .set({
-      shopEmail: parsed.shopEmail,
-      shopHours: parsed.shopHours ?? null,
-      collectionInstructions: parsed.collectionInstructions ?? null,
+      shopEmail: parsed.data.shopEmail,
+      shopHours: parsed.data.shopHours ?? null,
+      collectionInstructions: parsed.data.collectionInstructions ?? null,
       updatedAt: new Date(),
     })
-    .where(eq(tenants.id, id));
+    .where(eq(tenants.id, id))
+    .returning({ id: tenants.id });
+
+  if (!updated) return { ok: false as const, error: "Tenant not found" };
 
   revalidatePath(`/platform/tenants/${id}`);
   return { ok: true as const };
 }
 
 export async function createStripeStandardForTenant(id: string) {
-  await requirePlatformAdmin();
+  const user = await requirePlatformAdmin();
 
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, id) });
   if (!tenant) return { ok: false as const, error: "Tenant not found" };
@@ -86,6 +111,7 @@ export async function createStripeStandardForTenant(id: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://uniformorder.online";
 
   let acctId = tenant.stripeAccountId;
+  let created = false;
   if (!acctId) {
     const account = await stripe.accounts.create({
       type: "standard",
@@ -97,6 +123,7 @@ export async function createStripeStandardForTenant(id: string) {
       metadata: { tenantId: tenant.id },
     });
     acctId = account.id;
+    created = true;
     await updateTenantStripe(id, {
       stripeAccountId: acctId,
       stripePayoutsEnabled: false,
@@ -112,6 +139,12 @@ export async function createStripeStandardForTenant(id: string) {
   });
 
   revalidatePath(`/platform/tenants/${id}`);
+  if (created) {
+    await serverCapture(user.email, "platform_tenant_stripe_created", {
+      tenantId: id,
+      accountId: acctId,
+    });
+  }
   return { ok: true as const, accountId: acctId, onboardingUrl: link.url };
 }
 
@@ -128,10 +161,15 @@ export async function cloneCatalogFromTenant(
   srcTenantId: string,
   dstTenantId: string,
 ): Promise<CloneResult> {
-  await requirePlatformAdmin();
+  const user = await requirePlatformAdmin();
   const result = await cloneCatalogFromTenantUnsafe(srcTenantId, dstTenantId);
   if (result.ok) {
     revalidatePath(`/platform/tenants/${dstTenantId}`);
+    await serverCapture(user.email, "platform_tenant_catalog_cloned", {
+      srcTenantId,
+      dstTenantId,
+      copied: result.copied,
+    });
   }
   return result;
 }
@@ -171,6 +209,11 @@ export async function finalizeTenantGoLive(id: string) {
   revalidatePath(`/platform/tenants/${id}`);
   revalidatePath("/platform/tenants");
   revalidatePath(`/${id}`, "layout");
+  await serverCapture(user.email, "platform_tenant_went_live", {
+    tenantId: id,
+    publiclyListed: hasCatalog,
+    hasCatalog,
+  });
   return {
     ok: true as const,
     publiclyListed: hasCatalog,

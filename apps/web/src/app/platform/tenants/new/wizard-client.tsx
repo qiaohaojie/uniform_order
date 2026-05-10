@@ -19,6 +19,8 @@ export function WizardClient({
   catalogCount: number;
 }) {
   const [step, setStep] = useState(initialStep);
+  const [accent, setAccent] = useState<string>(tenant?.accent ?? "#7A1F2B");
+  const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null);
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -36,13 +38,22 @@ export function WizardClient({
       <div className="mt-6 grid grid-cols-[1fr_360px] gap-6">
         <div className="bg-paper rounded-[10px] border border-rule p-7">
           {step === 1 && <Step1Identity tenant={tenant} onContinue={(id) => goto(2, id)} />}
-          {step === 2 && tenant && <Step2Branding tenant={tenant} onContinue={() => goto(3)} />}
+          {step === 2 && tenant && (
+            <Step2Branding
+              tenant={tenant}
+              accent={accent}
+              logoUrl={logoUrl}
+              onAccentChange={setAccent}
+              onLogoChange={setLogoUrl}
+              onContinue={() => goto(3)}
+            />
+          )}
           {step === 3 && tenant && <Step3Stripe tenant={tenant} onContinue={() => goto(4)} />}
           {step === 4 && tenant && <Step4Operator tenant={tenant} onContinue={() => goto(5)} />}
           {step === 5 && tenant && <Step5Catalog tenant={tenant} onContinue={() => goto(6)} />}
           {step === 6 && tenant && <Step6GoLive tenant={tenant} catalogCount={catalogCount} />}
         </div>
-        {step === 2 && tenant && <LivePreview accent={tenant.accent} logoUrl={tenant.logoUrl} short={tenant.short} />}
+        {step === 2 && tenant && <LivePreview accent={accent} logoUrl={logoUrl} short={tenant.short} />}
       </div>
     </div>
   );

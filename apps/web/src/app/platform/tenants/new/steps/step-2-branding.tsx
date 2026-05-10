@@ -8,13 +8,19 @@ const PRESETS = ["#7A1F2B", "#0F4C5C", "#2F5D50", "#1F3A6E", "#4A2238", "#7A5418
 
 export function Step2Branding({
   tenant,
+  accent,
+  logoUrl,
+  onAccentChange,
+  onLogoChange,
   onContinue,
 }: {
   tenant: TenantRow;
+  accent: string;
+  logoUrl: string | null;
+  onAccentChange: (v: string) => void;
+  onLogoChange: (v: string | null) => void;
   onContinue: () => void;
 }) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(tenant.logoUrl);
-  const [accent, setAccent] = useState<string>(tenant.accent);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -24,7 +30,7 @@ export function Step2Branding({
     const r = await updateTenantBranding(tenant.id, { logoUrl, accent });
     setPending(false);
     if (!r.ok) {
-      setError("Save failed.");
+      setError(r.error);
       return;
     }
     onContinue();
@@ -49,7 +55,7 @@ export function Step2Branding({
             input={{ tenantId: tenant.id }}
             onClientUploadComplete={(res) => {
               const url = res?.[0]?.url ?? null;
-              if (url) setLogoUrl(url);
+              if (url) onLogoChange(url);
             }}
             onUploadError={(e) => setError(e.message)}
           />
@@ -63,7 +69,7 @@ export function Step2Branding({
             <button
               key={c}
               type="button"
-              onClick={() => setAccent(c)}
+              onClick={() => onAccentChange(c)}
               className={`w-11 h-11 rounded-full border ${accent === c ? "border-ink ring-2 ring-white" : "border-rule"}`}
               style={{ background: c }}
             />
@@ -71,7 +77,7 @@ export function Step2Branding({
           <input
             type="text"
             value={accent}
-            onChange={(e) => setAccent(e.target.value)}
+            onChange={(e) => onAccentChange(e.target.value)}
             className="ml-2 h-9 w-28 px-2 border border-rule rounded-md text-xs font-mono"
           />
         </div>
