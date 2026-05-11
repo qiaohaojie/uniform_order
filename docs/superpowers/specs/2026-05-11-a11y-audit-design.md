@@ -48,15 +48,15 @@ Notes: <free-form>
 
 Boxes are checked per-screen so the artefact is itself reviewable — every check is an explicit assertion, not implied by silence.
 
-**Authenticated checkout:** Better-Auth dev session captured once via a one-off helper script:
+**Authenticated checkout:** Neon Auth (`@neondatabase/auth`) dev session captured once via a one-off helper script:
 
 1. Developer runs `node docs/superpowers/audits/2026-05-11-a11y/setup-auth.mjs` (headed Playwright, no automation of the sign-in itself).
-2. Script opens `/auth/sign-in`, then waits for the developer to complete sign-in interactively (whatever the dev environment is configured for — magic-link via console log, Google OAuth, etc.). Detection: poll for Better-Auth's session cookie on the current origin. The exact cookie name is determined in the plan by inspecting `lib/auth/*` in this repo's Better-Auth config (default in current versions: `better-auth.session_token`); script asserts the name explicitly rather than guessing.
+2. Script opens `/auth/sign-in`, then waits for the developer to complete sign-in interactively (magic-link via console log, Google OAuth, etc.). Detection: poll for a redirect away from `/auth/sign-in` to any non-auth URL. The exact Neon Auth session cookie name varies by adapter version, so the script saves the full `storageState` (all cookies + origin localStorage) verbatim rather than asserting on a specific cookie name; this is robust to Neon Auth upgrades.
 3. On success, script saves the resulting cookies + origin storage to `auth-storage.json` in the audit dir and exits.
 4. `auth-storage.json` is gitignored; `audit.mjs` loads it via Playwright's `storageState` option on every run.
 5. If the file is missing, `audit.mjs` prints the setup pointer and exits non-zero.
 
-This keeps the audit reproducible without ever encoding a credential into the repo. Re-running Phase B requires the captured session to still be valid (Better-Auth sessions default to long expiry — ample for our use); otherwise the developer re-runs `setup-auth.mjs`. As a side benefit, this closes §3.9's known gap (anonymous capture of `/checkout` showed the sign-in card, not the form).
+This keeps the audit reproducible without ever encoding a credential into the repo. Re-running Phase B requires the captured session to still be valid (Neon Auth dev sessions are long-lived — ample for our use); otherwise the developer re-runs `setup-auth.mjs`. As a side benefit, this closes §3.9's known gap (anonymous capture of `/checkout` showed the sign-in card, not the form).
 
 ## Severity bar
 
@@ -111,7 +111,7 @@ If Phase A finds zero P0 + zero P1, Phase B collapses to a single docs commit cl
 
 ## Known risks
 
-- Better-Auth dev session captured via `setup-auth.mjs` may expire between Phase A and Phase B if days pass between merges. Easy to refresh — re-run the setup script.
+- Neon Auth dev session captured via `setup-auth.mjs` may expire between Phase A and Phase B if days pass between merges. Easy to refresh — re-run the setup script.
 - Stripe Card Element may report axe `incomplete` for the iframe contents (axe can't inspect cross-origin frames). These are noise; document and ignore.
 - The §3.9 audit script's tenant + sample cart injection pattern should be reused, not reinvented. Plan will reference the existing `capture.mjs` for the navigation + cart-seeding helpers.
 
