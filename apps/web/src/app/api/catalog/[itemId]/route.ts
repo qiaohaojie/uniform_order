@@ -65,6 +65,9 @@ export async function PATCH(
     // Diff parsed input vs pre-write DB state. Only diff scalar fields the
     // operator can edit; `variants` is handled separately because the column
     // doesn't live on catalogItems.
+    // Diff over every field accepted by catalogItemPatchSchema. Keep this
+    // list in sync with the patch schema; a missing entry would mean a real
+    // change is treated as a no-op and never persisted.
     const scalarCandidates = [
       "name",
       "category",

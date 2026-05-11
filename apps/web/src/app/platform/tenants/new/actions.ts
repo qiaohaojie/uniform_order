@@ -102,7 +102,11 @@ export async function updateTenantOperator(id: string, input: unknown) {
   if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
   const [existing] = await db
-    .select({ shopEmail: tenants.shopEmail })
+    .select({
+      shopEmail: tenants.shopEmail,
+      shopHours: tenants.shopHours,
+      collectionInstructions: tenants.collectionInstructions,
+    })
     .from(tenants)
     .where(eq(tenants.id, id))
     .limit(1);
@@ -110,8 +114,16 @@ export async function updateTenantOperator(id: string, input: unknown) {
   if (!existing) return { ok: false as const, error: "Tenant not found" };
 
   const previousEmail = existing.shopEmail ?? null;
+  const nextShopHours = parsed.data.shopHours ?? null;
+  const nextCollectionInstructions = parsed.data.collectionInstructions ?? null;
 
-  if (previousEmail === parsed.data.shopEmail) {
+  const changedFields: string[] = [];
+  if (previousEmail !== parsed.data.shopEmail) changedFields.push("shopEmail");
+  if ((existing.shopHours ?? null) !== nextShopHours) changedFields.push("shopHours");
+  if ((existing.collectionInstructions ?? null) !== nextCollectionInstructions)
+    changedFields.push("collectionInstructions");
+
+  if (changedFields.length === 0) {
     return { ok: true as const, noop: true as const };
   }
 
@@ -119,8 +131,8 @@ export async function updateTenantOperator(id: string, input: unknown) {
     .update(tenants)
     .set({
       shopEmail: parsed.data.shopEmail,
-      shopHours: parsed.data.shopHours ?? null,
-      collectionInstructions: parsed.data.collectionInstructions ?? null,
+      shopHours: nextShopHours,
+      collectionInstructions: nextCollectionInstructions,
       updatedAt: new Date(),
     })
     .where(eq(tenants.id, id))
@@ -137,7 +149,7 @@ export async function updateTenantOperator(id: string, input: unknown) {
     action: "tenant.operator_updated",
     targetType: "tenant",
     targetId: id,
-    payload: { previousEmail, newEmail: parsed.data.shopEmail },
+    payload: { previousEmail, newEmail: parsed.data.shopEmail, changedFields },
   });
 
   return { ok: true as const };

@@ -50,8 +50,14 @@ export function formatAuditEvent(event: AuditEvent): string {
       const fields = safeArr<string>(p.changedFields);
       return `Updated branding (${fields.length} ${fields.length === 1 ? "field" : "fields"})`;
     }
-    case "tenant.operator_updated":
-      return `Changed operator from ${safeStr(p.previousEmail) || "(none)"} to ${safeStr(p.newEmail)}`;
+    case "tenant.operator_updated": {
+      const fields = safeArr<string>(p.changedFields);
+      const emailChanged = fields.length === 0 || fields.includes("shopEmail");
+      if (emailChanged) {
+        return `Changed operator from ${safeStr(p.previousEmail) || "(none)"} to ${safeStr(p.newEmail)}`;
+      }
+      return `Updated shop details (${fields.length} ${fields.length === 1 ? "field" : "fields"})`;
+    }
     case "tenant.legal_updated": {
       const version = safeNum(p.version) ?? 0;
       const mode = safeStr(p.mode) || "text";
