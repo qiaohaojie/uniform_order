@@ -1,0 +1,168 @@
+{
+  "screen": "item",
+  "viewport": "iphone-se",
+  "viewportPx": [
+    375,
+    667
+  ],
+  "documentScrollWidth": 375,
+  "documentScrollHeight": 704,
+  "viewportWidth": 375,
+  "viewportHeight": 667,
+  "interactiveElements": [
+    {
+      "selector": "a.w-9.h-9",
+      "rectPx": [
+        16,
+        6,
+        36,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "a.w-9.h-9",
+      "rectPx": [
+        323,
+        6,
+        36,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "button.h-11.rounded-lg",
+      "rectPx": [
+        20,
+        430,
+        335,
+        44
+      ],
+      "visible": true,
+      "smallestDim": 44
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        20,
+        517,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        88,
+        517,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        156,
+        517,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        225,
+        517,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        293,
+        517,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        20,
+        565,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        88,
+        565,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.h-[42px].rounded-md",
+      "rectPx": [
+        156,
+        565,
+        62,
+        42
+      ],
+      "visible": true,
+      "smallestDim": 42
+    },
+    {
+      "selector": "button.w-9.h-11",
+      "rectPx": [
+        17,
+        632,
+        26,
+        44
+      ],
+      "visible": true,
+      "smallestDim": 25.84375
+    },
+    {
+      "selector": "button.w-9.h-11",
+      "rectPx": [
+        63,
+        632,
+        26,
+        44
+      ],
+      "visible": true,
+      "smallestDim": 25.84375
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        100,
+        628,
+        259,
+        52
+      ],
+      "visible": true,
+      "smallestDim": 52
+    }
+  ]
+}

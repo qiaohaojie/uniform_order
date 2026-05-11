@@ -1,0 +1,113 @@
+{
+  "screen": "cart",
+  "viewport": "android-landscape",
+  "viewportPx": [
+    740,
+    360
+  ],
+  "documentScrollWidth": 740,
+  "documentScrollHeight": 592,
+  "viewportWidth": 740,
+  "viewportHeight": 360,
+  "interactiveElements": [
+    {
+      "selector": "a.w-9.h-9",
+      "rectPx": [
+        171,
+        6,
+        36,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        240,
+        180,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        290,
+        180,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        240,
+        274,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        290,
+        274,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        240,
+        369,
+        28,
+        26
+      ],
+      "visible": false,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        290,
+        369,
+        28,
+        26
+      ],
+      "visible": false,
+      "smallestDim": 26
+    },
+    {
+      "selector": "a",
+      "rectPx": [
+        171,
+        530,
+        398,
+        20
+      ],
+      "visible": false,
+      "smallestDim": 20
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        171,
+        516,
+        398,
+        52
+      ],
+      "visible": false,
+      "smallestDim": 52
+    }
+  ]
+}

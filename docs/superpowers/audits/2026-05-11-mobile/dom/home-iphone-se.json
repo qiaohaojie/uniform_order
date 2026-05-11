@@ -1,0 +1,47 @@
+{
+  "screen": "home",
+  "viewport": "iphone-se",
+  "viewportPx": [
+    375,
+    667
+  ],
+  "documentScrollWidth": 375,
+  "documentScrollHeight": 667,
+  "viewportWidth": 375,
+  "viewportHeight": 667,
+  "interactiveElements": [
+    {
+      "selector": "a.bg-white.rounded-[14px]",
+      "rectPx": [
+        20,
+        225,
+        335,
+        90
+      ],
+      "visible": true,
+      "smallestDim": 90
+    },
+    {
+      "selector": "a.bg-white.rounded-[14px]",
+      "rectPx": [
+        20,
+        329,
+        335,
+        90
+      ],
+      "visible": true,
+      "smallestDim": 90
+    },
+    {
+      "selector": "a.block.w-full",
+      "rectPx": [
+        24,
+        590,
+        327,
+        54
+      ],
+      "visible": true,
+      "smallestDim": 53.5
+    }
+  ]
+}

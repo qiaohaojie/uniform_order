@@ -16,5 +16,8 @@
       "sharp",
       "unrs-resolver"
     ]
+  },
+  "devDependencies": {
+    "playwright": "^1.59.1"
   }
 }

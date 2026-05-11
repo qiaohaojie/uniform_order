@@ -1,0 +1,113 @@
+{
+  "screen": "cart",
+  "viewport": "iphone-se",
+  "viewportPx": [
+    375,
+    667
+  ],
+  "documentScrollWidth": 375,
+  "documentScrollHeight": 667,
+  "viewportWidth": 375,
+  "viewportHeight": 667,
+  "interactiveElements": [
+    {
+      "selector": "a.w-9.h-9",
+      "rectPx": [
+        16,
+        6,
+        36,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        85,
+        180,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        135,
+        180,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        85,
+        274,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        135,
+        274,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        85,
+        369,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "button.w-7.h-full",
+      "rectPx": [
+        135,
+        369,
+        28,
+        26
+      ],
+      "visible": true,
+      "smallestDim": 26
+    },
+    {
+      "selector": "a",
+      "rectPx": [
+        16,
+        606,
+        343,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 20
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        16,
+        591,
+        343,
+        52
+      ],
+      "visible": true,
+      "smallestDim": 52
+    }
+  ]
+}
