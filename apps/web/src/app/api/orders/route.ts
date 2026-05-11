@@ -5,7 +5,7 @@ import {
   getOrdersByTenantAndParentEmail,
   getTenant,
 } from "@/db/queries";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import {
   ensureParentEmailAccess,
@@ -69,6 +69,24 @@ export async function GET(req: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     const rows = await getOrdersByTenant(tenantId);
+
+    if (searchParams.get("withLines") === "1") {
+      // Only the "new" bucket needs lines (it's the batch-print picking queue).
+      // Skipping historical statuses keeps the payload proportional to the
+      // active queue rather than total order count.
+      const newIds = rows.filter((r) => r.status === "new").map((r) => r.id);
+      const lines = newIds.length > 0
+        ? await db.select().from(orderLines).where(inArray(orderLines.orderId, newIds))
+        : [];
+      const linesByOrderId: Record<string, typeof lines> = {};
+      for (const line of lines) {
+        (linesByOrderId[line.orderId] ??= []).push(line);
+      }
+      return NextResponse.json(
+        rows.map((r) => ({ ...r, lines: linesByOrderId[r.id] ?? [] })),
+      );
+    }
+
     return NextResponse.json(rows);
   } catch (err) {
     console.error("GET /api/orders error:", err);

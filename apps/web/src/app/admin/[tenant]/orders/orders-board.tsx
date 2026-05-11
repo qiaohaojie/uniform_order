@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { Tenant } from "@/lib/data";
 import { Chip } from "@/components/chip";
+import { PickSlip, type PickSlipOrder, type PickSlipLine } from "@/components/admin/pick-slip";
 
 type OrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected";
 
@@ -12,6 +13,7 @@ interface DbOrder {
   parentName: string;
   parentEmail: string;
   parentMobile: string;
+  parentNote: string | null;
   studentName: string;
   studentYear: string;
   studentRoll: string;
@@ -23,6 +25,7 @@ interface DbOrder {
   stripeRef: string | null;
   status: OrderStatus;
   createdAt: string;
+  lines: PickSlipLine[];
 }
 
 const COLUMNS: { id: OrderStatus; label: string; tone: string }[] = [
@@ -140,17 +143,19 @@ export function OrdersBoard({
   tenantId,
   tenant,
   searchQuery,
+  onNewCountChange,
 }: {
   tenantId: string;
   tenant: Tenant;
   searchQuery: string;
+  onNewCountChange?: (count: number) => void;
 }) {
   const [allOrders, setAllOrders] = useState<DbOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await fetch(`/api/orders?tenantId=${encodeURIComponent(tenantId)}`);
+      const res = await fetch(`/api/orders?tenantId=${encodeURIComponent(tenantId)}&withLines=1`);
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Failed to fetch orders.");
@@ -207,6 +212,14 @@ export function OrdersBoard({
     {} as Record<OrderStatus, number>
   );
 
+  const newOrders = allOrders
+    .filter((o) => o.status === "new")
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  useEffect(() => {
+    onNewCountChange?.(newOrders.length);
+  }, [newOrders.length, onNewCountChange]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -218,7 +231,8 @@ export function OrdersBoard({
   }
 
   return (
-    <div className="flex-1 p-6 overflow-hidden">
+    <>
+    <div data-no-print className="flex-1 p-6 overflow-hidden">
       <div className="h-full grid gap-3.5" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
         {COLUMNS.map((col) => {
           const colOrders = filtered.filter((o) => o.status === col.id);
@@ -268,5 +282,34 @@ export function OrdersBoard({
         })}
       </div>
     </div>
+    <div className="print:block hidden" aria-hidden>
+      {newOrders.map((o, idx) => {
+        const slipOrder: PickSlipOrder = {
+          id: o.id,
+          status: o.status,
+          parentName: o.parentName,
+          parentEmail: o.parentEmail,
+          parentMobile: o.parentMobile,
+          parentNote: o.parentNote,
+          studentName: o.studentName,
+          studentYear: o.studentYear,
+          studentRoll: o.studentRoll,
+          delivery: o.delivery,
+          total: o.total,
+          gst: o.gst,
+          stripeRef: o.stripeRef,
+          createdAt: o.createdAt,
+        };
+        return (
+          <div
+            key={o.id}
+            className={idx < newOrders.length - 1 ? "break-after-page" : undefined}
+          >
+            <PickSlip order={slipOrder} tenant={tenant} lines={o.lines} />
+          </div>
+        );
+      })}
+    </div>
+    </>
   );
 }

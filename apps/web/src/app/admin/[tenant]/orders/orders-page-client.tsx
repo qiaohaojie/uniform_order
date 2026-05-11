@@ -12,6 +12,17 @@ export function OrdersPageClient({
   tenant: Tenant;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [newCount, setNewCount] = useState(0);
+
+  const handlePrint = () => {
+    if (newCount === 0) return;
+    // 25 is roughly a full-day picking run at one school. Above that we want a
+    // moment of pause before committing operator-side paper + ink.
+    if (newCount >= 25 && !window.confirm(`Print ${newCount} pick slips?`)) {
+      return;
+    }
+    window.print();
+  };
 
   return (
     <>
@@ -45,14 +56,16 @@ export function OrdersPageClient({
               )}
             </div>
             <button
-              onClick={() => window.print()}
-              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
+              onClick={handlePrint}
+              disabled={newCount === 0}
+              title={newCount === 0 ? "No new orders to pick" : undefined}
+              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
                 <rect x="6" y="3" width="12" height="6" /><rect x="3" y="9" width="18" height="9" rx="1" /><rect x="6" y="15" width="12" height="6" />
               </svg>
-              Print pick slips
+              {newCount > 0 ? `Print pick slips (${newCount})` : "Print pick slips"}
             </button>
             <button
               onClick={() => {
@@ -70,7 +83,12 @@ export function OrdersPageClient({
           </div>
         }
       />
-      <OrdersBoard tenantId={tenantId} tenant={tenant} searchQuery={searchQuery} />
+      <OrdersBoard
+        tenantId={tenantId}
+        tenant={tenant}
+        searchQuery={searchQuery}
+        onNewCountChange={setNewCount}
+      />
     </>
   );
 }

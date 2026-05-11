@@ -76,6 +76,11 @@ html, body {
 
 /* ─── Print styles ──────────────────────────────────────────────────────────── */
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
   /* Hide the admin sidebar, topbar, and action buttons */
   nav,
   aside,
