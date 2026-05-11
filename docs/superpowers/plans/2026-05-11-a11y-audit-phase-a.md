@@ -59,7 +59,7 @@ pnpm add -Dw @axe-core/playwright@^4.10.0
 
 ```bash
 grep -A1 '"devDependencies"' package.json | head -5
-node -e "import('@axe-core/playwright').then(m => console.log('ok:', typeof m.default))"
+node -e "import('@axe-core/playwright').then(m => console.log('ok:', typeof (m.default ?? m.AxeBuilder)))"
 ```
 
 Expected: `@axe-core/playwright` is listed in `devDependencies` with a `^4` range, and the `node -e` line prints `ok: function`.
@@ -147,27 +147,43 @@ const context = await browser.newContext({
 const page = await context.newPage();
 
 console.log("Opening sign-in page. Complete the sign-in flow in the browser.");
-console.log("The script will save storage state and exit automatically once you land on any non-auth URL.");
+console.log("The script will save storage state and exit automatically once it detects a real session.");
 await page.goto(`${BASE}${SIGN_IN_PATH}`);
 
 const deadline = Date.now() + TIMEOUT_MS;
 while (Date.now() < deadline) {
   const url = page.url();
   if (!url.includes(SIGN_IN_PATH) && !url.includes("/auth/")) {
-    console.log(`Detected post-sign-in URL: ${url}`);
-    break;
+    // URL has left /auth/. That alone is loose — Neon Auth's [[...path]]
+    // catch-all may redirect through transient locations before the session
+    // cookie is actually set. Behavioural double-check: navigate to a known
+    // gated route and verify we stay there.
+    await page.goto(`${BASE}/orders`, { waitUntil: "domcontentloaded" });
+    if (!page.url().includes("/auth/")) {
+      console.log(`Auth confirmed via /orders staying at: ${page.url()}`);
+      break;
+    }
+    // Bounced back to /auth/. Sign-in didn't actually take — keep waiting.
+    await page.goto(`${BASE}${SIGN_IN_PATH}`);
   }
   await page.waitForTimeout(1000);
 }
 
-if (page.url().includes(SIGN_IN_PATH)) {
-  console.error("Timed out waiting for sign-in. No file written.");
+if (page.url().includes(SIGN_IN_PATH) || page.url().includes("/auth/")) {
+  console.error("Timed out waiting for a real sign-in. No file written.");
+  await browser.close();
+  process.exit(1);
+}
+
+const cookies = await context.cookies();
+if (cookies.length === 0) {
+  console.error("Post-sign-in but zero cookies on context — refusing to save an empty storage state.");
   await browser.close();
   process.exit(1);
 }
 
 await context.storageState({ path: OUT });
-console.log(`Saved storage state to ${OUT}`);
+console.log(`Saved storage state to ${OUT} (${cookies.length} cookies).`);
 console.log("This file is gitignored — verify with: git check-ignore -v " + OUT);
 await browser.close();
 ```
@@ -223,7 +239,7 @@ Create `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` with this content:
 // Pre-reqs: pnpm dev:web on :3000; auth-storage.json captured via setup-auth.mjs.
 import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
-import { writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync, rmSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const BASE = "http://localhost:3000";
@@ -232,6 +248,12 @@ const OUT_DIR = "docs/superpowers/audits/2026-05-11-a11y";
 const AXE_DIR = join(OUT_DIR, "axe");
 const STORAGE = join(OUT_DIR, "auth-storage.json");
 mkdirSync(AXE_DIR, { recursive: true });
+
+// Idempotency: clear any stale JSON from a prior run so a partial
+// failure doesn't leave mixed-vintage data in axe/.
+for (const f of readdirSync(AXE_DIR)) {
+  if (f.endsWith(".json")) rmSync(join(AXE_DIR, f));
+}
 
 if (!existsSync(STORAGE)) {
   console.error(`Missing ${STORAGE}.`);
@@ -272,11 +294,28 @@ async function runScreen(browser, screen) {
   }, SAMPLE_CART);
   const page = await context.newPage();
 
-  await page.goto(screen.url, { waitUntil: "networkidle" });
-  // Give RSC streaming + client hydration a beat to settle on heavier pages.
+  await page.goto(screen.url, { waitUntil: "domcontentloaded" });
+  // Next 16 App Router + RSC streaming + PostHog client + auth polling
+  // means "networkidle" never resolves. Lean on DOMContentLoaded + a
+  // hydration buffer instead. If a specific screen lags, bump per-screen
+  // not globally.
   await page.waitForTimeout(800);
 
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  // Belt-and-braces: an auth: true screen that landed back on /auth/
+  // means the storage state was rejected (expired session, missing
+  // cookies). Fail loudly so the executor re-runs setup-auth.mjs.
+  if (screen.auth && page.url().includes("/auth/")) {
+    throw new Error(
+      `Auth screen ${screen.slug} bounced to ${page.url()} — session likely expired. Delete auth-storage.json and re-run setup-auth.mjs.`,
+    );
+  }
+
+  const results = await new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // Stripe Payment Element iframe content is upstream-tested (WCAG 2.1 AA).
+    // Excluding keeps `incomplete` honest; prose carve-out remains in findings.md.
+    .exclude("iframe[name^='__privateStripeFrame']")
+    .analyze();
 
   const summary = {
     screen: screen.slug,
@@ -373,7 +412,14 @@ If missing: `cp /Volumes/T7/georgeqiao/dev/uniform_order/apps/web/.env.local app
 
 - [ ] **Step 3: Start the dev server in the background**
 
-Start `pnpm dev:web` with `run_in_background: true`.
+If running this plan via the Claude Code Bash tool, invoke `pnpm dev:web` with `run_in_background: true`. If running by hand from a terminal, use:
+
+```bash
+pnpm dev:web > /tmp/a11y-dev.log 2>&1 &
+echo "dev PID: $!"
+```
+
+Either way, the dev server must be reachable at `http://localhost:3000` before continuing.
 
 - [ ] **Step 4: Wait for :3000 to return 200**
 
@@ -506,8 +552,10 @@ const white = [0xff, 0xff, 0xff];
 console.log("burgundy on parchment:", ratio(burgundy, parchment));
 console.log("burgundy on paper:    ", ratio(burgundy, paper));
 console.log("burgundy on white:    ", ratio(burgundy, white));
-'
+' | tee docs/superpowers/audits/2026-05-11-a11y/burgundy-contrast.txt
 ```
+
+`tee` writes the ratios to `burgundy-contrast.txt` so Task 9 doesn't have to depend on terminal scrollback. The file gets committed alongside the rest of the audit dir.
 
 Record the three ratios. WCAG 1.4.3: 4.5:1 normal text, 3:1 large text (≥ 18pt or 14pt bold). Any combination that falls below the relevant threshold for actionable text is a P1 finding — call it out explicitly in `findings.md`, even if axe missed it (axe only flags pairs it actually saw rendered, not theoretical combinations).
 
@@ -733,6 +781,7 @@ pkill -f "next-server" 2>/dev/null
 ```bash
 git add docs/superpowers/audits/2026-05-11-a11y/findings.md \
         docs/superpowers/audits/2026-05-11-a11y/keyboard-walkthrough.md \
+        docs/superpowers/audits/2026-05-11-a11y/burgundy-contrast.txt \
         docs/superpowers/audits/2026-05-11-a11y/axe/ \
         docs/remaining_work.md
 git status --short
@@ -754,7 +803,7 @@ Substitute the real Headline numbers from Task 8 for the `<N>` placeholders.
 
 ```bash
 git commit -m "$(cat <<'EOF'
-docs(a11y): §3.8 audit Phase A — axe results + findings
+chore(a11y): §3.8 audit Phase A — axe results + findings
 
 Single-viewport (iPhone SE 375×667) WCAG 2.1 A+AA pass across the
 six parent-flow critical-path screens via @axe-core/playwright,
@@ -838,5 +887,7 @@ End of Phase A. Phase B plan is drafted only after George reviews `findings.md`.
 - [ ] `remaining_work.md` §3.8 collapsed to the "audit complete; fixes pending" pointer with real numbers (not `<N>` placeholders).
 - [ ] `auth-storage.json` exists locally but is NOT in `git status`.
 - [ ] PR opened with `chore(a11y):` prefix; body has real Headline numbers (not `<N>` placeholders).
+- [ ] Commit subject also uses `chore(a11y):` (matches PR title).
+- [ ] `/checkout` `incomplete` count reviewed — any non-Stripe entries surfaced as findings or observations, not silently dropped. Stripe iframe entries are excluded at audit time via the `.exclude("iframe[name^='__privateStripeFrame']")` filter; verify they don't reappear from a different selector.
 
 If any item fails, fix inline before handing off.
