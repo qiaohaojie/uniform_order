@@ -1,0 +1,47 @@
+{
+  "screen": "home",
+  "viewport": "android-landscape",
+  "viewportPx": [
+    740,
+    360
+  ],
+  "documentScrollWidth": 740,
+  "documentScrollHeight": 520,
+  "viewportWidth": 740,
+  "viewportHeight": 360,
+  "interactiveElements": [
+    {
+      "selector": "a.bg-white.rounded-[14px]",
+      "rectPx": [
+        175,
+        225,
+        390,
+        90
+      ],
+      "visible": true,
+      "smallestDim": 90
+    },
+    {
+      "selector": "a.bg-white.rounded-[14px]",
+      "rectPx": [
+        175,
+        329,
+        390,
+        90
+      ],
+      "visible": true,
+      "smallestDim": 90
+    },
+    {
+      "selector": "a.block.w-full",
+      "rectPx": [
+        179,
+        443,
+        382,
+        54
+      ],
+      "visible": false,
+      "smallestDim": 53.5
+    }
+  ]
+}

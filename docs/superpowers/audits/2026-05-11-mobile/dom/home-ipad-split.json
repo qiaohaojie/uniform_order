@@ -1,0 +1,47 @@
+{
+  "screen": "home",
+  "viewport": "ipad-split",
+  "viewportPx": [
+    507,
+    820
+  ],
+  "documentScrollWidth": 507,
+  "documentScrollHeight": 820,
+  "viewportWidth": 507,
+  "viewportHeight": 820,
+  "interactiveElements": [
+    {
+      "selector": "a.bg-white.rounded-[14px]",
+      "rectPx": [
+        59,
+        225,
+        390,
+        90
+      ],
+      "visible": true,
+      "smallestDim": 90
+    },
+    {
+      "selector": "a.bg-white.rounded-[14px]",
+      "rectPx": [
+        59,
+        329,
+        390,
+        90
+      ],
+      "visible": true,
+      "smallestDim": 90
+    },
+    {
+      "selector": "a.block.w-full",
+      "rectPx": [
+        63,
+        743,
+        382,
+        54
+      ],
+      "visible": true,
+      "smallestDim": 53.5
+    }
+  ]
+}

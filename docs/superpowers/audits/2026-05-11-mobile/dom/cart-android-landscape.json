@@ -1,0 +1,113 @@
+{
+  "screen": "cart",
+  "viewport": "android-landscape",
+  "viewportPx": [
+    740,
+    360
+  ],
+  "documentScrollWidth": 740,
+  "documentScrollHeight": 586,
+  "viewportWidth": 740,
+  "viewportHeight": 360,
+  "interactiveElements": [
+    {
+      "selector": "a.w-9.h-9",
+      "rectPx": [
+        171,
+        6,
+        36,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "button.w-6.text-center",
+      "rectPx": [
+        240,
+        182,
+        24,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 19.5
+    },
+    {
+      "selector": "button.w-6.text-center",
+      "rectPx": [
+        286,
+        182,
+        24,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 19.5
+    },
+    {
+      "selector": "button.w-6.text-center",
+      "rectPx": [
+        240,
+        274,
+        24,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 19.5
+    },
+    {
+      "selector": "button.w-6.text-center",
+      "rectPx": [
+        286,
+        274,
+        24,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 19.5
+    },
+    {
+      "selector": "button.w-6.text-center",
+      "rectPx": [
+        240,
+        367,
+        24,
+        20
+      ],
+      "visible": false,
+      "smallestDim": 19.5
+    },
+    {
+      "selector": "button.w-6.text-center",
+      "rectPx": [
+        286,
+        367,
+        24,
+        20
+      ],
+      "visible": false,
+      "smallestDim": 19.5
+    },
+    {
+      "selector": "a",
+      "rectPx": [
+        171,
+        524,
+        398,
+        20
+      ],
+      "visible": false,
+      "smallestDim": 20
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        171,
+        510,
+        398,
+        52
+      ],
+      "visible": false,
+      "smallestDim": 52
+    }
+  ]
+}

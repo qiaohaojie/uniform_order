@@ -1,0 +1,80 @@
+{
+  "screen": "checkout",
+  "viewport": "android-landscape",
+  "viewportPx": [
+    740,
+    360
+  ],
+  "documentScrollWidth": 740,
+  "documentScrollHeight": 418,
+  "viewportWidth": 740,
+  "viewportHeight": 360,
+  "interactiveElements": [
+    {
+      "selector": "input#_R_b4qinebn5rlb_-form-item.file:text-foreground.placeholder:text-muted-foreground",
+      "rectPx": [
+        171,
+        137,
+        334,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "a.text-sm.hover:underline",
+      "rectPx": [
+        358,
+        197,
+        147,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 20
+    },
+    {
+      "selector": "input#_R_j4qinebn5rlb_-form-item.file:text-foreground.placeholder:text-muted-foreground",
+      "rectPx": [
+        171,
+        225,
+        334,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        171,
+        285,
+        334,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "a.text-foreground.underline",
+      "rectPx": [
+        391,
+        345,
+        52,
+        32
+      ],
+      "visible": true,
+      "smallestDim": 32
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        391,
+        345,
+        52,
+        32
+      ],
+      "visible": true,
+      "smallestDim": 32
+    }
+  ]
+}

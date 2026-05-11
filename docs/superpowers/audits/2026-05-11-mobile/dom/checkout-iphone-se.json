@@ -1,0 +1,80 @@
+{
+  "screen": "checkout",
+  "viewport": "iphone-se",
+  "viewportPx": [
+    375,
+    667
+  ],
+  "documentScrollWidth": 375,
+  "documentScrollHeight": 667,
+  "viewportWidth": 375,
+  "viewportHeight": 667,
+  "interactiveElements": [
+    {
+      "selector": "input#_R_b4qinebn5rlb_-form-item.file:text-foreground.placeholder:text-muted-foreground",
+      "rectPx": [
+        41,
+        262,
+        293,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "a.text-sm.hover:underline",
+      "rectPx": [
+        187,
+        322,
+        147,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 20
+    },
+    {
+      "selector": "input#_R_j4qinebn5rlb_-form-item.file:text-foreground.placeholder:text-muted-foreground",
+      "rectPx": [
+        41,
+        350,
+        293,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        41,
+        410,
+        293,
+        36
+      ],
+      "visible": true,
+      "smallestDim": 36
+    },
+    {
+      "selector": "a.text-foreground.underline",
+      "rectPx": [
+        240,
+        470,
+        52,
+        32
+      ],
+      "visible": true,
+      "smallestDim": 32
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        240,
+        470,
+        52,
+        32
+      ],
+      "visible": true,
+      "smallestDim": 32
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "screen": "placed",
+  "viewport": "ipad-split",
+  "viewportPx": [
+    507,
+    820
+  ],
+  "documentScrollWidth": 507,
+  "documentScrollHeight": 820,
+  "viewportWidth": 507,
+  "viewportHeight": 820,
+  "interactiveElements": [
+    {
+      "selector": "a",
+      "rectPx": [
+        59,
+        705,
+        390,
+        20
+      ],
+      "visible": true,
+      "smallestDim": 20
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        59,
+        690,
+        390,
+        52
+      ],
+      "visible": true,
+      "smallestDim": 52
+    },
+    {
+      "selector": "a.block.mt-1.5",
+      "rectPx": [
+        59,
+        748,
+        390,
+        44
+      ],
+      "visible": true,
+      "smallestDim": 44
+    },
+    {
+      "selector": "button.inline-flex.items-center",
+      "rectPx": [
+        59,
+        748,
+        390,
+        44
+      ],
+      "visible": true,
+      "smallestDim": 44
+    }
+  ]
+}
