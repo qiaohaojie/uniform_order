@@ -149,11 +149,13 @@ export async function editTenantLegal(id: string, input: unknown) {
     return { ok: true as const };
   }
 
-  const changedFields: string[] = [];
-  if (!current) changedFields.push("initial");
-  if (!sameMode) changedFields.push("mode");
-  if (!sameContent) changedFields.push("policy");
-  if (!sameDeclarant) changedFields.push("declarant");
+  const changedFields = !current
+    ? ["initial"]
+    : [
+        ...(sameMode ? [] : ["mode"]),
+        ...(sameContent ? [] : ["policy"]),
+        ...(sameDeclarant ? [] : ["declarant"]),
+      ];
 
   // Insert new version + flip tenants pointer atomically in one db.batch
   // round-trip (project rule: never db.transaction; neon-http doesn't support
@@ -193,7 +195,6 @@ export async function editTenantLegal(id: string, input: unknown) {
       break;
     } catch (e) {
       if (isUniqueConstraintError(e, "tenant_legal_versions_tenant_version_unique")) {
-        if (attempt === 2) throw e;
         continue;
       }
       throw e;
