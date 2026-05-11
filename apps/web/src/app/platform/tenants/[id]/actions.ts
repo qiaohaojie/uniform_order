@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
 import { brandingEditSchema, tenantLegalSchema } from "@/lib/platform/schema";
-import { serverCapture } from "@/lib/analytics/server";
+import { logAuditEvent } from "@/lib/audit/log";
 import { getTenantLegalVersion, getMaxLegalVersionForTenant } from "@/db/queries";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
 
@@ -102,9 +102,14 @@ export async function editTenantBranding(id: string, input: unknown) {
     })
     .where(eq(tenants.id, id));
 
-  await serverCapture(user.email, "platform_branding_edited", {
+  await logAuditEvent({
     tenantId: id,
-    changedFields,
+    actorEmail: user.email,
+    actorRole: "platform_admin",
+    action: "tenant.branding_updated",
+    targetType: "tenant",
+    targetId: id,
+    payload: { changedFields },
   });
 
   revalidatePath(`/platform/tenants/${id}`);
@@ -204,11 +209,14 @@ export async function editTenantLegal(id: string, input: unknown) {
     return { ok: false as const, error: "Could not allocate a version number; please retry" };
   }
 
-  await serverCapture(user.email, "tenant_legal_edited", {
+  await logAuditEvent({
     tenantId: id,
-    mode: next.mode,
-    version: inserted.version,
-    changedFields,
+    actorEmail: user.email,
+    actorRole: "platform_admin",
+    action: "tenant.legal_updated",
+    targetType: "tenant_legal_version",
+    targetId: inserted.id,
+    payload: { version: inserted.version, mode: next.mode, changedFields },
   });
 
   revalidatePath(`/platform/tenants/${id}`);

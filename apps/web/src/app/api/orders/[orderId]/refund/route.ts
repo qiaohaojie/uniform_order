@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById, getTenant, addOrderRefund, getTotalRefunded, updateOrderStatus, money } from "@/db/queries";
+import { db, orderLines } from "@/db";
+import { eq } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe";
 import {
   ensureTenantAccess,
+  isPlatformAdminEmail,
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
+import { logAuditEvent } from "@/lib/audit/log";
 
 const STRIPE_REASONS = new Set(["duplicate", "fraudulent", "requested_by_customer"]);
 
@@ -165,6 +169,42 @@ export async function POST(
       new_status: newStatus,
       reconcile_pending: reconcilePending,
     });
+
+    // Audit log — only emit when the DB refund row landed in this request. If
+    // reconcile is pending (Stripe succeeded but the DB insert was deferred),
+    // the charge.refunded webhook will reconcile the refund row + order status
+    // but does NOT emit an audit event today. That reconcile path is a known
+    // audit gap, tracked as a follow-up.
+    if (dbRecorded) {
+      const refundedLineItems = body.lineId
+        ? await db
+            .select({ id: orderLines.id, itemName: orderLines.itemName, qty: orderLines.qty })
+            .from(orderLines)
+            .where(eq(orderLines.id, body.lineId))
+        : [];
+
+      await logAuditEvent({
+        tenantId: order.tenantId,
+        actorEmail: authResult.user.email,
+        actorRole: isPlatformAdminEmail(authResult.user.email)
+          ? "platform_admin"
+          : "operator",
+        action: "order.refund_issued",
+        targetType: "order",
+        targetId: orderId,
+        payload: {
+          refundAmountCents: amountCents,
+          stripeRefundId: refund.id,
+          newStatus,
+          lineItems: refundedLineItems.map((li) => ({
+            id: li.id,
+            name: li.itemName,
+            quantity: li.qty,
+          })),
+          ...(body.reason ? { reason: body.reason } : {}),
+        },
+      });
+    }
 
     return NextResponse.json({
       ok: true,

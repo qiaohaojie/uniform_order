@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addCatalogItem, getCatalogByTenant } from "@/db/queries";
-import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
+import {
+  ensureTenantAccess,
+  isPlatformAdminEmail,
+  requireSessionUser,
+} from "@/lib/auth/authorization";
 import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
 import { catalogItemInputSchema } from "@/lib/schemas/catalog";
 import { applyRateLimit } from "@/lib/rate-limit";
+import { logAuditEvent } from "@/lib/audit/log";
 
 // GET /api/catalog?tenantId=imhs
 export async function GET(req: NextRequest) {
@@ -88,6 +93,27 @@ export async function POST(req: NextRequest) {
         price: v.price,
         active: v.active,
       })),
+    });
+
+    const variantPricesCents = input.variants.map((v) =>
+      Math.round(v.price * 100),
+    );
+    await logAuditEvent({
+      tenantId: input.tenantId,
+      actorEmail: authResult.user.email,
+      actorRole: isPlatformAdminEmail(authResult.user.email)
+        ? "platform_admin"
+        : "operator",
+      action: "catalog_item.created",
+      targetType: "catalog_item",
+      targetId: id,
+      payload: {
+        name: input.name,
+        category: input.category,
+        variantCount: input.variants.length,
+        minPriceCents: Math.min(...variantPricesCents),
+        maxPriceCents: Math.max(...variantPricesCents),
+      },
     });
 
     return NextResponse.json({ id }, { status: 201 });
