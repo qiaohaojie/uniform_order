@@ -425,6 +425,14 @@ Durable `audit_events` table + instrumentation across every operator and platfor
 
 Files: `apps/web/drizzle/0011_audit_events.sql`, `apps/web/drizzle/meta/_journal.json`, `apps/web/drizzle/meta/0011_snapshot.json`, `apps/web/src/db/schema.ts`, `apps/web/src/lib/audit/{types,log,format,load-order-activity,load-tenant-activity}.ts`, `apps/web/src/components/admin/order-activity-strip.tsx`, `apps/web/src/components/platform/tenant-activity-feed.tsx`, `apps/web/src/app/api/orders/[orderId]/route.ts`, `apps/web/src/app/api/orders/[orderId]/refund/route.ts`, `apps/web/src/app/api/catalog/route.ts`, `apps/web/src/app/api/catalog/[itemId]/route.ts`, `apps/web/src/app/platform/tenants/new/actions.ts`, `apps/web/src/app/platform/tenants/[id]/actions.ts`, `apps/web/src/app/admin/[tenant]/orders/[orderId]/page.tsx`, `apps/web/src/app/platform/tenants/[id]/page.tsx`.
 
+### 4.22 Per-tenant refund-policy link in transactional email (§3.10 follow-up #2) ✅
+
+**Source:** `remaining_work.md` §3.10 follow-up #2 — shipped as part of PR #19 (`0c58484`).
+
+Now that schools author their own refund policy via PR #19's `tenant_legal_versions` + `editTenantLegal` flow, `lib/email/index.ts` derives `refundPolicyUrl = tenant.currentLegalVersionId ? ${NEXT_PUBLIC_APP_URL}/${tenant.id}/refund-policy : null` and threads it to both `OrderConfirmation` and `OrderReady`. Both templates render a "refund policy" link in their footer when the URL is set, and gracefully fall back to the inline "Contact {tenantName} for refund policy questions: {shopEmail}" line when null. No template-level change after this date — the conditional is baked into the React Email components.
+
+Files: `apps/web/src/lib/email/index.ts`, `apps/web/src/lib/email/templates/OrderConfirmation.tsx`, `apps/web/src/lib/email/templates/OrderReady.tsx`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -434,4 +442,4 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
 - **Quality** — print stylesheet QA on real A4 (§3.7); accessibility audit (§3.8); mobile viewport edge cases (§3.9).
-- **Post-launch** — per-tenant refund-policy link in email v2 (§3.10 follow-up #2); bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7).
+- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7).

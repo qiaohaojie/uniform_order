@@ -28,7 +28,7 @@ This document lists every item that must be resolved (or explicitly deferred) be
 >
 > §2.10 (`db.transaction` → `db.batch` fix, PR #10) and §3.3 ("add another child", PR #6) are complete — moved to `docs/completed.md` §4.11 and §4.12. §3.3 production ops verifications carried over to §2.11 below.
 >
-> §3.10 follow-up #1 (delete orphan `/[tenant]/refund-policy` route, PR #11) is complete — moved to `docs/completed.md` §4.13. Remaining §3.10 follow-ups (school-onboarding capture, v2 per-tenant policy link, deferred platform `/terms`) stay below.
+> §3.10 follow-ups #1 and #2 are complete — orphan `/[tenant]/refund-policy` removal in `docs/completed.md` §4.13; school-onboarding capture + per-tenant email policy link shipped via PR #19 (see §4.22). Only the deferred platform `/terms` page remains below.
 >
 > §3.1 NSBH catalog seed (PR #12, `e4ef0c7`) is complete — moved to `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt-ss/shirt-ls variant gaps are tracked in §2.12 below.
 >
@@ -112,7 +112,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 1. ✅ **School-authored refund-policy capture** — shipped via PR #19 (`0c58484`). `tenant_legal_versions` table, `editTenantLegal` action on the platform tenant detail page, and a `/[tenant]/refund-policy` route are live. Version chain + declarant name/role/date persisted; seller-of-record acknowledgement checkbox included.
 
-2. **Re-introduce per-tenant policy link in email (v2)** — now unblocked by item 1 above. Order confirmation + order ready email footers should switch from inline contact-only to a "Refund policy" link pointing to the school-authored `/[tenant]/refund-policy` whenever `tenants.current_legal_version_id` is set; fall back to inline contact when null. Small change in `lib/email/templates/` + thread the policy URL through `lib/email/index.ts`.
+2. ✅ **Re-introduce per-tenant policy link in email (v2)** — shipped as part of PR #19 (`0c58484`). `lib/email/index.ts` derives `refundPolicyUrl` from `tenant.currentLegalVersionId` and threads it to both templates; `OrderConfirmation.tsx` and `OrderReady.tsx` render a "refund policy" link when set and fall back to the inline contact line when null. Moved to `docs/completed.md` §4.22.
 
 3. **Platform `/terms` page — deferred indefinitely.** Not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
 
