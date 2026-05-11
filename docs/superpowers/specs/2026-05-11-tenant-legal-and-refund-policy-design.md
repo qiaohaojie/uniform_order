@@ -41,7 +41,7 @@ acl_acknowledged              bool not null             -- must be true to save
 seller_of_record_acknowledged bool not null             -- must be true to save
 declarant_name                text not null
 declarant_role                text not null
-entered_by_user_id            text not null             -- platform admin who saved
+entered_by_user_id            uuid fk → neon_auth.user(id) not null  -- platform admin who saved
 entered_by_email              text not null             -- snapshot for audit
 created_at                    timestamptz not null default now()
 unique (tenant_id, version)
@@ -67,7 +67,7 @@ legal_version_id              uuid fk → tenant_legal_versions(id) nullable
 
 Snapshotted at order-creation time (`POST /api/orders`) by reading `tenant.currentLegalVersionId`. Nullable so legacy orders predating this feature continue to work without backfill.
 
-The snapshot is for **audit trail** (proving which policy was in force when this specific order was placed, e.g. during an ACL dispute). Parent-facing rendering — the email footer and the `/refund-policy` route — always serves the *current* version, not the order's snapshot. See §7.2 for the rationale.
+The snapshot is for **audit trail** (proving which policy was in force when this specific order was placed, e.g. during an ACL dispute). Parent-facing rendering — the email footer and the `/refund-policy` route — always serves the *current* version, not the order's snapshot. See §7.2 for the rationale. **No UI surface reads `orders.legal_version_id`; it exists for SQL-level dispute lookup only** — flagged here to head off a future "why isn't this used?" cleanup.
 
 ### 3.4 Drizzle schema
 
@@ -90,20 +90,21 @@ Migration journal entry follows the existing numbering. Use `db.batch()` for any
 ### 4.2 Zod schema (in `lib/platform/schema.ts`)
 
 ```ts
+// Zod v4 (project uses ^4.4.3) — `error` parameter, not v3's `errorMap`.
 export const tenantLegalSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('text'),
     policyText: z.string().min(50, 'Policy text must be at least 50 characters'),
-    aclAcknowledged: z.literal(true, { errorMap: () => ({ message: 'Required' }) }),
-    sellerOfRecordAcknowledged: z.literal(true, { errorMap: () => ({ message: 'Required' }) }),
+    aclAcknowledged: z.literal(true, { error: 'Required' }),
+    sellerOfRecordAcknowledged: z.literal(true, { error: 'Required' }),
     declarantName: z.string().min(1),
     declarantRole: z.string().min(1),
   }),
   z.object({
     mode: z.literal('url'),
     policyUrl: z.string().url().refine(u => new URL(u).protocol === 'https:', 'Must be HTTPS'),
-    aclAcknowledged: z.literal(true, { errorMap: () => ({ message: 'Required' }) }),
-    sellerOfRecordAcknowledged: z.literal(true, { errorMap: () => ({ message: 'Required' }) }),
+    aclAcknowledged: z.literal(true, { error: 'Required' }),
+    sellerOfRecordAcknowledged: z.literal(true, { error: 'Required' }),
     declarantName: z.string().min(1),
     declarantRole: z.string().min(1),
   }),
@@ -115,21 +116,21 @@ export const tenantLegalSchema = z.discriminatedUnion('mode', [
 1. `requirePlatformAdmin()` → grab session user.
 2. `parseInput(tenantLegalSchema, input)` → typed payload.
 3. SELECT current version (if `tenants.currentLegalVersionId` set), build the comparable snapshot of {mode, policyText|null, policyUrl|null, declarantName, declarantRole}.
-4. Diff parsed input against current snapshot. **Identical → return `{ ok: true, noop: true }` without writing.** Mirrors `editTenantBranding` no-op short-circuit.
+4. Diff parsed input against current snapshot. **Identical → return `{ ok: true as const }` without writing.** Mirrors `editTenantBranding` (`actions.ts:90`), which uses the same `{ ok: true as const }` shape with no extra `noop` flag — keeping contracts symmetric across both edit actions.
 5. Otherwise, in a single `db.batch([...])`:
    - INSERT new `tenant_legal_versions` row with `version = max(version) + 1` for the tenant.
    - UPDATE `tenants` SET `current_legal_version_id = <new id>`.
 
-   The version-increment race is mitigated by the `unique (tenant_id, version)` constraint plus a small retry loop (mirrors the `orders_pkey` collision-retry pattern in `db/queries.ts:573`). In practice the race is rare — typically a single platform admin per tenant — but the constraint guarantees we never get duplicate version numbers.
+   The version-increment race is mitigated by the `unique (tenant_id, version)` constraint plus a small retry loop. On `unique_violation` (PG code 23505) for `(tenant_id, version)`, re-SELECT max version and retry up to ~3 times. Same shape as the `orders_pkey` collision-retry in `apps/web/src/app/api/orders/route.ts:225` (`isUniqueConstraintError(error, "orders_pkey")`). In practice the race is rare — typically a single platform admin per tenant — but the constraint guarantees we never get duplicate version numbers.
 6. Compute `changedFields: ('mode'|'policy'|'declarant'|'acks')[]` server-side.
-7. `serverCapture('tenant_legal_edited', { tenantId, mode, version, changedFields })`. Single event per save.
-8. `revalidatePath(\`/platform/tenants/${tenantId}\`)` and `revalidatePath(\`/${tenantId}/refund-policy\`)`.
-9. Return `{ ok: true, version }`.
+7. `serverCapture(user.email, 'tenant_legal_edited', { tenantId, mode, version, changedFields })`. Matches the existing call signature at `app/platform/tenants/[id]/actions.ts:102` and `app/platform/tenants/new/actions.ts:38`. Single event per save.
+8. `revalidatePath(\`/platform/tenants/${tenantId}\`)` and `revalidatePath(\`/${tenantId}\`, 'layout')`. The layout flag is required because `/[tenant]/refund-policy` lives under the tenant layout — matches the pattern used by `editTenantBranding` (`actions.ts:14`).
+9. Return `{ ok: true as const, version }`.
 
 ### 4.4 Errors
 
 - Zod failure → `{ ok: false, error: <first message> }`. Drawer surfaces it inline.
-- DB throw → caught, `serverCapture('tenant_legal_edit_error', { tenantId, message })`, return `{ ok: false, error: 'Save failed. Please try again.' }`.
+- DB throw → caught, `serverCapture(user.email, 'tenant_legal_edit_error', { tenantId, message })`, return `{ ok: false as const, error: 'Save failed. Please try again.' }`.
 - Auth failure inside `requirePlatformAdmin` throws and is caught by the framework's error boundary — same behaviour as `editTenantBranding`.
 
 ## 5. UI components
@@ -171,7 +172,7 @@ Mirrors `BrandingEditDrawer`:
   - `isMounted` ref to no-op `setPending`/`setError` after unmount during a pending save.
   - Cancel / close-X / scrim disabled while `pending`.
   - Full focus trap deferred (matches branding-drawer scope).
-- Initial state: when `currentVersion` is non-null, prefill all fields from it. Acks reset to `false` on every open — re-acknowledgement is required, as a deliberate friction.
+- Initial state: when `currentVersion` is non-null, prefill all fields from it — including the two acknowledgement checkboxes (pre-ticked). This keeps the contract symmetric with the no-op short-circuit: if the admin opens the drawer and clicks Save without changing anything, the server diff returns `{ ok: true as const }` and no new version is minted. Forcing acks to false on open would require the user to perform a re-acknowledgement that produced no audit row — incoherent. To produce a re-acknowledgement audit row, the admin must change at least one field (typically declarant_name or declarant_role).
 
 ### 5.3 Onboarding banner
 
@@ -190,7 +191,7 @@ Resurrects the route that PR #11 deleted. Lives at `apps/web/src/app/[tenant]/re
 - Await tenant lookup via existing `getTenant(slug)`. Tenant not found → `notFound()`.
 - Tenant exists but `currentLegalVersionId === null` → `notFound()`. (Parents shouldn't see a half-broken page; the platform-admin banner is the affordance to fix it.)
 - Fetch the current version row.
-- `mode === 'url'` → `redirect(version.policyUrl, RedirectType.replace)` from `next/navigation`. Status 307 by default; explicit 302 not required since the route always serves the latest version.
+- `mode === 'url'` → `redirect(version.policyUrl)` from `next/navigation`. Issues HTTP 307 by default (temporary, same-method). We deliberately do **not** pass `RedirectType.replace` — that flag controls client-side history-replacement and has no effect on the HTTP status of a server-initiated redirect to an external host. **Plan-time verification:** confirm `next/navigation`'s `redirect()` accepts off-origin URLs in Next 16 (recent versions allow it; older versions threw). If it doesn't, fall back to a `Response.redirect()` from a route handler.
 - `mode === 'text'` → render inside `MobileShell`:
   - Serif heading "Refund policy" with tenant accent underline.
   - `<div className="whitespace-pre-wrap">{policyText}</div>`.
@@ -268,7 +269,8 @@ No new validation. We're recording state, not gating on it. If `legal_version_id
 | Race: admin saves new version mid-checkout | Order writes whatever `tenant.currentLegalVersionId` was at INSERT time. No locking — small window, no parent-visible policy text in checkout today. |
 | Mode switch | New version row, old version preserved with its mode. Orders linked to old version still resolve correctly. |
 | URL host loop-back to uniformorder.online | Not policed. Chrome catches 302 loops. |
-| Re-Save with no changes | Server diff returns `{ ok: true, noop: true }`. No new version, no PostHog event, no revalidation. Acks must still be re-ticked client-side (friction is the point) but server short-circuits anyway. |
+| Re-Save with no changes | Server diff returns `{ ok: true as const }` (no special flag, mirrors `editTenantBranding`). No new version, no PostHog event, no revalidation. Acks come pre-ticked from the prior version — see §5.2. |
+| Email link → /refund-policy returns 404 | Theoretically possible if `tenant.currentLegalVersionId` is cleared between order placement and email send. In practice, `lib/email/index.ts` resolves `refundPolicyUrl` from `tenant.currentLegalVersionId` at send time — so if the FK is null, the link is null and the footer falls back to the contact line. The 404 race is not reachable through the email path. |
 | URL with non-HTTPS scheme | Rejected by zod refinement. |
 | Text policy < 50 chars | Rejected by zod minimum. |
 | Tenant deletion | Out of scope — no tenant deletion flow exists today. FK cascade not specified; if/when tenant-delete is built, it'll need to deal with `tenant_legal_versions` and `orders.legal_version_id`. |
@@ -280,7 +282,7 @@ No new validation. We're recording state, not gating on it. If `legal_version_id
 | `tenant_legal_edited` | `tenantId`, `mode`, `version`, `changedFields[]` |
 | `tenant_legal_edit_error` | `tenantId`, `message` |
 
-Both fire from the server action. No client-side events for this surface.
+Both fire from the server action via `serverCapture(user.email, eventName, props)` — see §4.3 step 7 for the signature. No client-side events for this surface.
 
 ## 10. Testing
 
@@ -290,7 +292,7 @@ Manual smoke checklist (to be expanded in the implementation plan):
 1. Save first version (text mode) for NSBH; banner disappears, LegalCard renders.
 2. Open drawer, change text, re-ack, save → version increments to 2.
 3. Switch to URL mode, save → version 3 with mode='url' and policy_text=null.
-4. Visit `/nsbh/refund-policy` in URL mode — confirm 307 redirect.
+4. Visit `/nsbh/refund-policy` in URL mode — DevTools Network tab shows status 307 with the `Location` header pointing to the school's `policy_url`. (The page itself won't render — Chrome follows the redirect to the external host.)
 5. Switch back to text mode, visit page — confirm inline render.
 6. Place a real order against NSBH; confirm `orders.legal_version_id` is set; check confirmation email footer renders the link.
 7. Place an order against a tenant with `currentLegalVersionId IS NULL`; confirm fallback footer copy.
@@ -303,7 +305,7 @@ Manual smoke checklist (to be expanded in the implementation plan):
 ## 11. Files touched (estimated)
 
 **New files:**
-- `apps/web/drizzle/00NN_tenant_legal_versions.sql` (migration)
+- `apps/web/drizzle/0010_tenant_legal_versions.sql` (migration — next number after `0009_petite_the_phantom.sql`)
 - `apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx`
 - `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx`
 - `apps/web/src/app/[tenant]/refund-policy/page.tsx` (resurrected)
@@ -318,7 +320,7 @@ Manual smoke checklist (to be expanded in the implementation plan):
 - `apps/web/src/lib/email/templates/OrderConfirmation.tsx` (footer)
 - `apps/web/src/lib/email/templates/OrderReady.tsx` (footer)
 
-Estimated diff: ~600 added / ~30 modified.
+Estimated diff: ~600 lines added in new files, ~80–120 LOC modified across the existing files (rough — email templates + action + page render + order INSERT all touch non-trivial chunks).
 
 ## 12. Sequencing
 
