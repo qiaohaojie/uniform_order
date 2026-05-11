@@ -92,9 +92,11 @@ Done. See `docs/completed.md` §4.12. Production ops verifications carried over 
 
 The reports page produces monthly GST totals client-side. Before go-live, have an Australian accountant confirm the formula (1/11 of GST-inclusive total), the rounding rules, and the Stripe-fee deduction model.
 
-### 3.7 Print stylesheet QA
+### 3.7 Print stylesheet QA — manual A4 verification only
 
-`window.print()` works for pick slips, but needs verification on real A4 in Chrome and Safari (page breaks for multi-page picks, single-slip-per-page mode for batch printing).
+**Code half shipped.** `window.print()` works for the single-slip path (order detail page) and for batch picking from the orders page (one slip per A4 page for every order in status `new`, via the shared `PickSlip` component, `@page A4` rule, and `break-after-page` between slips). See `docs/superpowers/plans/2026-05-11-batch-print-pick-slips.md` and spec `…/specs/2026-05-11-batch-print-pick-slips-design.md`.
+
+**Remaining (manual):** Real A4 paper QA in Chrome and Safari on macOS — single slip prints clean, batch prints one slip per page with no trailing blank, parent-note banner appears on slips that have a note, barcode renders, Kanban never appears in print output.
 
 ### 3.8 Accessibility audit
 
