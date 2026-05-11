@@ -15,19 +15,13 @@ import {
 import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
+import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
 
 function createOrderId(prefix: string) {
   return `${prefix}-${generateOrderSuffix()}`;
-}
-
-function isUniqueConstraintError(error: unknown, constraintName?: string) {
-  const pgError = error as { code?: string; constraint?: string };
-  if (pgError?.code !== "23505") return false;
-  if (!constraintName) return true;
-  return pgError.constraint === constraintName;
 }
 
 // GET /api/orders?tenantId=nsbh&email=...
