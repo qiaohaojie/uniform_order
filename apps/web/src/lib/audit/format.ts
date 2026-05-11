@@ -1,6 +1,9 @@
 import type { AuditEvent } from "./types";
 
 function shortId(id: string): string {
+  // Order IDs are short tenant-prefixed strings like "NSBH-04297" — show as-is.
+  // UUID-shaped ids (e.g. legal version rows) get truncated to the first segment.
+  if (id.length <= 12) return id;
   return id.slice(0, 8);
 }
 
