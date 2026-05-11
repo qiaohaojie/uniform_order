@@ -1,11 +1,15 @@
 "use server";
 import { db } from "@/db";
-import { tenants } from "@/db/schema";
+import { tenants, tenantLegalVersions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
-import { brandingEditSchema } from "@/lib/platform/schema";
+import { brandingEditSchema, tenantLegalSchema } from "@/lib/platform/schema";
 import { logAuditEvent } from "@/lib/audit/log";
+import { serverCapture } from "@/lib/analytics/server";
+import { getTenantLegalVersion, getMaxLegalVersionForTenant } from "@/db/queries";
+import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
@@ -113,4 +117,112 @@ export async function editTenantBranding(id: string, input: unknown) {
   if (existing.status === "approved") revalidatePath(`/${id}`, "layout");
 
   return { ok: true as const };
+}
+
+export async function editTenantLegal(id: string, input: unknown) {
+  const user = await requirePlatformAdmin();
+  const parsed = parseInput(tenantLegalSchema, input);
+  if (!parsed.ok) return { ok: false as const, error: parsed.error };
+
+  const [tenant] = await db
+    .select({
+      id: tenants.id,
+      currentLegalVersionId: tenants.currentLegalVersionId,
+      platformApprovalStatus: tenants.platformApprovalStatus,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, id))
+    .limit(1);
+  if (!tenant) return { ok: false as const, error: "Tenant not found" };
+
+  const current = tenant.currentLegalVersionId
+    ? await getTenantLegalVersion(tenant.currentLegalVersionId)
+    : null;
+  const next = parsed.data;
+
+  // Diff against current to short-circuit no-op saves (mirrors editTenantBranding).
+  const sameMode = current?.policyMode === next.mode;
+  const sameContent =
+    sameMode &&
+    (next.mode === "text"
+      ? current?.policyText === next.policyText
+      : current?.policyUrl === next.policyUrl);
+  const sameDeclarant =
+    current?.declarantName === next.declarantName &&
+    current?.declarantRole === next.declarantRole;
+
+  if (current && sameContent && sameDeclarant) {
+    return { ok: true as const };
+  }
+
+  const changedFields = !current
+    ? ["initial"]
+    : [
+        ...(sameMode ? [] : ["mode"]),
+        ...(sameContent ? [] : ["policy"]),
+        ...(sameDeclarant ? [] : ["declarant"]),
+      ];
+
+  // Insert new version + flip tenants pointer atomically in one db.batch
+  // round-trip (project rule: never db.transaction; neon-http doesn't support
+  // it). Generate the row id client-side so both statements can reference it
+  // without an interleaved RETURNING. Same pattern db/queries.ts:600/651/700
+  // uses for catalog INSERT-then-related-writes.
+  //
+  // Retry loop guards the (tenant_id, version) unique constraint — narrows
+  // the SELECT-MAX/INSERT race but doesn't eliminate it (see queries.ts
+  // race-window note above).
+  let inserted: { id: string; version: number } | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const nextVersion = (await getMaxLegalVersionForTenant(id)) + 1;
+    const newId = randomUUID();
+    try {
+      await db.batch([
+        db.insert(tenantLegalVersions).values({
+          id: newId,
+          tenantId: id,
+          version: nextVersion,
+          policyMode: next.mode,
+          policyText: next.mode === "text" ? next.policyText : null,
+          policyUrl: next.mode === "url" ? next.policyUrl : null,
+          aclAcknowledged: next.aclAcknowledged,
+          sellerOfRecordAcknowledged: next.sellerOfRecordAcknowledged,
+          declarantName: next.declarantName,
+          declarantRole: next.declarantRole,
+          enteredByUserId: user.id,
+          enteredByEmail: user.email,
+        }),
+        db
+          .update(tenants)
+          .set({ currentLegalVersionId: newId, updatedAt: new Date() })
+          .where(eq(tenants.id, id)),
+      ]);
+      inserted = { id: newId, version: nextVersion };
+      break;
+    } catch (e) {
+      if (isUniqueConstraintError(e, "tenant_legal_versions_tenant_version_unique")) {
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (!inserted) {
+    return { ok: false as const, error: "Could not allocate a version number; please retry" };
+  }
+
+  await serverCapture(user.email, "tenant_legal_edited", {
+    tenantId: id,
+    mode: next.mode,
+    version: inserted.version,
+    changedFields,
+  });
+
+  revalidatePath(`/platform/tenants/${id}`);
+  // Mirror editTenantBranding (actions.ts:108): only cascade the parent-shop
+  // layout cache when the tenant is actually approved.
+  if (tenant.platformApprovalStatus === "approved") {
+    revalidatePath(`/${id}`, "layout");
+  }
+
+  return { ok: true as const, version: inserted.version };
 }

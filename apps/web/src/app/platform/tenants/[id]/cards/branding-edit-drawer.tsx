@@ -31,6 +31,11 @@ export function BrandingEditDrawer({
 
   // Esc-to-close + lock body scroll while drawer is mounted.
   useEffect(() => {
+    // React 18+ Strict Mode runs setup → cleanup → setup on initial mount in
+    // dev. Reset mountedRef on every setup so the previous cleanup's
+    // `mountedRef.current = false` doesn't permanently disable post-await
+    // setters (would otherwise leave save() stuck with pending=true).
+    mountedRef.current = true;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCloseRef.current();
     };

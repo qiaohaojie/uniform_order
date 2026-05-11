@@ -30,6 +30,39 @@ export const deliveryMethodEnum = pgEnum("delivery_method", [
   "ship",
 ]);
 
+export const policyModeEnum = pgEnum("policy_mode", ["text", "url"]);
+
+// ─── Tenant legal versions ───────────────────────────────────────────────────
+// IMPORTANT: defined before `tenants` because `tenants.current_legal_version_id`
+// needs the FK target in scope. The opposite-direction FK (tenantId → tenants.id)
+// is enforced via the SQL ALTER TABLE in the migration only — the Drizzle column
+// stays as plain `text("tenant_id")` with no .references() callback to avoid the
+// hoisting cycle. FK integrity is preserved at the DB layer.
+export const tenantLegalVersions = pgTable(
+  "tenant_legal_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(), // FK enforced via SQL only — see note above
+    version: integer("version").notNull(),
+    policyMode: policyModeEnum("policy_mode").notNull(),
+    policyText: text("policy_text"),
+    policyUrl: text("policy_url"),
+    aclAcknowledged: boolean("acl_acknowledged").notNull(),
+    sellerOfRecordAcknowledged: boolean("seller_of_record_acknowledged").notNull(),
+    declarantName: text("declarant_name").notNull(),
+    declarantRole: text("declarant_role").notNull(),
+    enteredByUserId: uuid("entered_by_user_id").notNull(), // FK enforced via SQL only
+    enteredByEmail: text("entered_by_email").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantVersionUnique: uniqueIndex("tenant_legal_versions_tenant_version_unique").on(
+      t.tenantId,
+      t.version,
+    ),
+  }),
+);
+
 // ─── Tenants ─────────────────────────────────────────────────────────────────
 export const tenants = pgTable("tenants", {
   id: text("id").primaryKey(), // e.g. "nsbh"
@@ -53,6 +86,8 @@ export const tenants = pgTable("tenants", {
   platformApprovedAt: timestamp("platform_approved_at"),
   platformApprovedBy: text("platform_approved_by"),
   platformRejectionReason: text("platform_rejection_reason"),
+  // Current legal/refund-policy version (FK enforced via SQL ALTER, not Drizzle)
+  currentLegalVersionId: uuid("current_legal_version_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -123,6 +158,8 @@ export const orders = pgTable(
     status: orderStatusEnum("status").notNull().default("pending_payment"),
     // Auth link (optional — if parent was signed in)
     userId: uuid("user_id").references(() => neonAuthUsers.id, { onDelete: "set null" }),
+    // Snapshot of the policy version in force at order time (audit only)
+    legalVersionId: uuid("legal_version_id"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -221,3 +258,4 @@ export const auditEvents = pgTable(
 );
 
 export type TenantRow = typeof tenants.$inferSelect;
+export type TenantLegalVersionRow = typeof tenantLegalVersions.$inferSelect;
