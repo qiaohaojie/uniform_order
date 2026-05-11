@@ -1,0 +1,3 @@
+burgundy on parchment: 9.46
+burgundy on paper:     9.87
+burgundy on white:     10.20

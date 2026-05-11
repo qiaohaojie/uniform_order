@@ -1,0 +1,23 @@
+{
+  "screen": "item",
+  "url": "http://localhost:3000/nsbh/item/shirt-ls",
+  "auth": false,
+  "timestamp": "2026-05-11T12:44:13.192Z",
+  "counts": {
+    "critical": 0,
+    "serious": 0,
+    "moderate": 0,
+    "minor": 0,
+    "incomplete": 1,
+    "passes": 20
+  },
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 1
+    }
+  ]
+}

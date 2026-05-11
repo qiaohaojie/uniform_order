@@ -1,0 +1,29 @@
+{
+  "screen": "cart",
+  "url": "http://localhost:3000/nsbh/cart",
+  "auth": false,
+  "timestamp": "2026-05-11T12:44:15.007Z",
+  "counts": {
+    "critical": 0,
+    "serious": 0,
+    "moderate": 0,
+    "minor": 0,
+    "incomplete": 2,
+    "passes": 19
+  },
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "bypass",
+      "impact": "serious",
+      "help": "Page must have means to bypass repeated blocks",
+      "nodes": 1
+    },
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 4
+    }
+  ]
+}

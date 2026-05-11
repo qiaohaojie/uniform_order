@@ -76,9 +76,9 @@ The reports page produces monthly GST totals client-side. Before go-live, have a
 
 Code half shipped via PR #21 (squash `11667af`); see `completed.md` §4.23. Remaining: real A4 paper QA in Chrome and Safari on macOS — single slip prints clean, batch prints one slip per page with no trailing blank, parent-note banner appears on slips that have a note, barcode renders, Kanban never appears in print output.
 
-### 3.8 Accessibility audit
+### 3.8 Accessibility audit — audit complete; fixes pending
 
-No automated a11y tests run today. At minimum: keyboard nav through the parent flow, `aria-label`s on icon buttons (cart, add-to-cart, status pills), colour-contrast on the burgundy `#7A1F2B` accent.
+Audit done 2026-05-11 (axe-core + Playwright, single viewport iPhone SE 375×667, authenticated `/checkout`). See `docs/superpowers/audits/2026-05-11-a11y/findings.md` — 1 P0 (`select-name` on the Year `<select>` in checkout), 2 P1s (Stripe wrapper `aria-hidden-focus`, gold-on-parchment "Welcome" eyebrow at 2.97:1). Burgundy `#7A1F2B` is fine (9.46–10.20:1 across all backgrounds — the precautionary callout was a red herring; the actual contrast risk is the gold `#B08A3E` accent). Manual keyboard-only walkthrough was deferred; keyboard-only completability is unverified — Phase B follow-up. Fix phase (Phase B plan) drafted only after findings are reviewed.
 
 ### 3.9 Mobile shell viewport edge cases ✅
 
