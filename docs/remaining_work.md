@@ -78,7 +78,7 @@ Code half shipped via PR #21 (squash `11667af`); see `completed.md` §4.23. Rema
 
 ### 3.8 Accessibility audit — ✅ shipped
 
-Parent flow audited against WCAG 2.1 A+AA (PR #23 Phase A) and fixed (Phase B). 1 P0 (FieldLabel/select-name) + 2 P1 (Stripe wrapper, gold-text contrast) axe findings resolved or documented-excluded; Playwright-assisted keyboard walkthrough clean (no traps, 5/6 screens automated + manual follow-up enumerated). Original spec called out burgundy `#7A1F2B` as the likely contrast risk — Phase A debunked this (9.46–10.20:1 across backgrounds); the real risk was gold `#B08A3E` at small bold sizes, fixed via the `--color-gold-text` token. See `completed.md` §4.25.
+Parent flow audited against WCAG 2.1 A+AA (PR #23 Phase A) and fixed (PR #24 Phase B, squash `69430c5`). 1 P0 (FieldLabel/select-name) + 2 P1 (Stripe wrapper, gold-text contrast) axe findings resolved or documented-excluded; Playwright-assisted keyboard walkthrough clean (no traps, 5/6 screens automated + manual follow-up enumerated). Original spec called out burgundy `#7A1F2B` as the likely contrast risk — Phase A debunked this (9.46–10.20:1 across backgrounds); the real risk was gold `#B08A3E` at small bold sizes, fixed via the `--color-gold-text` token. See `completed.md` §4.25.
 
 ### 3.9 Mobile shell viewport edge cases ✅
 
