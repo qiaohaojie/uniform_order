@@ -33,6 +33,7 @@ interface OrderConfirmationEmailProps {
   totalAmount: number;
   shopEmail: string | null;
   orderUrl: string;
+  refundPolicyUrl: string | null;
 }
 
 export const OrderConfirmationEmail = ({
@@ -46,6 +47,7 @@ export const OrderConfirmationEmail = ({
   totalAmount = 0,
   shopEmail = null,
   orderUrl = "#",
+  refundPolicyUrl = null,
 }: OrderConfirmationEmailProps) => {
   const previewText = `Order Confirmation ${orderId} - ${tenantName}`;
 
@@ -109,16 +111,34 @@ export const OrderConfirmationEmail = ({
 
             <Text style={footerText}>
               {(() => {
-                const safeName = tenantName?.trim();
+                const safeName = tenantName?.trim() || "your school";
                 const safeEmail = shopEmail?.trim();
                 const validEmail = safeEmail && safeEmail.includes("@") ? safeEmail : null;
-                if (!safeName) {
-                  return "For refund or exchange questions, please contact your school directly.";
+
+                if (refundPolicyUrl) {
+                  return (
+                    <>
+                      See {safeName}'s{" "}
+                      <Link href={refundPolicyUrl} style={{ ...link, color: tenantAccent }}>
+                        refund policy
+                      </Link>
+                      {validEmail ? (
+                        <>
+                          , or contact{" "}
+                          <Link href={`mailto:${validEmail}`} style={link}>
+                            {validEmail}
+                          </Link>
+                        </>
+                      ) : null}
+                      .
+                    </>
+                  );
                 }
+
                 if (validEmail) {
                   return (
                     <>
-                      For refund or exchange questions, contact {safeName} at{" "}
+                      Contact {safeName} for refund policy questions:{" "}
                       <Link href={`mailto:${validEmail}`} style={link}>
                         {validEmail}
                       </Link>
@@ -126,7 +146,7 @@ export const OrderConfirmationEmail = ({
                     </>
                   );
                 }
-                return `For refund or exchange questions, contact ${safeName} directly.`;
+                return `Contact ${safeName} for refund policy questions.`;
               })()}
             </Text>
           </Section>

@@ -20,6 +20,8 @@ interface OrderReadyEmailProps {
   collectionInstructions: string;
   shopHours: string;
   orderUrl: string;
+  shopEmail: string | null;
+  refundPolicyUrl: string | null;
 }
 
 export const OrderReadyEmail = ({
@@ -30,6 +32,8 @@ export const OrderReadyEmail = ({
   collectionInstructions = "Please collect from the school office.",
   shopHours = "Mon-Fri, 8:30am - 4:00pm",
   orderUrl = "#",
+  shopEmail = null,
+  refundPolicyUrl = null,
 }: OrderReadyEmailProps) => {
   const previewText = `Your order ${orderId} is ready for pickup!`;
 
@@ -65,6 +69,47 @@ export const OrderReadyEmail = ({
                 View order status
               </Link>
             </Section>
+
+            <Text style={footerText}>
+              {(() => {
+                const safeName = tenantName?.trim() || "your school";
+                const safeEmail = shopEmail?.trim();
+                const validEmail = safeEmail && safeEmail.includes("@") ? safeEmail : null;
+
+                if (refundPolicyUrl) {
+                  return (
+                    <>
+                      Need a refund or exchange? See {safeName}'s{" "}
+                      <Link href={refundPolicyUrl} style={{ ...link, color: tenantAccent }}>
+                        refund policy
+                      </Link>
+                      {validEmail ? (
+                        <>
+                          {" "}or contact{" "}
+                          <Link href={`mailto:${validEmail}`} style={link}>
+                            {validEmail}
+                          </Link>
+                        </>
+                      ) : null}
+                      .
+                    </>
+                  );
+                }
+
+                if (validEmail) {
+                  return (
+                    <>
+                      Contact {safeName} for refund policy questions:{" "}
+                      <Link href={`mailto:${validEmail}`} style={link}>
+                        {validEmail}
+                      </Link>
+                      .
+                    </>
+                  );
+                }
+                return `Contact ${safeName} for refund policy questions.`;
+              })()}
+            </Text>
           </Section>
           <Hr style={footerHr} />
           <Section style={footer}>
@@ -174,4 +219,16 @@ const ctaButton = {
   textDecoration: "none",
   padding: "12px 24px",
   borderRadius: "6px",
+};
+
+const link = {
+  color: "#556cd6",
+  textDecoration: "underline",
+};
+
+const footerText = {
+  color: "#8898aa",
+  fontSize: "14px",
+  lineHeight: "22px",
+  marginTop: "32px",
 };

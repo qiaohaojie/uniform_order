@@ -38,3 +38,36 @@ export type Step1 = z.infer<typeof step1Schema>;
 export type Step2 = z.infer<typeof step2Schema>;
 export type BrandingEdit = z.infer<typeof brandingEditSchema>;
 export type Step4 = z.infer<typeof step4Schema>;
+
+const baseLegalFields = {
+  aclAcknowledged: z.literal(true, { error: "Required" }),
+  sellerOfRecordAcknowledged: z.literal(true, { error: "Required" }),
+  declarantName: z.string().min(1).max(120),
+  declarantRole: z.string().min(1).max(120),
+};
+
+export const tenantLegalSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("text"),
+    policyText: z.string().min(50, "Policy text must be at least 50 characters").max(20000),
+    policyUrl: z.undefined().optional(),
+    ...baseLegalFields,
+  }),
+  z.object({
+    mode: z.literal("url"),
+    policyUrl: z
+      .string()
+      .url()
+      .refine((u) => {
+        try {
+          return new URL(u).protocol === "https:";
+        } catch {
+          return false;
+        }
+      }, "Must be HTTPS"),
+    policyText: z.undefined().optional(),
+    ...baseLegalFields,
+  }),
+]);
+
+export type TenantLegal = z.infer<typeof tenantLegalSchema>;
