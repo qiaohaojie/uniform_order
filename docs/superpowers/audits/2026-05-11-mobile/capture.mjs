@@ -7,7 +7,7 @@ import { join } from "node:path";
 const BASE = "http://localhost:3000";
 const TENANT = "nsbh";
 const OUT_DIR = "docs/superpowers/audits/2026-05-11-mobile";
-const BASELINE = join(OUT_DIR, "baseline");
+const BASELINE = join(OUT_DIR, process.argv[2] ?? "baseline");
 const DOM = join(OUT_DIR, "dom");
 mkdirSync(BASELINE, { recursive: true });
 mkdirSync(DOM, { recursive: true });

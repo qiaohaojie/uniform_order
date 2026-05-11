@@ -80,9 +80,9 @@ Code half shipped via PR #21 (squash `11667af`); see `completed.md` §4.23. Rema
 
 No automated a11y tests run today. At minimum: keyboard nav through the parent flow, `aria-label`s on icon buttons (cart, add-to-cart, status pills), colour-contrast on the burgundy `#7A1F2B` accent.
 
-### 3.9 Mobile shell viewport edge cases — audit complete; fixes pending
+### 3.9 Mobile shell viewport edge cases ✅
 
-Audit done 2026-05-11. See `docs/superpowers/audits/2026-05-11-mobile/findings.md` for the findings + observations (0 P0s, 3 P1s — all small-tap-target issues on the cart quantity steppers, the catalog header cart-icon link, and the item-page back link). Fix phase (Phase B plan) is drafted only after the findings are approved.
+Done 2026-05-11. Three rule-#2 small-tap-target P1s identified by Phase A audit and fixed in Phase B (cart qty steppers → 28×28, catalog header cart link → 36×36, item header cart link → 36×36). Rule #1 (horizontal scrollbar) and rules #3-#4 had zero findings at any of the three viewports. See `completed.md` §4.24.
 
 ### 3.10 Platform `/terms` page — deferred indefinitely
 

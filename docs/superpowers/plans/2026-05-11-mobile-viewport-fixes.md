@@ -102,22 +102,46 @@ overall row spacing."
 ## Task 2: F2 — catalog header cart icon gets a 36 × 36 tap surface
 
 **Files:**
-- Modify: `apps/web/src/app/[tenant]/page.tsx:63`
+- Modify: `apps/web/src/app/[tenant]/page.tsx:63-71`
 
-The cart link in the catalog topbar wraps a 22 × 22 `<CartIcon />` and a badge with `className="relative text-white"`. With no explicit width or height, the link's `getBoundingClientRect` matches the icon at 22 × 22 — below the 24 px threshold. Fix: add `w-9 h-9 flex items-center justify-center` so the link itself is 36 × 36 while the icon and badge stay visually unchanged.
+The cart link in the catalog topbar wraps a 22 × 22 `<CartIcon />` and a `position: absolute` badge anchored `-top-1 -right-1.5` relative to the link. The link has no explicit width / height, so its `getBoundingClientRect` matches the icon at 22 × 22 — below the 24 px threshold.
 
-- [ ] **Step 1: Edit the link className**
+**Why not just enlarge the link and stop there:** if we make the `<Link>` itself 36 × 36 and leave the badge as-is, the badge's `-top-1 -right-1.5` would anchor to the new 36 × 36 corner instead of the icon's corner — the icon centers inside the box, so the badge would float ~7 px up and right of where it sits today. Visible regression with the dummy "6" badge on `/[tenant]`.
 
-In `apps/web/src/app/[tenant]/page.tsx`, change line 63 from:
+**Why not a wrapper div around the link:** that would leave the inner `<Link>` (the actual `<a>`) at 22 × 22 — rule-#2's jq check in Task 6 (`a.relative.text-white` on catalog) would still flag it and the verification gate would fail.
+
+**Fix:** make the `<Link>` 36 × 36 *and* nest the icon in its own `relative` span so the badge keeps anchoring to the icon's corner, not the link's. The Link is the 36 × 36 interactive element (jq check passes); the badge visually stays exactly where it is today.
+
+- [ ] **Step 1: Enlarge the link and re-anchor the badge to the icon**
+
+In `apps/web/src/app/[tenant]/page.tsx`, change lines 63-71 from:
 
 ```tsx
           <Link href={`/${tenant.id}/cart`} className="relative text-white" aria-label="Cart">
+            <CartIcon size={22} />
+            <span
+              className="absolute -top-1 -right-1.5 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center"
+              style={{ background: "#fff", color: tenant.accent }}
+            >
+              6
+            </span>
+          </Link>
 ```
 
 to:
 
 ```tsx
-          <Link href={`/${tenant.id}/cart`} className="relative text-white w-9 h-9 flex items-center justify-center" aria-label="Cart">
+          <Link href={`/${tenant.id}/cart`} className="w-9 h-9 flex items-center justify-center text-white" aria-label="Cart">
+            <span className="relative">
+              <CartIcon size={22} />
+              <span
+                className="absolute -top-1 -right-1.5 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center"
+                style={{ background: "#fff", color: tenant.accent }}
+              >
+                6
+              </span>
+            </span>
+          </Link>
 ```
 
 - [ ] **Step 2: Type-check**
@@ -135,9 +159,11 @@ git add "apps/web/src/app/[tenant]/page.tsx"
 git commit -m "fix(catalog): header cart link ≥ 36 × 36 tap target (F2)
 
 The cart icon link in the tenant-shop topbar rendered at 22 × 22 px
-(matching the icon glyph). Wrap it in w-9 h-9 flex items-center
-justify-center so the link itself is 36 × 36, restoring a proper
-tap target while leaving the icon's visual size unchanged."
+(matching the icon glyph). Make the Link itself 36 × 36 with w-9 h-9
+flex items-center justify-center, and nest the icon in its own
+relative span so the absolute-positioned badge keeps anchoring to
+the icon corner (not the new 36 × 36 box corner) — badge visual
+position unchanged."
 ```
 
 ---
@@ -145,23 +171,62 @@ tap target while leaving the icon's visual size unchanged."
 ## Task 3: F3 — item-page header cart icon grows to 36 × 36 (corrected from "back link")
 
 **Files:**
-- Modify: `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx:235`
+- Modify: `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx:233-247`
 
-The findings.md F3 row originally labelled this as the back link. Re-reading the source: the back link at `interactive.tsx:221` is already `w-9 h-9` and renders correctly. The actual element flagged by the DOM snapshot (`a.w-9.flex` selector, 36 × 22 rect) is the **cart icon link** in the same topbar — at `interactive.tsx:235`, currently `w-9 flex justify-end relative`. Without an explicit height, the link collapses to the 22 px icon height. Add `h-9 items-center` to give it the 36 × 36 tap surface.
+The findings.md F3 row originally labelled this as the back link. Re-reading the source: the back link at `interactive.tsx:221` is already `w-9 h-9` and renders correctly. The actual element flagged by the DOM snapshot (`a.w-9.flex` selector, 36 × 22 rect) is the **cart icon link** in the same topbar — at `interactive.tsx:233-247`, currently `w-9 flex justify-end relative` with a `<CartIcon size={22}/>` plus an `absolute -top-1 right-0` badge.
 
-- [ ] **Step 1: Edit the cart link className**
+Same badge concern as F2: if we just add `h-9 items-center`, the icon centers in the new 36 px box and the badge (`-top-1 right-0`) anchors to the box corner, drifting ~7 px above the icon. Apply the same shape as F2 — make the Link 36 × 36 with `items-center justify-center`, drop the now-redundant `justify-end`, drop `relative` from the Link, and nest the icon in its own `relative` span so the badge keeps anchoring to the icon corner.
 
-In `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`, change line 235 from:
+- [ ] **Step 1: Restructure the cart link**
+
+In `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`, replace the entire block at lines 233-248. From:
 
 ```tsx
+      <Link
+        href={`/${tenant.id}/cart`}
         className="w-9 flex justify-end relative"
+        style={{ color: "var(--color-ink)" }}
+        aria-label="Cart"
+      >
+        <CartIcon size={22} />
+        {cartCount > 0 && (
+          <span
+            className="absolute -top-1 right-0 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center text-white"
+            style={{ background: tenant.accent }}
+          >
+            {cartCount}
+          </span>
+        )}
+      </Link>
 ```
 
 to:
 
 ```tsx
-        className="w-9 h-9 flex items-center justify-end relative"
+      <Link
+        href={`/${tenant.id}/cart`}
+        className="w-9 h-9 flex items-center justify-center"
+        style={{ color: "var(--color-ink)" }}
+        aria-label="Cart"
+      >
+        <span className="relative">
+          <CartIcon size={22} />
+          {cartCount > 0 && (
+            <span
+              className="absolute -top-1 -right-1 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center text-white"
+              style={{ background: tenant.accent }}
+            >
+              {cartCount}
+            </span>
+          )}
+        </span>
+      </Link>
 ```
+
+Changes:
+- `<Link>` className `w-9 flex justify-end relative` → `w-9 h-9 flex items-center justify-center`. The Link is now the 36 × 36 interactive box; the rule-#2 jq check on `a.w-9.flex` will see ≥ 36 px on both dims.
+- `<CartIcon>` + badge are wrapped in a new `<span className="relative">` so the badge anchors to the icon's bounding box, not the Link's 36 × 36 box.
+- Badge `right-0` → `-right-1`. Previously the badge sat flush with the right edge of the right-justified icon inside a 36 px Link. Now the icon's wrapper span is icon-sized, so a small negative offset (−4 px) keeps the badge visually overhanging the icon corner — mirrors the catalog-header pattern (F2's `-top-1 -right-1.5`) and stays consistent with `Phone` topbar visuals.
 
 - [ ] **Step 2: Type-check**
 
@@ -179,8 +244,11 @@ git commit -m "fix(item): header cart link ≥ 36 × 36 tap target (F3)
 
 Phase A findings.md flagged a.w-9.flex with smallest dim 22 px. The
 selector matched the cart icon in the item topbar (not the back
-link, which is already w-9 h-9). Add h-9 items-center to the cart
-link so its rendered rect is 36 × 36."
+link, which is already w-9 h-9). Make the Link itself 36 × 36 with
+w-9 h-9 flex items-center justify-center, and nest the icon in its
+own relative span so the absolute-positioned badge keeps anchoring
+to the icon (badge offset re-tuned from right-0 to -right-1 to match
+the new wrapper sizing)."
 ```
 
 ---
@@ -195,12 +263,13 @@ The capture script needs `pnpm dev:web` running on port 3000. If Phase A's dev s
 - [ ] **Step 1: Kill any existing Next.js dev server**
 
 ```bash
-ps -ef | grep -E "next dev|next-server" | grep -v grep | awk '{print $2}' | xargs -r kill 2>/dev/null
+pkill -f "next dev" 2>/dev/null
+pkill -f "next-server" 2>/dev/null
 sleep 1
-ps -ef | grep -E "next dev|next-server" | grep -v grep | head -3 || echo stopped
+pgrep -f "next dev|next-server" | head -3 || echo stopped
 ```
 
-Expected: `stopped` (or no output).
+Expected: `stopped` (or no output). `pkill` is portable on macOS (Darwin) — the prior `xargs -r` form was GNU-only and silently no-op'd on empty input.
 
 - [ ] **Step 2: Start the dev server in the background**
 
@@ -324,7 +393,8 @@ Expected: zero output (no horizontal-scroll regression introduced by the fixes).
 - [ ] **Step 1: Stop the dev server**
 
 ```bash
-ps -ef | grep -E "next dev|next-server" | grep -v grep | awk '{print $2}' | xargs -r kill 2>/dev/null
+pkill -f "next dev" 2>/dev/null
+pkill -f "next-server" 2>/dev/null
 ```
 
 - [ ] **Step 2: Edit findings.md — flip the three findings to "Fixed"**
@@ -339,8 +409,8 @@ All three Phase A findings are resolved. Post-fix captures live in `docs/superpo
 | # | Fix commit | Element | Before (smallest dim) | After (smallest dim) | Class change |
 |---|---|---|---|---|---|
 | F1 | <fill from `git log --oneline --grep "F1"`> | Cart qty steppers (`apps/web/src/app/[tenant]/cart/cart-screen.tsx`) | 24 × 19.5 px | 28 × 28 px | parent `h-[26px]` → `h-7`; buttons `w-6` → `w-7 h-full` |
-| F2 | <fill from `git log --oneline --grep "F2"`> | Catalog header cart link (`apps/web/src/app/[tenant]/page.tsx`) | 22 × 22 px | 36 × 36 px | added `w-9 h-9 flex items-center justify-center` |
-| F3 | <fill from `git log --oneline --grep "F3"`> | Item header **cart** link — corrected from "back link" (`apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`) | 36 × 22 px | 36 × 36 px | added `h-9 items-center` |
+| F2 | <fill from `git log --oneline --grep "F2"`> | Catalog header cart link (`apps/web/src/app/[tenant]/page.tsx`) | 22 × 22 px | 36 × 36 px | Link → `w-9 h-9 flex items-center justify-center text-white`; icon + badge nested in inner `relative` span so badge stays anchored to icon (no visual shift) |
+| F3 | <fill from `git log --oneline --grep "F3"`> | Item header **cart** link — corrected from "back link" (`apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`) | 36 × 22 px | 36 × 36 px | Link → `w-9 h-9 flex items-center justify-center`; icon + badge wrapped in inner `relative` span; badge `right-0` → `-right-1` to match new wrapper |
 ```
 
 Replace the three `<fill from `git log --oneline --grep "FN"`>` placeholders with the actual short commit SHAs from `git log --oneline -5`.
@@ -371,9 +441,17 @@ Do not commit yet — the audit-doc commit happens in Task 9 alongside the §3.9
 
 - [ ] **Step 1: Collapse §3.9 in `remaining_work.md`**
 
+**First, verify the heading wording matches before attempting the Edit** — Phase A landed §3.9 independently and the snippet below was drafted from memory:
+
+```bash
+rg -n "^### 3\.9" docs/remaining_work.md
+```
+
+Read 15 lines around that match and reconcile the "Current text" block below against what's actually in the file (em-dash style, line wraps, exact words). If the existing text differs, edit by the matched anchor rather than blindly pasting the snippet below — a verbatim mismatch will fail the Edit silently and §3.9 will stay stale while §4.24 ships in `completed.md`.
+
 In `docs/remaining_work.md`, find the §3.9 block (currently the "audit complete; fixes pending" entry from Phase A) and replace it with a one-liner pointer. The replacement block (find the existing first line and the body, replace with this):
 
-Current text:
+Current text (verify against actual file first):
 
 ```
 ### 3.9 Mobile shell viewport edge cases — audit complete; fixes pending
@@ -406,8 +484,8 @@ Two-phase: **Phase A** (PR #22 audit) captured 18 baseline screenshots + 18 DOM 
 **Phase B** (this PR — merged into PR #22 as additional commits) applied three Tailwind class adjustments and re-captured the same 18 screenshots into `after/`:
 
 - **F1** Cart qty steppers in `app/[tenant]/cart/cart-screen.tsx` — stepper container `h-[26px]` → `h-7`; both `<button>`s `w-6` → `w-7 h-full`. Smallest dim 19.5 px → 28 px.
-- **F2** Catalog header cart link in `app/[tenant]/page.tsx` — added `w-9 h-9 flex items-center justify-center` to the `<Link>` so the link itself is 36 × 36 (icon stays 22 px). 22 × 22 → 36 × 36.
-- **F3** Item header cart link in `app/[tenant]/item/[itemId]/interactive.tsx` — added `h-9 items-center` to the existing `w-9 flex justify-end`. (Phase A findings row mislabelled this as the back link; the back link at the same file's line 221 was already `w-9 h-9`.) 36 × 22 → 36 × 36.
+- **F2** Catalog header cart link in `app/[tenant]/page.tsx` — Link enlarged to `w-9 h-9 flex items-center justify-center`; icon + badge nested in an inner `relative` span so the badge stays anchored to the icon (no visual shift on the badge). 22 × 22 → 36 × 36.
+- **F3** Item header cart link in `app/[tenant]/item/[itemId]/interactive.tsx` — Link restructured to `w-9 h-9 flex items-center justify-center`, icon + badge moved inside an inner `relative` span, badge offset `right-0` → `-right-1` to match the new wrapper. (Phase A findings row mislabelled this as the back link; the back link at the same file's line 221 was already `w-9 h-9`.) 36 × 22 → 36 × 36.
 
 Rule-#1 / #3 / #4 unchanged at zero matches post-fix; the three pre-fix rule-#2 selectors no longer appear in the `after/`-state DOM snapshots.
 

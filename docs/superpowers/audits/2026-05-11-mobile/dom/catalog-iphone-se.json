@@ -11,15 +11,15 @@
   "viewportHeight": 667,
   "interactiveElements": [
     {
-      "selector": "a.relative.text-white",
+      "selector": "a.w-9.h-9",
       "rectPx": [
-        337,
-        19,
-        22,
-        22
+        323,
+        12,
+        36,
+        36
       ],
       "visible": true,
-      "smallestDim": 22
+      "smallestDim": 36
     },
     {
       "selector": "a.h-[30px].px-3",

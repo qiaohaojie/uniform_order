@@ -449,6 +449,24 @@ Remaining work (manual, not code): real A4 paper QA in Chrome and Safari on macO
 
 Files: `apps/web/src/components/admin/pick-slip.tsx`, `apps/web/src/app/admin/[tenant]/orders/[orderId]/page.tsx`, `apps/web/src/app/admin/[tenant]/orders/orders-board.tsx`, `apps/web/src/app/admin/[tenant]/orders/orders-page-client.tsx`, `apps/web/src/app/api/orders/route.ts`, `apps/web/src/index.css`.
 
+### 4.24 Mobile viewport edge cases — audit + fixes (§3.9) ✅
+
+**Source:** `remaining_work.md` §3.9 — audit + fixes shipped 2026-05-11. Spec: `docs/superpowers/specs/2026-05-11-mobile-viewport-audit.md`; Phase A plan: `docs/superpowers/plans/2026-05-11-mobile-viewport-audit.md`; Phase B plan: `docs/superpowers/plans/2026-05-11-mobile-viewport-fixes.md`; findings + before/after artefacts: `docs/superpowers/audits/2026-05-11-mobile/`.
+
+Two-phase: **Phase A** (PR #22 audit) captured 18 baseline screenshots + 18 DOM snapshots across iPhone SE (375 × 667), Android landscape (740 × 360), and iPad split-view (507 × 820) for the six parent-purchase critical-path screens. Programmatic rule-#1 (horizontal scrollbar) and rule-#2 (smallest dim < 24 px) checks plus a manual visual review for rules #3–#4. Output: zero P0s, three rule-#2 P1s — all small-tap-target issues on icon-only / quantity controls.
+
+**Phase B** (this PR — merged into PR #22 as additional commits) applied three Tailwind class adjustments and re-captured the same 18 screenshots into `after/`:
+
+- **F1** Cart qty steppers in `app/[tenant]/cart/cart-screen.tsx` — stepper container `h-[26px]` → `h-7`; both `<button>`s `w-6` → `w-7 h-full`. Smallest dim 19.5 px → 28 px.
+- **F2** Catalog header cart link in `app/[tenant]/page.tsx` — Link enlarged to `w-9 h-9 flex items-center justify-center`; icon + badge nested in an inner `relative` span so the badge stays anchored to the icon (no visual shift on the badge). 22 × 22 → 36 × 36.
+- **F3** Item header cart link in `app/[tenant]/item/[itemId]/interactive.tsx` — Link restructured to `w-9 h-9 flex items-center justify-center`, icon + badge moved inside an inner `relative` span, badge offset `right-0` → `-right-1` to match the new wrapper. (Phase A findings row mislabelled this as the back link; the back link at the same file's line 221 was already `w-9 h-9`.) 36 × 22 → 36 × 36.
+
+Rule-#1 / #3 / #4 unchanged at zero matches post-fix; the three pre-fix rule-#2 selectors no longer appear in the `after/`-state DOM snapshots.
+
+**Known gap, not closed:** `/[tenant]/checkout` is gated by Better-Auth, so the original captures showed the sign-in page rather than the actual checkout form. The checkout layout itself remains unaudited at the three target viewports until an authenticated capture pass is run. Logged as an observation in `findings.md`; not blocking ship since the surrounding screens (cart, sign-in card, placed) audit clean.
+
+Files: `apps/web/src/app/[tenant]/cart/cart-screen.tsx`, `apps/web/src/app/[tenant]/page.tsx`, `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`, `docs/superpowers/audits/2026-05-11-mobile/` (18 baseline + 18 after PNGs, 18 DOM snapshots, `findings.md`, `capture.mjs`).
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)

@@ -22,70 +22,70 @@
       "smallestDim": 36
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
         124,
-        182,
-        24,
-        20
+        180,
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
-        170,
-        182,
-        24,
-        20
+        174,
+        180,
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
         124,
         274,
-        24,
-        20
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
-        170,
+        174,
         274,
-        24,
-        20
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
         124,
-        367,
-        24,
-        20
+        369,
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
-        170,
-        367,
-        24,
-        20
+        174,
+        369,
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
       "selector": "a",

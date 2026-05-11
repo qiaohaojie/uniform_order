@@ -6,7 +6,7 @@
     360
   ],
   "documentScrollWidth": 740,
-  "documentScrollHeight": 586,
+  "documentScrollHeight": 592,
   "viewportWidth": 740,
   "viewportHeight": 360,
   "interactiveElements": [
@@ -22,76 +22,76 @@
       "smallestDim": 36
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
         240,
-        182,
-        24,
-        20
+        180,
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
-        286,
-        182,
-        24,
-        20
+        290,
+        180,
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
         240,
         274,
-        24,
-        20
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
-        286,
+        290,
         274,
-        24,
-        20
+        28,
+        26
       ],
       "visible": true,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
         240,
-        367,
-        24,
-        20
+        369,
+        28,
+        26
       ],
       "visible": false,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
-      "selector": "button.w-6.text-center",
+      "selector": "button.w-7.h-full",
       "rectPx": [
-        286,
-        367,
-        24,
-        20
+        290,
+        369,
+        28,
+        26
       ],
       "visible": false,
-      "smallestDim": 19.5
+      "smallestDim": 26
     },
     {
       "selector": "a",
       "rectPx": [
         171,
-        524,
+        530,
         398,
         20
       ],
@@ -102,7 +102,7 @@
       "selector": "button.inline-flex.items-center",
       "rectPx": [
         171,
-        510,
+        516,
         398,
         52
       ],
