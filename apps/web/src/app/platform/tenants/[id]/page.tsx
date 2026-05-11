@@ -55,13 +55,11 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
         ) : (
           <>
             {!currentLegalVersion ? (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-[10px] px-5 py-4 flex items-start justify-between gap-4">
-                <div className="text-sm">
-                  <strong className="font-semibold text-yellow-900">Refund policy not set.</strong>{" "}
-                  <span className="text-yellow-900/90">
-                    Add it to enable a per-tenant refund-policy link in confirmation emails.
-                  </span>
-                </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-[10px] px-5 py-4 text-sm">
+                <strong className="font-semibold text-yellow-900">Refund policy not set.</strong>{" "}
+                <span className="text-yellow-900/90">
+                  Add it to enable a per-tenant refund-policy link in confirmation emails.
+                </span>
               </div>
             ) : null}
             <BrandingCard tenant={tenant} />

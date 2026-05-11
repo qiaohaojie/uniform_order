@@ -2,6 +2,12 @@ import { notFound, redirect } from "next/navigation";
 import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
 
+// Tenant-internal document, not an SEO target.
+export const metadata = {
+  title: "Refund policy",
+  robots: { index: false, follow: false },
+};
+
 export default async function RefundPolicyPage({
   params,
 }: {
