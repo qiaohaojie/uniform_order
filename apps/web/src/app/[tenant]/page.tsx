@@ -60,13 +60,15 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
               </div>
             )}
           </div>
-          <Link href={`/${tenant.id}/cart`} className="relative text-white" aria-label="Cart">
-            <CartIcon size={22} />
-            <span
-              className="absolute -top-1 -right-1.5 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center"
-              style={{ background: "#fff", color: tenant.accent }}
-            >
-              6
+          <Link href={`/${tenant.id}/cart`} className="w-9 h-9 flex items-center justify-center text-white" aria-label="Cart">
+            <span className="relative">
+              <CartIcon size={22} />
+              <span
+                className="absolute -top-1 -right-1.5 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center"
+                style={{ background: "#fff", color: tenant.accent }}
+              >
+                6
+              </span>
             </span>
           </Link>
         </div>
