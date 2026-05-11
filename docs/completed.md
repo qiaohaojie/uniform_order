@@ -369,7 +369,7 @@ Migrated the `[tenant]` and `admin/[tenant]` routes from the static `TENANTS`/`C
 
 ### 4.17 Platform portal — scaffold + tenant list + tenant detail (Phases 2/3/5) ✅
 
-**Source:** `remaining_work.md` §2.2 (3 of 4 super-admin screens) — shipped via PR #15 (squash-merge `dd688dc`, 2026-05-09).
+**Source:** `remaining_work.md` §2.2 — shipped via PR #15 (squash-merge `dd688dc`, 2026-05-09).
 
 `/platform/*` shell with auth gate using `isPlatformAdminEmail` (driven by `PLATFORM_ADMIN_EMAILS` env var). Tenants list with KPIs (active orders, total revenue, payouts-enabled flag) plus search + status filter. Tenant detail page with read-only cards (identity, branding, billing, operator, catalog summary). Spec: `docs/superpowers/specs/2026-05-09-platform-portal-design.md` v5.
 
@@ -387,13 +387,30 @@ Migrated the `[tenant]` and `admin/[tenant]` routes from the static `TENANTS`/`C
 
 Files: `lib/platform/stripe-billing.ts`, `app/platform/billing/page.tsx`, `app/platform/billing/billing-table.tsx`, `app/api/stripe/webhook/route.ts` (+2 lines: import + `revalidateTag` in `account.updated` branch). Iterated through 5 rounds of Gemini review feedback before merge.
 
+### 4.20 Platform portal — branding editor drawer (final §2.2 screen) ✅
+
+**Source:** `remaining_work.md` §2.2 (branding editor) — shipped via PR #18 (squash-merge `1ea6055`, 2026-05-11). Closes the super-admin portal scope (all 6 screens now live).
+
+Right-side overlay drawer launched from the Edit link on the tenant detail BrandingCard. Form on the left (logo upload + remove via UploadThing, accent picker, motto), live `BrandingPreview` on the right (MobileShell-style stub with accent header, logo / Crest fallback, motto, two stub catalog rows). Save is disabled while UploadThing is uploading so a stale URL can't be persisted. The public-listing toggle stays inline on the card — common operation, low blast radius, not worth a drawer round-trip.
+
+**Server action (`editTenantBranding`):** sibling to the wizard's `updateTenantBranding`. Covers logoUrl + accent + motto (motto sits in `step1Schema` for the wizard, so `step2Schema` stays unchanged). Computes `changedFields` server-side (rejects client-supplied diff — observability ground truth shouldn't be falsifiable by an admin or a buggy diff), short-circuits no-op saves, emits one PostHog event with the diff, and revalidates the tenant detail page plus the parent-shop layout when the tenant is approved.
+
+**Refactors bundled in same PR:**
+- `lib/platform/action-helpers.ts` — extracts `requirePlatformAdmin` / `parseInput` so wizard and edit drawer share the same admin gate + zod parser.
+- `components/platform/accent-picker.tsx` — shared between wizard step-2 and the drawer (single swatches + hex input).
+- `components/platform/branding-preview.tsx` — new stub component the drawer uses; wizard step-2 can adopt it later for the right-rail preview promised in the spec.
+- `BrandingCard` now imports `TenantRow` from `db/schema` instead of redefining `typeof tenants.$inferSelect` so the two layers don't drift on the row shape.
+
+**A11y:** `aria-modal`, Esc-to-close (stabilised via `onCloseRef` so an inline `onClose` prop on every parent render doesn't churn the keydown listener), body-scroll-lock, isMounted guard on post-await state updates, and Cancel / close-X / scrim are all disabled while pending so the user can't dismiss mid-save and miss a server error. Full focus trap deferred.
+
+Files: `app/platform/tenants/[id]/actions.ts`, `app/platform/tenants/[id]/cards/branding-card.tsx`, `app/platform/tenants/[id]/cards/branding-edit-drawer.tsx`, `app/platform/tenants/new/actions.ts`, `app/platform/tenants/new/steps/step-2-branding.tsx`, `components/platform/accent-picker.tsx`, `components/platform/branding-preview.tsx`, `lib/platform/action-helpers.ts`, `lib/platform/schema.ts` (+449 / -88).
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
 
 The following audit items are **not** complete and are tracked in `docs/remaining_work.md`:
 
-- Super-admin / platform portal — branding editor (3 of 4 screens shipped via PRs #15, #16, #17) — `remaining_work.md` §2.2.
 - Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) — `remaining_work.md` §3.1.
 - Parent-account ("add another child") production ops verifications — `remaining_work.md` §2.11.
 - Dashboard "New product" and "Export" buttons not wired — `remaining_work.md` §4.2.

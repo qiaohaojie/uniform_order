@@ -31,21 +31,8 @@ This document lists every item that must be resolved (or explicitly deferred) be
 > §3.10 follow-up #1 (delete orphan `/[tenant]/refund-policy` route, PR #11) is complete — moved to `docs/completed.md` §4.13. Remaining §3.10 follow-ups (school-onboarding capture, v2 per-tenant policy link, deferred platform `/terms`) stay below.
 >
 > §3.1 NSBH catalog seed (PR #12, `e4ef0c7`) is complete — moved to `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt-ss/shirt-ls variant gaps are tracked in §2.12 below.
-
-### 2.2 Super-admin / platform portal — 3 of 4 screens shipped; branding editor remaining
-
-**Where:** `/platform/*` under `app/platform/`. Spec: `docs/superpowers/specs/2026-05-09-platform-portal-design.md`.
-
-| Screen | Status | PR |
-|---|---|---|
-| `/platform` shell + auth gate | ✅ Shipped | #15 (`dd688dc`) |
-| Tenants list with KPIs / status badges | ✅ Shipped | #15 (`dd688dc`) |
-| Tenant detail (read-only cards) | ✅ Shipped | #15 (`dd688dc`) |
-| Provision new tenant wizard (4-step) | ✅ Shipped | #16 (`0c11acc`) |
-| Billing & payouts overview | ✅ Shipped | #17 (`ca85cbc`) |
-| Branding editor (logo upload, accent colour picker, live parent preview) | ❌ Remaining | — |
-
-The remaining branding editor is the only super-admin screen not yet built. It's not a blocker for NSBH go-live (NSBH branding lives in seed data) but is needed before any new school can self-serve their visual identity.
+>
+> §2.2 (super-admin / platform portal — all 6 screens) is now complete and has been moved to `docs/completed.md` §4.16–§4.20. PR #18 (`1ea6055`) shipped the final branding editor drawer.
 
 ### 2.8 Ops / verification follow-ups (carried over from completed code work)
 
@@ -71,7 +58,7 @@ The catalog management feature (self-service add/edit catalog items, image uploa
 §3.1 NSBH code shipped via PR #12 (squash-merge `e4ef0c7`). Outstanding:
 
 - [ ] **Run prod NSBH seed.** `apps/web/scripts/seed.mjs` is idempotent (`ON CONFLICT DO UPDATE` for items, `DELETE + INSERT` for variants). Run against production Neon once these changes deploy: `cd apps/web && node scripts/seed.mjs` with the prod `DATABASE_URL`. Today the parent shop renders from `CATALOG` in `lib/data.ts`, so the prod seed only affects the admin catalog table — it becomes load-bearing once parent-shop DB-reads land.
-- [ ] **RGSH catalog (separate task).** Needs school sign-off on the catalog list — RGSH currently inherits NSBH-only seed entries. Capture as a school-onboarding sub-task once §2.2 super-admin portal exists.
+- [ ] **RGSH catalog (separate task).** Needs school sign-off on the catalog list — RGSH currently inherits NSBH-only seed entries. Capture as a school-onboarding sub-task; super-admin portal now exists (`completed.md` §4.16–§4.20) so onboarding workflow can drive this.
 - [x] **Pre-existing variant misalignments** ✅ — shipped via PR #13 (`e7bccf0`, 2026-05-09); see `completed.md` §4.15.
 
 ### 2.11 Parent-account ("add another child") — production ops follow-ups
@@ -123,7 +110,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 **Follow-ups (not v1 blockers):**
 
-1. **School onboarding form must capture refund-policy data** (when §2.2 super-admin portal is built):
+1. **School onboarding form must capture refund-policy data** (extension to the now-shipped provision wizard, `completed.md` §4.18):
    - Refund policy text *or* external URL (textarea or link field)
    - Digital declaration: "We confirm this refund policy complies with Australian Consumer Law and we accept responsibility for honoring it for purchases via uniformorder.online" — name, role, date
    - Seller-of-record acknowledgement checkbox (school confirms they understand they are seller of record under Stripe Connect)
@@ -163,7 +150,7 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 4. [ ] Stripe Express account onboarded for NSBH (test mode first, then live): complete onboarding at Stripe Dashboard → Connect → Accounts, verify `account.updated` webhook syncs `stripe_charges_enabled = true` to tenants table, then re-run Test 3 smoke test (place order → partial refund → full refund → 409 on third attempt)
 5. [ ] Ops follow-ups in §2.8 (live Stripe keys, prod DB URL, Hostinger env, prod domain + TLS, PostHog key verified)
 
-The super-admin portal (§2.2) is required for onboarding tenant #3 and beyond, but the launch tenant (NSBH) can ship without it provided RGSH stays on seed data.
+The super-admin portal is now complete (see `completed.md` §4.16–§4.20); tenant onboarding from #3 onward can be self-served from `/platform/tenants/new` plus the branding editor on the tenant detail page.
 
 ---
 
@@ -178,5 +165,5 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 | Dashboard "New product" button not wired | §4.2 |
 | Dashboard "Export" button not wired | §4.2 |
 | Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 3 |
-| Super-admin / platform portal — tenants list, provision wizard, billing overview ✅ shipped (PRs #15, #16, #17); branding editor remaining | §2.2 |
+| Super-admin / platform portal — tenants list, provision wizard, billing overview, branding editor | ✅ Done — `completed.md` §4.16–§4.20 (PRs #14, #15, #16, #17, #18) |
 | Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) | §3.1 |
