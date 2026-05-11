@@ -385,7 +385,7 @@ fix(a11y): A2 — upgrade @stripe/stripe-js, aria-hidden-focus cleared
 
 Bumped @stripe/stripe-js from ^9.4.0 to ^<LATEST>. Smoke-tested checkout
 end-to-end with test card 4242…; card mounts, payment confirms, /placed
-loads. Single-screen re-audit confirms .__PrivateStripeElement-input no
+loads. Intermediate re-audit (axe/tmp/) confirms .__PrivateStripeElement-input no
 longer fires aria-hidden-focus. Full re-audit follows in Task 5.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
@@ -680,7 +680,7 @@ Scoped grep — confirm no parent-flow small-bold-gold eyebrow still references 
 ```bash
 grep -nF "var(--color-gold)" \
   apps/web/src/app/home-client.tsx \
-  apps/web/src/app/orders/[orderId]/order-detail-client.tsx
+  'apps/web/src/app/orders/[orderId]/order-detail-client.tsx'
 ```
 
 Expected: **no output** (exit code 1). Any match means a missed swap in Task 2 — investigate.
@@ -688,7 +688,7 @@ Expected: **no output** (exit code 1). Any match means a missed swap in Task 2 �
 Optional broader check for any future small-bold-gold eyebrow that crept in elsewhere along the parent flow (informational only):
 
 ```bash
-grep -RnF "var(--color-gold)" apps/web/src/app/[tenant] apps/web/src/app/page.tsx apps/web/src/app/orders 2>/dev/null
+grep -RnF "var(--color-gold)" 'apps/web/src/app/[tenant]' apps/web/src/app/page.tsx apps/web/src/app/orders 2>/dev/null
 ```
 
 Expected: no matches in any small-bold-text context. The admin `pick-slip.tsx:164` deferral is out of scope under §3.8 and lives outside these paths.
