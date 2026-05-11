@@ -87,13 +87,13 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
                   <div
-                    className="flex items-center border rounded-md h-[26px]"
+                    className="flex items-center border rounded-md h-7"
                     style={{ borderColor: "var(--color-rule)" }}
                   >
                     <button
                       type="button"
                       onClick={() => setQty(i, line.qty - 1)}
-                      className="w-6 text-center text-[13px]"
+                      className="w-7 h-full text-center text-[13px]"
                       style={{ color: "var(--color-ink-dim)" }}
                       aria-label="Decrease"
                     >
@@ -103,7 +103,7 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
                     <button
                       type="button"
                       onClick={() => setQty(i, line.qty + 1)}
-                      className="w-6 text-center text-[13px]"
+                      className="w-7 h-full text-center text-[13px]"
                       style={{ color: "var(--color-ink-dim)" }}
                       aria-label="Increase"
                     >
