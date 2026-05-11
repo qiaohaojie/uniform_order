@@ -16,7 +16,9 @@ You are working in a git worktree at `.claude/worktrees/operator-audit-log` on b
 
 **Migration numbering caveat.** This plan uses `0010_audit_events.sql` because that's the next free number on `main` today. PR #19 (open on `worktree-tenant-legal-refund-policy`) also uses `0010_*`. Whichever PR merges second will need to rebase its migration filename + journal entry from `0010` → `0011`. Do not pre-rebase. Use `0010` throughout this work.
 
-**Drizzle-kit migrate is broken in this env.** Per `MEMORY.md`, `drizzle-kit migrate` hangs on websocket connection. Task 1 documents the Neon MCP workaround. Do NOT run `pnpm --filter web exec drizzle-kit migrate` — apply SQL via Neon MCP `run_sql_transaction` and insert the journal row manually.
+**Drizzle-kit migrate is broken in this env.** Per `MEMORY.md`, `drizzle-kit migrate` hangs on websocket connection. Task 1 documents the workaround: `drizzle-kit generate` (offline; produces SQL + snapshot + `_journal.json` entry with correct format) followed by Neon MCP `run_sql_transaction` (applies the SQL). Do NOT run `pnpm --filter web exec drizzle-kit migrate`.
+
+**Drizzle hash caveat.** The runtime row in `drizzle.__drizzle_migrations` requires a hash that drizzle-kit computes internally from the SQL string after stripping `--> statement-breakpoint` markers and joining. Hashing the raw file with `shasum -a 256` will NOT match. Task 1 documents the recovery if a future `drizzle-kit migrate` rejects the row — accept this risk; in this env drizzle-kit migrate is broken anyway, so the mismatch is only relevant once the websocket blocker is fixed.
 
 **No test suite.** The correctness gate is `pnpm check-types:web` per `CLAUDE.md`. Each task ends with a type-check + commit. The final task adds a manual smoke list.
 
@@ -136,156 +138,65 @@ CREATE INDEX "idx_audit_events_actor_time" ON "audit_events" ("actor_email", "cr
 
 The `--> statement-breakpoint` comments are drizzle-kit's convention; preserve them so future drizzle tooling can re-parse.
 
-- [ ] **Step 3: Append the journal entry**
+- [ ] **Step 3: Generate the migration SQL + snapshot + journal entry via drizzle-kit**
 
-Open `apps/web/drizzle/meta/_journal.json`. Inside the `entries` array, after the last entry (idx 9, `0009_petite_the_phantom`), insert:
+`drizzle-kit generate` runs offline (no DB connection needed) and produces:
+- A new SQL file in `apps/web/drizzle/0010_<random_suffix>.sql`
+- A new snapshot in `apps/web/drizzle/meta/0010_snapshot.json`
+- An updated `apps/web/drizzle/meta/_journal.json` with the correct `when` timestamp
 
-```json
-,
-    {
-      "idx": 10,
-      "version": "7",
-      "when": <unix_millis_now>,
-      "tag": "0010_audit_events",
-      "breakpoints": true
-    }
+```bash
+pnpm --filter web exec drizzle-kit generate
 ```
 
-Replace `<unix_millis_now>` with the result of `node -e "console.log(Date.now())"` — capture once and use that exact number.
+Expected output: drizzle-kit lists `audit_events` as a new table, writes the three files, exits 0. The SQL filename will be `0010_<adjective_noun>.sql` (drizzle picks a random suffix like `petite_the_phantom`).
 
-- [ ] **Step 4: Create the migration snapshot**
+**Rename for clarity:** rename the generated SQL file to `0010_audit_events.sql` and update the corresponding `_journal.json` entry's `tag` field to match. Then delete the random-suffix file's path from disk.
 
-Create `apps/web/drizzle/meta/0010_snapshot.json` by copying `0009_petite_the_phantom`'s snapshot (`apps/web/drizzle/meta/0009_snapshot.json`) as a starting point, then add the new `audit_events` table block under `tables`. Verbatim block to add inside `tables` (keep alphabetical order if other entries are alphabetical; otherwise append at the end):
-
-```json
-"audit_events": {
-  "name": "audit_events",
-  "schema": "",
-  "columns": {
-    "id": {
-      "name": "id",
-      "type": "uuid",
-      "primaryKey": true,
-      "notNull": true
-    },
-    "created_at": {
-      "name": "created_at",
-      "type": "timestamp with time zone",
-      "primaryKey": false,
-      "notNull": true,
-      "default": "now()"
-    },
-    "tenant_id": {
-      "name": "tenant_id",
-      "type": "text",
-      "primaryKey": false,
-      "notNull": false
-    },
-    "actor_email": {
-      "name": "actor_email",
-      "type": "text",
-      "primaryKey": false,
-      "notNull": true
-    },
-    "actor_role": {
-      "name": "actor_role",
-      "type": "text",
-      "primaryKey": false,
-      "notNull": true
-    },
-    "action": {
-      "name": "action",
-      "type": "text",
-      "primaryKey": false,
-      "notNull": true
-    },
-    "target_type": {
-      "name": "target_type",
-      "type": "text",
-      "primaryKey": false,
-      "notNull": true
-    },
-    "target_id": {
-      "name": "target_id",
-      "type": "text",
-      "primaryKey": false,
-      "notNull": true
-    },
-    "payload": {
-      "name": "payload",
-      "type": "jsonb",
-      "primaryKey": false,
-      "notNull": true,
-      "default": "'{}'::jsonb"
-    }
-  },
-  "indexes": {
-    "idx_audit_events_tenant_time": {
-      "name": "idx_audit_events_tenant_time",
-      "columns": [
-        { "expression": "tenant_id", "isExpression": false, "asc": true, "nulls": "last" },
-        { "expression": "created_at", "isExpression": false, "asc": false, "nulls": "first" }
-      ],
-      "isUnique": false,
-      "concurrently": false,
-      "method": "btree",
-      "with": {}
-    },
-    "idx_audit_events_target": {
-      "name": "idx_audit_events_target",
-      "columns": [
-        { "expression": "target_type", "isExpression": false, "asc": true, "nulls": "last" },
-        { "expression": "target_id", "isExpression": false, "asc": true, "nulls": "last" },
-        { "expression": "created_at", "isExpression": false, "asc": false, "nulls": "first" }
-      ],
-      "isUnique": false,
-      "concurrently": false,
-      "method": "btree",
-      "with": {}
-    },
-    "idx_audit_events_actor_time": {
-      "name": "idx_audit_events_actor_time",
-      "columns": [
-        { "expression": "actor_email", "isExpression": false, "asc": true, "nulls": "last" },
-        { "expression": "created_at", "isExpression": false, "asc": false, "nulls": "first" }
-      ],
-      "isUnique": false,
-      "concurrently": false,
-      "method": "btree",
-      "with": {}
-    }
-  },
-  "foreignKeys": {
-    "audit_events_tenant_id_tenants_id_fk": {
-      "name": "audit_events_tenant_id_tenants_id_fk",
-      "tableFrom": "audit_events",
-      "tableTo": "tenants",
-      "columnsFrom": ["tenant_id"],
-      "columnsTo": ["id"],
-      "onDelete": "set null",
-      "onUpdate": "no action"
-    }
-  },
-  "compositePrimaryKeys": {},
-  "uniqueConstraints": {},
-  "checkConstraints": {
-    "audit_events_actor_role_check": {
-      "name": "audit_events_actor_role_check",
-      "value": "\"actor_role\" IN ('operator', 'platform_admin')"
-    },
-    "audit_events_target_type_check": {
-      "name": "audit_events_target_type_check",
-      "value": "\"target_type\" IN ('order', 'tenant', 'catalog_item', 'tenant_legal_version')"
-    }
-  }
-}
+```bash
+# After drizzle-kit generates with a random name, e.g. 0010_curious_taskmaster.sql:
+mv apps/web/drizzle/0010_curious_taskmaster.sql apps/web/drizzle/0010_audit_events.sql
+# Then edit apps/web/drizzle/meta/_journal.json: change the tag field of the new entry from
+# "0010_curious_taskmaster" to "0010_audit_events". Leave when/idx/version/breakpoints alone.
 ```
 
-Adjust the snapshot's top-level `id` and `prevId` if your copied 0009 snapshot has those fields — set `prevId` to 0009's `id` and generate a new UUID for `id` (use `node -e "console.log(crypto.randomUUID())"`).
+**Verify monotonic `when`:** open `_journal.json` and confirm the new entry's `when` value is strictly greater than entry 9's `when` (`1778334723623`). drizzle-kit normally guarantees this via `Date.now()`, but if the system clock has drifted, manually bump the new entry's `when` to `1778334723624` (or higher). Drizzle assumes monotonic ordering and will mis-order migrations otherwise.
 
-If the snapshot turns out to be more complex than this template (e.g. drizzle-kit's exact format differs), fall back: skip the snapshot for now and let `drizzle-kit generate` regenerate it once drizzle-kit is unblocked. The runtime app does not read the snapshot — only future `drizzle-kit generate` runs do.
+**Hand-extend the SQL with constraints drizzle doesn't model.** Drizzle-kit's TS schema doesn't express CHECK constraints. Open the generated `0010_audit_events.sql` and add the two CHECK constraints into the `CREATE TABLE` body. The final file should look like:
 
-- [ ] **Step 5: Apply the migration via Neon MCP**
+```sql
+CREATE TABLE "audit_events" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"tenant_id" text,
+	"actor_email" text NOT NULL,
+	"actor_role" text NOT NULL,
+	"action" text NOT NULL,
+	"target_type" text NOT NULL,
+	"target_id" text NOT NULL,
+	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	CONSTRAINT "audit_events_actor_role_check"
+		CHECK ("actor_role" IN ('operator', 'platform_admin')),
+	CONSTRAINT "audit_events_target_type_check"
+		CHECK ("target_type" IN ('order', 'tenant', 'catalog_item', 'tenant_legal_version'))
+);
+--> statement-breakpoint
+ALTER TABLE "audit_events" ADD CONSTRAINT "audit_events_tenant_id_tenants_id_fk"
+	FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id")
+	ON DELETE SET NULL ON UPDATE NO ACTION;
+--> statement-breakpoint
+CREATE INDEX "idx_audit_events_tenant_time" ON "audit_events" ("tenant_id", "created_at" DESC);
+--> statement-breakpoint
+CREATE INDEX "idx_audit_events_target" ON "audit_events" ("target_type", "target_id", "created_at" DESC);
+--> statement-breakpoint
+CREATE INDEX "idx_audit_events_actor_time" ON "audit_events" ("actor_email", "created_at" DESC);
+```
+
+If drizzle-kit's generated body differs (different column ordering, missing index, etc.), align it to the above — the apply step depends on this exact shape. Adding CHECK constraints directly to the snapshot is optional; the runtime app doesn't read the snapshot, and the next `drizzle-kit generate` will treat the constraint as a no-op since the TS schema didn't define it (drizzle considers it user-managed). Leave the snapshot as drizzle-kit emitted it.
+
+**Fallback if `drizzle-kit generate` fails in this env:** if `drizzle-kit generate` also turns out to be broken (it shouldn't — it doesn't touch DB — but if it does), STOP. Do not hand-write the snapshot. Append a note to `MEMORY.md` describing the failure and proceed only with the SQL file and a hand-written journal entry. Document in the PR body that the snapshot must be regenerated once drizzle-kit is unblocked. A wrong snapshot is worse than no snapshot — the next `drizzle-kit generate` run would produce a confusing diff.
+
+- [ ] **Step 4: Apply the migration via Neon MCP**
 
 Use the Neon MCP `run_sql_transaction` tool (NOT the Bash tool; NOT `drizzle-kit migrate`). Get the dev project ID first via `mcp__Neon__list_projects` if you don't already have it.
 
@@ -317,27 +228,38 @@ CREATE INDEX "idx_audit_events_actor_time" ON "audit_events" ("actor_email", "cr
 
 Expected: Neon MCP returns success. If it errors, read the error carefully — it is likely a duplicate-name issue (PR #19 used 0010 too; check `\\d audit_events` to see if it already exists; if it does, you may need to drop + recreate or rename).
 
-- [ ] **Step 6: Insert the drizzle journal row**
+- [ ] **Step 5: Insert the drizzle journal row (with hash caveat)**
 
-Drizzle's migration runner records applied migrations in `drizzle.__drizzle_migrations`. Without this row, a future `drizzle-kit migrate` run would re-apply the file and fail with "table already exists." Insert manually via Neon MCP `run_sql`:
+Drizzle's migration runner records applied migrations in `drizzle.__drizzle_migrations`. Without this row, a future `drizzle-kit migrate` run would re-apply the file and fail with "table already exists."
+
+**Hash caveat.** Drizzle's internal hash is SHA-256 over the SQL string AFTER splitting on `--> statement-breakpoint`, joining with newlines, and trimming. `shasum` of the raw file (which includes the breakpoint markers) almost certainly will NOT match. We compute a best-effort hash and accept the risk that a future `drizzle-kit migrate` may reject it.
+
+Compute the hash like drizzle does:
+
+```bash
+node -e "
+const fs = require('fs');
+const crypto = require('crypto');
+const raw = fs.readFileSync('apps/web/drizzle/0010_audit_events.sql', 'utf8');
+const joined = raw.split('--> statement-breakpoint').map(s => s.trim()).filter(Boolean).join('\n');
+console.log(crypto.createHash('sha256').update(joined).digest('hex'));
+"
+```
+
+Insert via Neon MCP `run_sql` (use `ON CONFLICT DO NOTHING` so a re-run is idempotent):
 
 ```sql
 INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
 VALUES (
-  '<sha256-of-migration-sql>',
+  '<sha256-from-node-script>',
   <unix_millis_now>::bigint
-);
+)
+ON CONFLICT DO NOTHING;
 ```
 
-To compute the hash, in the worktree shell:
+Use the SAME `when` value from `_journal.json` for `<unix_millis_now>`. Drizzle keys off the timestamp.
 
-```bash
-shasum -a 256 apps/web/drizzle/0010_audit_events.sql | awk '{print $1}'
-```
-
-Use the resulting 64-char hex string as `<sha256-of-migration-sql>`. Use the same `Date.now()` value you used in the journal entry for `<unix_millis_now>` (must be the same — drizzle keys off this).
-
-Verify it landed via Neon MCP `run_sql`:
+Verify it landed:
 
 ```sql
 SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 3;
@@ -345,7 +267,9 @@ SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC L
 
 You should see the new row at the top.
 
-- [ ] **Step 7: Type check**
+**Recovery if drizzle-kit migrate later complains about hash mismatch:** delete the row (`DELETE FROM drizzle.__drizzle_migrations WHERE id = <new_id>`), then re-run drizzle-kit migrate against a DB where the table already exists. Drizzle will fail on `CREATE TABLE audit_events` — at that point modify the migration body to `CREATE TABLE IF NOT EXISTS` (one-line patch) or DROP the table and re-create. Document in the PR body if this becomes necessary.
+
+- [ ] **Step 6: Type check**
 
 ```bash
 pnpm check-types:web
@@ -353,7 +277,7 @@ pnpm check-types:web
 
 Expected: clean (no errors). If `auditEvents` isn't exported correctly from `schema.ts`, fix and re-run.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/db/schema.ts apps/web/drizzle/0010_audit_events.sql apps/web/drizzle/meta/0010_snapshot.json apps/web/drizzle/meta/_journal.json
@@ -496,13 +420,6 @@ git commit -m "feat(audit): logAuditEvent helper + shared types"
 // apps/web/src/lib/audit/format.ts
 import type { AuditEvent } from "./types";
 
-export interface FormattedAuditEvent {
-  /** One-line human-readable description. */
-  line: string;
-  /** Lucide icon hint or dot color hint. Empty string = use default gold dot. */
-  iconHint: "" | "money" | "check" | "edit" | "plus" | "trash" | "rocket" | "scale";
-}
-
 function shortId(id: string): string {
   return id.slice(0, 8);
 }
@@ -524,50 +441,70 @@ function safeArr<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
-export function formatAuditEvent(event: AuditEvent): FormattedAuditEvent {
+/**
+ * Map an audit event row to a one-line human-readable description.
+ * Centralised so future event additions or copy tweaks change in one place.
+ */
+export function formatAuditEvent(event: AuditEvent): string {
   const p = (event.payload as Record<string, unknown>) ?? {};
   switch (event.action) {
     case "order.marked_ready":
-      return { line: `Marked order #${shortId(event.targetId)} ready`, iconHint: "check" };
+      return `Marked order #${shortId(event.targetId)} ready`;
     case "order.refund_issued": {
       const amount = formatCents(safeNum(p.refundAmountCents));
       const items = safeArr<{ name: string }>(p.lineItems);
       const itemsLabel = items.length === 1 ? "1 item" : `${items.length} items`;
-      return { line: `Refunded ${amount} (${itemsLabel})`, iconHint: "money" };
+      return `Refunded ${amount} (${itemsLabel})`;
     }
     case "catalog_item.created":
-      return { line: `Added "${safeStr(p.name) || safeStr(p.sku) || "item"}" to catalog`, iconHint: "plus" };
+      return `Added "${safeStr(p.name) || safeStr(p.sku) || "item"}" to catalog`;
     case "catalog_item.updated": {
       const fields = safeArr<string>(p.changedFields);
-      return { line: `Edited catalog item (${fields.length} ${fields.length === 1 ? "field" : "fields"})`, iconHint: "edit" };
+      return `Edited catalog item (${fields.length} ${fields.length === 1 ? "field" : "fields"})`;
     }
     case "catalog_item.deleted":
-      return { line: `Removed "${safeStr(p.name) || safeStr(p.sku) || "item"}" from catalog`, iconHint: "trash" };
+      return `Removed "${safeStr(p.name) || safeStr(p.sku) || "item"}" from catalog`;
     case "tenant.draft_created":
-      return { line: `Created tenant draft "${safeStr(p.name) || event.targetId}"`, iconHint: "plus" };
+      return `Created tenant draft "${safeStr(p.name) || event.targetId}"`;
     case "tenant.branding_updated": {
       const fields = safeArr<string>(p.changedFields);
-      return { line: `Updated branding (${fields.length} ${fields.length === 1 ? "field" : "fields"})`, iconHint: "edit" };
+      return `Updated branding (${fields.length} ${fields.length === 1 ? "field" : "fields"})`;
     }
     case "tenant.operator_updated":
-      return { line: `Changed operator from ${safeStr(p.previousEmail) || "(none)"} to ${safeStr(p.newEmail)}`, iconHint: "edit" };
+      return `Changed operator from ${safeStr(p.previousEmail) || "(none)"} to ${safeStr(p.newEmail)}`;
     case "tenant.legal_updated": {
       const version = safeNum(p.version) ?? 0;
       const mode = safeStr(p.mode) || "text";
-      return { line: `Saved legal policy v${version} (${mode} mode)`, iconHint: "scale" };
+      return `Saved legal policy v${version} (${mode} mode)`;
     }
     case "tenant.stripe_account_linked":
-      return { line: `Linked Stripe account ${safeStr(p.stripeAccountId) || ""}`.trim(), iconHint: "money" };
+      return `Linked Stripe account ${safeStr(p.stripeAccountId) || ""}`.trim();
     case "tenant.catalog_cloned": {
       const source = safeStr(p.sourceTenantId) || "another tenant";
       const count = safeNum(p.itemCount) ?? 0;
-      return { line: `Cloned catalog from ${source} (${count} items)`, iconHint: "plus" };
+      return `Cloned catalog from ${source} (${count} items)`;
     }
     case "tenant.went_live":
-      return { line: `Approved tenant for live ordering`, iconHint: "rocket" };
+      return `Approved tenant for live ordering`;
     default:
-      return { line: event.action, iconHint: "" };
+      return event.action;
   }
+}
+
+/**
+ * Format a Date as a short relative time string ("just now", "12m ago", "3d ago").
+ * Shared by OrderActivityStrip and TenantActivityFeed.
+ */
+export function formatRelativeTime(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 }
 ```
 
@@ -595,9 +532,19 @@ git commit -m "feat(audit): formatAuditEvent shared formatter (12 events)"
 
 This helper produces the merged + sorted row list for the order timeline UI. It combines three sources into one client-friendly array.
 
-- [ ] **Step 1: Inspect the `payments` schema**
+- [ ] **Step 1: Inspect the schema for payment / refund / order-line tables**
 
-Read `apps/web/src/db/schema.ts` and locate the `payments` table (or whatever it's actually called — could be `orderPayments`, `stripePayments`, etc.). Note its column names for `orderId`, `amountCents`, `kind`/`type` (succeeded vs refunded), and `createdAt`. The code in the next step assumes column names — if yours differ, adjust accordingly.
+Run this first to surface the actual table names:
+
+```bash
+rg 'pgTable\("' apps/web/src/db/schema.ts
+```
+
+You'll likely see `orders`, `order_refunds`, `order_items` (or `order_line_items`), and possibly `payments`. From the spec survey, the schema has `order_refunds` (line ~158) but no separate `payments` table — Stripe-charge success is recorded on `orders.paidAt` / `orders.stripePaymentIntentId` directly, and refunds live in `order_refunds`. Verify this in your run.
+
+Note for the next step:
+- Refund rows source: whichever table actually exists (`order_refunds` likely; check `amountCents` / `amount_cents`, `createdAt`, `stripeRefundId` columns).
+- "Payment received" row source: probably synthesised from `orders.paidAt` + `orders.totalCents` if those exist. If not, drop the `payment_received` discriminator entirely — the timeline will show only audit + virtual order-placed + refund rows.
 
 Also note the `orders` table columns: confirm `parentName` and `createdAt` exist (per spec §6.2 + §7).
 
@@ -776,27 +723,13 @@ This is a server component. It accepts the merged rows from `loadOrderActivity` 
 
 ```tsx
 // apps/web/src/components/admin/order-activity-strip.tsx
-import { formatAuditEvent } from "@/lib/audit/format";
+import { formatAuditEvent, formatRelativeTime } from "@/lib/audit/format";
 import type { OrderActivityRow } from "@/lib/audit/load-order-activity";
-
-function relativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
-}
 
 function describeRow(row: OrderActivityRow): { line: string; actor: string; isHumanActor: boolean } {
   switch (row.kind) {
-    case "audit": {
-      const f = formatAuditEvent(row.event);
-      return { line: f.line, actor: row.event.actorEmail, isHumanActor: true };
-    }
+    case "audit":
+      return { line: formatAuditEvent(row.event), actor: row.event.actorEmail, isHumanActor: true };
     case "payment_received":
       return {
         line: `Payment received ($${(row.amountCents / 100).toFixed(2)})`,
@@ -847,7 +780,7 @@ export function OrderActivityStrip({ rows }: { rows: OrderActivityRow[] }) {
                   <p className="text-[color:var(--color-navy-deep)]">{line}</p>
                   <p className="text-xs text-neutral-500">{actor}</p>
                 </div>
-                <p className="tnum shrink-0 text-xs text-neutral-500">{relativeTime(row.createdAt)}</p>
+                <p className="tnum shrink-0 text-xs text-neutral-500">{formatRelativeTime(row.createdAt)}</p>
               </div>
             </li>
           );
@@ -884,20 +817,8 @@ git commit -m "feat(audit): OrderActivityStrip server component"
 
 ```tsx
 // apps/web/src/components/platform/tenant-activity-feed.tsx
-import { formatAuditEvent } from "@/lib/audit/format";
+import { formatAuditEvent, formatRelativeTime } from "@/lib/audit/format";
 import type { AuditEvent } from "@/lib/audit/types";
-
-function relativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
-}
 
 const MAX_ROWS = 20;
 
@@ -917,21 +838,18 @@ export function TenantActivityFeed({ events }: { events: AuditEvent[] }) {
     <section className="rounded-md border border-[color:var(--color-rule)] bg-[color:var(--color-paper)] p-5">
       <h2 className="font-serif text-lg text-[color:var(--color-navy-deep)]">Activity</h2>
       <ol className="mt-4 space-y-3">
-        {events.map((e) => {
-          const f = formatAuditEvent(e);
-          return (
-            <li key={e.id} className="flex items-start gap-3 text-sm">
-              <span aria-hidden className="mt-2 inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--color-gold)]" />
-              <div className="flex flex-1 items-baseline justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[color:var(--color-navy-deep)]">{f.line}</p>
-                  <p className="text-xs text-neutral-500">{e.actorEmail}</p>
-                </div>
-                <p className="tnum shrink-0 text-xs text-neutral-500">{relativeTime(e.createdAt)}</p>
+        {events.map((e) => (
+          <li key={e.id} className="flex items-start gap-3 text-sm">
+            <span aria-hidden className="mt-2 inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--color-gold)]" />
+            <div className="flex flex-1 items-baseline justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[color:var(--color-navy-deep)]">{formatAuditEvent(e)}</p>
+                <p className="text-xs text-neutral-500">{e.actorEmail}</p>
               </div>
-            </li>
-          );
-        })}
+              <p className="tnum shrink-0 text-xs text-neutral-500">{formatRelativeTime(e.createdAt)}</p>
+            </div>
+          </li>
+        ))}
       </ol>
       {showFooter ? (
         <p className="mt-4 text-xs text-neutral-500">Showing 20 most recent — full history coming soon.</p>
@@ -994,13 +912,14 @@ await logAuditEvent({
 
 If the action does not already capture `previousStatus` before the mutation, add a `const previousStatus = existing.status;` line BEFORE the mutation, then reuse it here.
 
-- [ ] **Step 3: Read the existing refund route**
+- [ ] **Step 3: Read the existing refund route AND surface the line-item table**
 
 ```bash
 cat apps/web/src/app/api/orders/[orderId]/refund/route.ts | head -200
+rg 'pgTable\("(order_items|order_line_items|line_items|orderLineItems)' apps/web/src/db/schema.ts
 ```
 
-Locate the point after the Stripe refund call succeeds and BEFORE returning 200. Note the variables available: refund amount, line item IDs, user email, tenant slug, order id.
+Locate the point after the Stripe refund call succeeds and BEFORE returning 200. Note the variables available: refund amount, line item IDs, user email, tenant slug, order id. From the schema grep, note the actual line-items table name and its `name` / `itemName` / `productName` column.
 
 - [ ] **Step 4: Add `logAuditEvent` for `order.refund_issued`**
 
@@ -1237,9 +1156,14 @@ await logAuditEvent({
 
 If the file is gated by `requirePlatformAdmin` at the top of every action, you can hardcode `"platform_admin"`. If not, derive via `isPlatformAdminEmail(user.email) ? "platform_admin" : "operator"`. Match the surrounding code's pattern.
 
-- [ ] **Step 4: Add `updateTenantBranding` (wizard step) with no-op short-circuit**
+- [ ] **Step 4: Add `updateTenantBranding` (wizard step) with no-op short-circuit — but first decide if it should fire at all**
 
-Find the wizard's `updateTenantBranding` action. Read the existing row, compute `changedFields` against the input (same DB-state diff pattern as Task 9 Step 3). Short-circuit if `changedFields.length === 0`. After the successful update:
+After reading the wizard's `updateTenantBranding` action, decide:
+
+- **Does the mutation persist to the `tenants` row directly?** Then proceed with the audit call below.
+- **Does it persist only to a draft buffer (no `tenants` write)?** Then SKIP the audit call here. The branding event will fire later via the platform tenant detail page's branding edit (Task 11). Note this in the commit message: `feat(audit): provision wizard (skipped tenant.branding_updated — wizard step uses draft buffer)`.
+
+If proceeding: read the existing row, compute `changedFields` against the input (same DB-state diff pattern as Task 9 Step 3). Short-circuit if `changedFields.length === 0`. After the successful update:
 
 ```ts
 await logAuditEvent({
@@ -1252,8 +1176,6 @@ await logAuditEvent({
   payload: { changedFields },
 });
 ```
-
-If this wizard step does NOT already write the columns being changed (e.g. only stores them in a draft buffer), the audit row may be misleading. Check whether the wizard step commits to the `tenants` row directly. If it doesn't, skip the audit call here and rely on the platform tenant detail page's branding edit (Task 11) to fire the event.
 
 - [ ] **Step 5: Add `updateTenantOperator`**
 
@@ -1315,7 +1237,19 @@ await logAuditEvent({
 
 - [ ] **Step 8: Replace the approval-flip (`went_live`) serverCapture**
 
+Capture `previousStatus` before the flip so the audit row distinguishes a first-time approval from an approve-after-rejection.
+
 ```ts
+// Before the status flip:
+const [existing] = await db
+  .select({ status: tenants.platformApprovalStatus })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const previousStatus = existing?.status ?? null;
+
+// …perform the flip…
+
 await logAuditEvent({
   tenantId,
   actorEmail: user.email,
@@ -1323,9 +1257,11 @@ await logAuditEvent({
   action: "tenant.went_live",
   targetType: "tenant",
   targetId: tenantId,
-  payload: {},
+  payload: { previousStatus },
 });
 ```
+
+Adapt column name `platformApprovalStatus` to whatever the existing code reads. The point is to record what state was being transitioned out of (`pending` vs `rejected` vs other) for forensic queries like "when did NSBH go live the second time after revocation?".
 
 - [ ] **Step 9: Type check**
 
@@ -1522,13 +1458,14 @@ git commit -m "feat(audit): render TenantActivityFeed on platform tenant detail"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Final type-check**
+- [ ] **Step 1: Final type-check + commit audit**
 
 ```bash
 pnpm check-types:web
+git log --oneline main..HEAD
 ```
 
-Expected: clean.
+Expected: type-check clean (no output beyond drizzle/tsc preamble). The `git log` should show ~13 commits matching the task list — visually scan and confirm no task was silently skipped. If a commit is missing, return to that task before continuing.
 
 - [ ] **Step 2: Boot dev server and smoke-test the six core paths**
 
@@ -1543,7 +1480,7 @@ Open `http://localhost:3000` and run through the smoke list from spec §9. **Hal
 3. Sign in as platform admin → `/platform/tenants/nsbh` → open branding edit drawer → change a single field → save → reload → "Activity" card shows `Updated branding (1 field)`.
 4. Sign in as platform admin → `/platform/tenants/nsbh` → open legal edit drawer → save a v2 → reload → "Activity" shows `Saved legal policy v2 (text mode)` (adjust mode to whatever you actually set).
 5. Sign in as platform admin → `/platform/tenants/new` → complete the wizard end-to-end on a throwaway slug → confirm four audit rows in the new tenant's "Activity" card: draft_created, stripe_account_linked (or skipped if you skipped Stripe), catalog_cloned (if you cloned), went_live (if you approved).
-6. Force-failure check: temporarily edit `lib/audit/log.ts` to `throw new Error("force")` at the top of the function, mark an order ready, confirm the order STILL flips to ready in the DB and a PostHog `audit_log_failed` event fires. Revert the throw and re-type-check before committing.
+6. Force-failure check: temporarily edit `lib/audit/log.ts` to `throw new Error("force")` at the top of the function, mark an order ready, confirm the order STILL flips to ready in the DB and a PostHog `audit_log_failed` event fires. Revert the throw, then **before** any subsequent commit run `git diff apps/web/src/lib/audit/log.ts` and confirm zero diff against HEAD. Then re-run `pnpm check-types:web` to confirm clean. Accidentally committing the throw would silently break audit logging in production.
 
 - [ ] **Step 3: Update remaining_work.md**
 
@@ -1581,6 +1518,7 @@ Plan: `docs/superpowers/plans/2026-05-11-operator-audit-log.md`
 - **PostHog event names changed.** Old: `platform_tenant_created`, `platform_tenant_stripe_created`, `platform_tenant_catalog_cloned`, `platform_tenant_went_live`. New (dotted): `tenant.draft_created`, `tenant.stripe_account_linked`, `tenant.catalog_cloned`, `tenant.went_live`. Any dashboard / funnel / alert referencing the old names needs migration before deploy.
 - **Migration filename may conflict with PR #19.** PR #19 also uses `0010_*`. Whichever PR merges second renames its migration to `0011_*` + updates the journal entry.
 - **`tenants.platformApprovedBy` retirement deferred** to a follow-up migration once the new `tenant.went_live` audit row is confirmed firing on real approvals (see spec §10).
+- **Orphan-row behavior on tenant hard-delete.** The FK is `ON DELETE SET NULL`, so audit rows survive if a tenant is hard-deleted but they become invisible to `loadTenantActivity` (which filters by `tenant_id`). v1 is fine: no UI / API hard-deletes a tenant today. If hard-delete is ever added, surface a "Deleted tenants" admin view that lists `WHERE tenant_id IS NULL`.
 
 ## Test Plan
 
