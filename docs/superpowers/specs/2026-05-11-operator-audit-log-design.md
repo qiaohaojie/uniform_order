@@ -96,11 +96,15 @@ Twelve events for v1. Verbs are past tense (describing what happened, not a comm
 | `tenant.catalog_cloned` | tenant | `{ sourceTenantId, itemCount }` |
 | `tenant.went_live` | tenant | `{}` |
 
-### 4.3 `changedFields` semantics
+### 4.3 `changedFields` and no-op semantics
 
-For all `*.updated` events (`tenant.branding_updated`, `tenant.operator_updated`, `catalog_item.updated`), `changedFields` is the **DB-state diff**: the route reads the current row, compares to the incoming payload, and emits only fields whose value actually differs from what's stored. This matches PR #18's branding-editor pattern (server-side `changedFields` computation, not form-pristine state). The reason: form-pristine diff over-reports — a no-op save (open drawer, click save without typing) would emit a phantom event listing every field "edited."
+Two related rules:
 
-A no-op save (no fields differ) **does not emit an audit row at all** — the action short-circuits before reaching `logAuditEvent`. This matches PR #18 and PR #19's no-op short-circuit pattern.
+**`changedFields` is the DB-state diff** — applies to `tenant.branding_updated` and `catalog_item.updated` only (the two events whose payload carries `changedFields: string[]`). The route reads the current row, compares to the incoming payload, and emits only fields whose value actually differs from what's stored. This matches PR #18's branding-editor pattern (server-side `changedFields` computation, not form-pristine state). The reason: form-pristine diff over-reports — a no-op save (open drawer, click save without typing) would emit a phantom event listing every field "edited."
+
+`tenant.operator_updated` carries `{ previousEmail, newEmail }` (not `changedFields`), so the diff rule doesn't apply literally — but the no-op rule below does.
+
+**No-op short-circuit** — applies to *all* `*.updated` events. If the incoming values match the stored values byte-for-byte, the server action short-circuits **before** reaching `logAuditEvent`. No audit row, no PostHog co-emit. This matches PR #18 and PR #19's pattern.
 
 ### 4.4 Cloning semantics
 
@@ -250,15 +254,15 @@ Where each event fires in code, ordered by file.
 | `app/admin/[tenant]/orders/[orderId]/order-detail-actions.tsx` | After `markOrderReady` mutation succeeds | `order.marked_ready` |
 | `app/api/orders/[orderId]/refund/route.ts` | After successful Stripe refund kickoff, before returning 200 | `order.refund_issued` |
 | `app/api/catalog/route.ts` (POST) | After insert | `catalog_item.created` |
-| `app/api/catalog/[itemId]/route.ts` (PUT) | After update; pass `changedFields` from input diff | `catalog_item.updated` |
+| `app/api/catalog/[itemId]/route.ts` (PUT) | After update; `changedFields` computed per §4.3 (DB-state diff) | `catalog_item.updated` |
 | `app/api/catalog/[itemId]/route.ts` (DELETE) | After soft- or hard-delete | `catalog_item.deleted` |
 | `app/platform/tenants/new/actions.ts` `createTenantDraft` | After insert; replaces existing `platform_tenant_created` serverCapture | `tenant.draft_created` |
-| `app/platform/tenants/new/actions.ts` `updateTenantBranding` (wizard step) | After update | `tenant.branding_updated` |
-| `app/platform/tenants/new/actions.ts` `updateTenantOperator` | After update | `tenant.operator_updated` |
+| `app/platform/tenants/new/actions.ts` `updateTenantBranding` (wizard step) | After update; `changedFields` computed per §4.3 (DB-state diff); no-op short-circuit applies | `tenant.branding_updated` |
+| `app/platform/tenants/new/actions.ts` `updateTenantOperator` | After update; no-op short-circuit per §4.3 | `tenant.operator_updated` |
 | `app/platform/tenants/new/actions.ts` `createStripeStandardForTenant` | After Stripe account link; replaces existing `platform_tenant_stripe_created` serverCapture | `tenant.stripe_account_linked` |
 | `app/platform/tenants/new/actions.ts` `cloneCatalogFromTenant` | After batch insert; replaces existing `platform_tenant_catalog_cloned` serverCapture | `tenant.catalog_cloned` |
 | `app/platform/tenants/new/actions.ts` (approval step) | After flip; replaces existing `platform_tenant_went_live` serverCapture | `tenant.went_live` |
-| `app/platform/tenants/[id]/actions.ts` `updateTenantBranding` | After update | `tenant.branding_updated` |
+| `app/platform/tenants/[id]/actions.ts` `updateTenantBranding` | After update; `changedFields` computed per §4.3 (DB-state diff); no-op short-circuit applies | `tenant.branding_updated` |
 | `app/platform/tenants/[id]/actions.ts` `updateTenantLegal` | After version insert + pointer update | `tenant.legal_updated` |
 
 Existing `serverCapture` calls at the marked sites get **removed** (the co-emit inside `logAuditEvent` replaces them).
