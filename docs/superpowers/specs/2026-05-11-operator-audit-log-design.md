@@ -33,7 +33,7 @@ After this spec ships:
 
 ## 3. Schema
 
-One new table, two new indexes. No changes to existing tables in v1. (A follow-up migration retires `tenants.platformApprovedBy` once the new table is populated and confirmed correct.)
+One new table, three new indexes. No changes to existing tables in v1. (A follow-up migration retires `tenants.platformApprovedBy` once the new table is populated and confirmed correct.)
 
 ### 3.1 `audit_events` (new table)
 
@@ -79,7 +79,7 @@ Twelve events for v1. Verbs are past tense (describing what happened, not a comm
 | Action | Target type | Payload (beyond standard fields) |
 |---|---|---|
 | `order.marked_ready` | order | `{ previousStatus }` |
-| `order.refund_requested` | order | `{ refundAmountCents, lineItemIds, reason? }` |
+| `order.refund_issued` | order | `{ refundAmountCents, lineItems: { id, name, quantity }[], reason? }` |
 | `catalog_item.created` | catalog_item | `{ sku, name, priceCents }` |
 | `catalog_item.updated` | catalog_item | `{ changedFields: string[] }` |
 | `catalog_item.deleted` | catalog_item | `{ sku, name }` |
@@ -96,11 +96,17 @@ Twelve events for v1. Verbs are past tense (describing what happened, not a comm
 | `tenant.catalog_cloned` | tenant | `{ sourceTenantId, itemCount }` |
 | `tenant.went_live` | tenant | `{}` |
 
-### 4.3 Cloning semantics
+### 4.3 `changedFields` semantics
+
+For all `*.updated` events (`tenant.branding_updated`, `tenant.operator_updated`, `catalog_item.updated`), `changedFields` is the **DB-state diff**: the route reads the current row, compares to the incoming payload, and emits only fields whose value actually differs from what's stored. This matches PR #18's branding-editor pattern (server-side `changedFields` computation, not form-pristine state). The reason: form-pristine diff over-reports — a no-op save (open drawer, click save without typing) would emit a phantom event listing every field "edited."
+
+A no-op save (no fields differ) **does not emit an audit row at all** — the action short-circuits before reaching `logAuditEvent`. This matches PR #18 and PR #19's no-op short-circuit pattern.
+
+### 4.4 Cloning semantics
 
 `tenant.catalog_cloned` fires **once** with `itemCount` set to the number of rows copied. It does **not** also fire 24× `catalog_item.created`. The clone is logically one action by one actor; spamming the feed with 24 rows defeats the purpose. The clone runs inside `db.batch(...)` so partial-clone is structurally impossible — `itemCount` is for human readability in the feed, not integrity.
 
-### 4.4 Excluded actions
+### 4.5 Excluded actions
 
 - Read actions (viewing lists, viewing details) — not mutations, not logged.
 - Stripe webhook receipts — already durably in `payments` / `orders`; joined into the timeline UI.
@@ -126,12 +132,29 @@ export interface LogAuditEventInput {
 }
 
 export async function logAuditEvent(input: LogAuditEventInput): Promise<void> {
+  // The try wraps only the DB write — its success/failure is the audit signal.
+  // PostHog co-emit is best-effort and must not affect the audit-success path.
   try {
     await db.insert(auditEvents).values({
       id: crypto.randomUUID(),
       ...input,
       payload: input.payload ?? {},
     });
+  } catch (err) {
+    console.error('[audit] failed to log', { action: input.action, targetId: input.targetId }, err);
+    try {
+      await serverCapture(input.actorEmail, 'audit_log_failed', {
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } catch { /* swallow — PostHog is best-effort */ }
+    return; // user-facing mutation already succeeded; we do not rethrow
+  }
+
+  // Audit row landed. Now best-effort PostHog co-emit, isolated from the success signal.
+  try {
     await serverCapture(input.actorEmail, input.action, {
       ...input.payload,
       tenantId: input.tenantId,
@@ -140,14 +163,7 @@ export async function logAuditEvent(input: LogAuditEventInput): Promise<void> {
       actorRole: input.actorRole,
     });
   } catch (err) {
-    console.error('[audit] failed to log', { action: input.action, targetId: input.targetId }, err);
-    await serverCapture(input.actorEmail, 'audit_log_failed', {
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    // swallow — the user-facing mutation already succeeded
+    console.error('[audit] posthog co-emit failed (audit row landed OK)', { action: input.action }, err);
   }
 }
 ```
@@ -167,6 +183,8 @@ const actorRole: AuditActorRole = isPlatformAdminEmail(user.email) ? 'platform_a
 ```
 
 No new auth helper. No `actor_user_id` foreign key — Neon Auth user IDs are not stable across deletion, and email is the durable handle the app uses everywhere.
+
+**Consequence of email-as-actor (intentional):** if an operator changes their login email later, historical rows keep the *old* email. This is arguably correct — the row records what was true at the time of the action — but worth saying out loud so a future reader doesn't "fix" it by retroactively rewriting `actor_email`.
 
 ### 5.4 PostHog co-emit
 
@@ -191,7 +209,7 @@ export function formatAuditEvent(event: AuditEvent): { icon: ReactNode; line: st
 One switch over `action`. Returns a one-line human-readable string. Example mappings:
 
 - `order.marked_ready` → "Marked order #{shortId} ready"
-- `order.refund_requested` → "Requested refund of ${amount}"
+- `order.refund_issued` → "Requested refund of ${amount}"
 - `tenant.branding_updated` → "Updated branding ({n} fields)"
 - `tenant.went_live` → "Approved tenant for live ordering"
 - `tenant.legal_updated` → "Saved legal policy v{n} ({mode} mode)"
@@ -207,7 +225,7 @@ Centralised so future event additions or copy tweaks change in one place.
 
 1. `audit_events WHERE target_type = 'order' AND target_id = :orderId`
 2. `payments WHERE order_id = :orderId` (joined as virtual rows: "Payment received $X" / "Refund processed $X")
-3. `orders.createdAt` (synthesised single virtual row: "Order placed by parent")
+3. `orders.createdAt` + `orders.parentName` (synthesised single virtual row: "Order placed by {parentName}" — e.g. "Order placed by Sarah Chen")
 
 **Display:** vertical timeline, newest-first. Each row: dot · description · monospace right-aligned relative timestamp. Dot colour = `--color-gold` for human actor, neutral grey for Stripe/parent virtual rows. No expand-all (one order's lifetime fits in 20 rows comfortably).
 
@@ -230,7 +248,7 @@ Where each event fires in code, ordered by file.
 | File | Where to add `logAuditEvent` | Action(s) |
 |---|---|---|
 | `app/admin/[tenant]/orders/[orderId]/order-detail-actions.tsx` | After `markOrderReady` mutation succeeds | `order.marked_ready` |
-| `app/api/orders/[orderId]/refund/route.ts` | After successful Stripe refund kickoff, before returning 200 | `order.refund_requested` |
+| `app/api/orders/[orderId]/refund/route.ts` | After successful Stripe refund kickoff, before returning 200 | `order.refund_issued` |
 | `app/api/catalog/route.ts` (POST) | After insert | `catalog_item.created` |
 | `app/api/catalog/[itemId]/route.ts` (PUT) | After update; pass `changedFields` from input diff | `catalog_item.updated` |
 | `app/api/catalog/[itemId]/route.ts` (DELETE) | After soft- or hard-delete | `catalog_item.deleted` |
@@ -297,6 +315,8 @@ No backfill. No data migration. No changes to existing tables in this migration.
 - **Operator self-service history.** "What have I done lately?" view for operators is not in v1. The `idx_audit_events_actor_time` index is there in case we add it.
 - **Webhook attribution.** Currently webhook-driven events live only in `payments`. If we later want them in `audit_events` (with `actor_role = 'stripe_webhook'`), this means relaxing the `actor_role` check constraint and accepting `actor_email = 'stripe@webhook'` or similar. Deferred until we have a concrete need.
 - **PostHog dashboard migration.** Pre-deploy: audit the PostHog project (organization 019c854e..., project UniformOrder id 411893) for any dashboard / funnel / alert referencing `platform_tenant_created`, `platform_tenant_stripe_created`, `platform_tenant_catalog_cloned`, or `platform_tenant_went_live` and update them to the new dotted names. Owner: George. Blocks the v1 deploy only if active alerts are wired to the old names.
+
+  **Alternative: dual-emit transition window.** Instead of a pre-deploy gate, `logAuditEvent` could co-emit *both* the old name (`platform_tenant_created`) and the new dotted name (`tenant.draft_created`) for a 1–2 week window, then drop the old emit. Trade-off: doubles PostHog ingest temporarily and requires a follow-up cleanup task, but unblocks deploy and lets dashboard migration happen at George's own pace. Recommended only if dashboards/funnels/alerts on the old names actually exist; if there are none (likely — the events were just instrumented in the platform-portal work), the clean rename is simpler.
 
 ## 11. Why now
 
