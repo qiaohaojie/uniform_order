@@ -345,6 +345,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
               <FieldLabel htmlFor="studentName">Student name</FieldLabel>
               <input id="studentName" value={student.studentName} onChange={(e) => setField("studentName", e.target.value)}
                 placeholder="e.g. Riley Qiao"
+                aria-required="true" aria-invalid={!!fieldErrors.studentName}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.studentName ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.studentName && <FieldError>{fieldErrors.studentName}</FieldError>}
@@ -352,6 +353,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
             <div>
               <FieldLabel htmlFor="year">Year</FieldLabel>
               <select id="year" value={student.year} onChange={(e) => setField("year", e.target.value)}
+                aria-required="true"
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none bg-white"
                 style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}>
                 {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -361,6 +363,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
               <FieldLabel htmlFor="rollClass">Roll class</FieldLabel>
               <input id="rollClass" value={student.rollClass} onChange={(e) => setField("rollClass", e.target.value)}
                 placeholder="e.g. 9F"
+                aria-required="true" aria-invalid={!!fieldErrors.rollClass}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.rollClass ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.rollClass && <FieldError>{fieldErrors.rollClass}</FieldError>}
@@ -372,6 +375,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
               <FieldLabel htmlFor="parentName">Parent / guardian name</FieldLabel>
               <input id="parentName" value={student.parentName} onChange={(e) => setField("parentName", e.target.value)}
                 placeholder="e.g. George Qiao"
+                aria-required="true" aria-invalid={!!fieldErrors.parentName}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.parentName ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.parentName && <FieldError>{fieldErrors.parentName}</FieldError>}
@@ -380,6 +384,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
               <FieldLabel htmlFor="mobile">Mobile</FieldLabel>
               <input id="mobile" value={student.mobile} onChange={(e) => setField("mobile", e.target.value)}
                 placeholder="04xx xxx xxx" type="tel"
+                aria-required="true" aria-invalid={!!fieldErrors.mobile}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.mobile ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.mobile && <FieldError>{fieldErrors.mobile}</FieldError>}
@@ -388,6 +393,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
               <FieldLabel htmlFor="email">Email (receipt)</FieldLabel>
               <input id="email" value={student.email} onChange={(e) => setField("email", e.target.value)}
                 placeholder="you@example.com" type="email"
+                aria-required="true" aria-invalid={!!fieldErrors.email}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.email ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.email && <FieldError>{fieldErrors.email}</FieldError>}
