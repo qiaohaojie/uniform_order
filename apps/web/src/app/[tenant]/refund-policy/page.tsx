@@ -1,9 +1,10 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
 
 // Tenant-internal document, not an SEO target.
-export const metadata = {
+export const metadata: Metadata = {
   title: "Refund policy",
   robots: { index: false, follow: false },
 };
