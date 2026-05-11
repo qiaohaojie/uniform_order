@@ -67,6 +67,10 @@ export async function sendOrderConfirmationEmail(orderId: string) {
     return;
   }
 
+  const refundPolicyUrl = tenant.currentLegalVersionId
+    ? `${requireAppUrl()}/${tenant.id}/refund-policy`
+    : null;
+
   const props = {
     tenantName: tenant.name,
     tenantAccent: tenant.accent,
@@ -84,6 +88,7 @@ export async function sendOrderConfirmationEmail(orderId: string) {
     totalAmount: Number(order.total),
     shopEmail: tenant.shopEmail,
     orderUrl: `${requireAppUrl()}/orders/${order.id}`,
+    refundPolicyUrl,
   };
 
   const html = await render(React.createElement(OrderConfirmationEmail, props));
@@ -135,6 +140,10 @@ export async function sendOrderReadyEmail(orderId: string) {
     return;
   }
 
+  const refundPolicyUrl = tenant.currentLegalVersionId
+    ? `${requireAppUrl()}/${tenant.id}/refund-policy`
+    : null;
+
   const props = {
     tenantName: tenant.name,
     tenantAccent: tenant.accent,
@@ -144,6 +153,8 @@ export async function sendOrderReadyEmail(orderId: string) {
       tenant.collectionInstructions || "Please collect from the school office.",
     shopHours: tenant.shopHours || "Mon-Fri, 8:30am - 4:00pm",
     orderUrl: `${requireAppUrl()}/orders/${order.id}`,
+    shopEmail: tenant.shopEmail,
+    refundPolicyUrl,
   };
 
   const html = await render(React.createElement(OrderReadyEmail, props));

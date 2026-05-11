@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getTenant } from "@/db/queries";
+import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import type { TenantStatus } from "@/lib/platform/queries";
 import { BrandingCard } from "./cards/branding-card";
+import { LegalCard } from "./cards/legal-card";
 import { OperatorCard } from "./cards/operator-card";
 import { StripeCard } from "./cards/stripe-card";
 import { DangerCard } from "./cards/danger-card";
@@ -30,6 +31,9 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   if (!tenant) notFound();
 
   const status = deriveStatus(tenant);
+  const currentLegalVersion = tenant.currentLegalVersionId
+    ? await getTenantLegalVersion(tenant.currentLegalVersionId)
+    : null;
 
   return (
     <>
@@ -50,7 +54,16 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
           <ResumeOnboarding tenant={tenant} />
         ) : (
           <>
+            {!currentLegalVersion ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-[10px] px-5 py-4 text-sm">
+                <strong className="font-semibold text-yellow-900">Refund policy not set.</strong>{" "}
+                <span className="text-yellow-900/90">
+                  Add it to enable a per-tenant refund-policy link in confirmation emails.
+                </span>
+              </div>
+            ) : null}
             <BrandingCard tenant={tenant} />
+            <LegalCard tenant={tenant} currentVersion={currentLegalVersion} />
             <OperatorCard tenant={tenant} />
             <StripeCard tenant={tenant} />
             <DangerCard tenant={tenant} status={status} />

@@ -1,4 +1,4 @@
-import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds, parentChildren } from "./index";
+import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds, parentChildren, tenantLegalVersions } from "./index";
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { cache } from "react";
@@ -1055,4 +1055,21 @@ export async function listOrdersForParent(args: {
     .orderBy(desc(orders.createdAt));
 
   return rows;
+}
+
+export async function getTenantLegalVersion(id: string) {
+  const [row] = await db
+    .select()
+    .from(tenantLegalVersions)
+    .where(eq(tenantLegalVersions.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getMaxLegalVersionForTenant(tenantId: string): Promise<number> {
+  const [row] = await db
+    .select({ max: sql<number>`COALESCE(MAX(${tenantLegalVersions.version}), 0)` })
+    .from(tenantLegalVersions)
+    .where(eq(tenantLegalVersions.tenantId, tenantId));
+  return row?.max ?? 0;
 }
