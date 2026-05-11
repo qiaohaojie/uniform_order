@@ -17,95 +17,64 @@
 - Server-side PostHog calls use `serverCapture(user.email, "event_name", { ... })`.
 - `revalidatePath` for routes that live under a layout takes a second arg `"layout"` (e.g. `revalidatePath(\`/${id}\`, "layout")`).
 
+**Deviations from spec (deliberate, called out in self-review):**
+- LegalCard is a `"use client"` component (spec §5.1 said "server component"). It owns the `editing` boolean and conditionally renders `LegalEditDrawer` — same pattern as `BrandingCard`. The summary content is still server-fed via props.
+- The onboarding banner has no inline "Add policy" button (spec §5.3 specified one). Two affordances opening the same drawer is noise; the LegalCard's "Edit" link is the action affordance, the banner is purely a visibility nudge.
+
 ---
 
 ## File map
 
 | Path | New / Modify | Responsibility |
 |---|---|---|
-| `apps/web/drizzle/0010_tenant_legal_versions.sql` | New | DDL: enum, table, two FK columns |
-| `apps/web/src/db/schema.ts` | Modify | Drizzle table + enum + FK cols + exported types |
-| `apps/web/src/db/queries.ts` | Modify | `getTenantLegalVersion(id)` helper |
+| `apps/web/drizzle/0010_*.sql` (auto-named) | Generated | DDL: enum, table, two FK columns — produced by `drizzle-kit generate`, then hand-extended with FK + check constraints |
+| `apps/web/drizzle/meta/0010_snapshot.json` + `_journal.json` | Generated | Drizzle's snapshot + journal updates |
+| `apps/web/src/db/schema.ts` | Modify | Drizzle table + enum + FK cols (FK targets enforced via SQL only) + exported types |
+| `apps/web/src/db/queries.ts` | Modify | `getTenantLegalVersion(id)`, `getMaxLegalVersionForTenant(tenantId)` helpers |
+| `apps/web/src/lib/db/unique-constraint.ts` | New | Lifted `isUniqueConstraintError` (was module-private in `api/orders/route.ts`) |
 | `apps/web/src/lib/platform/schema.ts` | Modify | `tenantLegalSchema` (zod discriminated union) |
 | `apps/web/src/app/platform/tenants/[id]/actions.ts` | Modify | `editTenantLegal` server action with collision-retry |
 | `apps/web/src/app/[tenant]/refund-policy/page.tsx` | New | Server route: notFound / 307 / inline render |
 | `apps/web/src/lib/email/index.ts` | Modify | Resolve `refundPolicyUrl` and pass into both templates |
 | `apps/web/src/lib/email/templates/OrderConfirmation.tsx` | Modify | New prop + conditional footer link |
-| `apps/web/src/lib/email/templates/OrderReady.tsx` | Modify | New prop + new footer line |
-| `apps/web/src/app/api/orders/route.ts` | Modify | Snapshot `legalVersionId` on order insert |
-| `apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx` | New | Read-only summary card (server component) |
+| `apps/web/src/lib/email/templates/OrderReady.tsx` | Modify | New props (shopEmail + refundPolicyUrl) + new footer line |
+| `apps/web/src/app/api/orders/route.ts` | Modify | Use lifted `isUniqueConstraintError`; snapshot `legalVersionId` |
+| `apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx` | New | Read-only summary card (client — owns editing state) |
 | `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx` | New | Right-side form drawer (client) |
 | `apps/web/src/app/platform/tenants/[id]/page.tsx` | Modify | Render banner + LegalCard inside the cards branch |
 
 ---
 
-## Task 1: Migration + Drizzle schema
+## Task 1: Drizzle schema + generated migration
 
 **Files:**
-- Create: `apps/web/drizzle/0010_tenant_legal_versions.sql`
 - Modify: `apps/web/src/db/schema.ts`
+- Generated: `apps/web/drizzle/0010_*.sql`, `apps/web/drizzle/meta/0010_snapshot.json`, `apps/web/drizzle/meta/_journal.json`
 
-- [ ] **Step 1: Write the migration SQL**
+> **Approach:** define the schema in TS, then `drizzle-kit generate` produces the SQL file AND updates `meta/_journal.json` + a new snapshot. Hand-extend the SQL afterwards with the FK + check constraints that Drizzle doesn't model. Hand-writing the SQL alone would skip the journal — see PR #8 / `completed.md` §4.9.
 
-Create `apps/web/drizzle/0010_tenant_legal_versions.sql`:
+- [ ] **Step 1: Update `apps/web/src/db/schema.ts`**
 
-```sql
--- ─── Enum ───────────────────────────────────────────────────────────────────
-CREATE TYPE "policy_mode" AS ENUM ('text', 'url');
-
--- ─── tenant_legal_versions ──────────────────────────────────────────────────
-CREATE TABLE "tenant_legal_versions" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "tenant_id" text NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
-  "version" integer NOT NULL,
-  "policy_mode" "policy_mode" NOT NULL,
-  "policy_text" text,
-  "policy_url" text,
-  "acl_acknowledged" boolean NOT NULL,
-  "seller_of_record_acknowledged" boolean NOT NULL,
-  "declarant_name" text NOT NULL,
-  "declarant_role" text NOT NULL,
-  "entered_by_user_id" uuid NOT NULL REFERENCES "neon_auth"."user"("id"),
-  "entered_by_email" text NOT NULL,
-  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT "tenant_legal_versions_tenant_version_unique" UNIQUE ("tenant_id", "version"),
-  CONSTRAINT "tenant_legal_versions_mode_check" CHECK (
-    ("policy_mode" = 'text' AND "policy_text" IS NOT NULL AND "policy_url" IS NULL)
-    OR
-    ("policy_mode" = 'url'  AND "policy_url"  IS NOT NULL AND "policy_text" IS NULL)
-  )
-);
-
-CREATE INDEX "idx_tenant_legal_versions_tenant" ON "tenant_legal_versions" ("tenant_id");
-
--- ─── tenants.current_legal_version_id ───────────────────────────────────────
-ALTER TABLE "tenants"
-  ADD COLUMN "current_legal_version_id" uuid REFERENCES "tenant_legal_versions"("id");
-
--- ─── orders.legal_version_id ────────────────────────────────────────────────
-ALTER TABLE "orders"
-  ADD COLUMN "legal_version_id" uuid REFERENCES "tenant_legal_versions"("id");
-```
-
-- [ ] **Step 2: Update `apps/web/src/db/schema.ts`**
-
-Add the enum near the existing `pgEnum` declarations:
+Add the enum near the existing `pgEnum` declarations (top of file, around line 17):
 
 ```ts
 export const policyModeEnum = pgEnum("policy_mode", ["text", "url"]);
 ```
 
-Add a new table block after `parentChildren` (around line 200). The check constraint is already enforced in SQL — it does not need a `pgCheck` wrapper here:
+Add a new table block. **Place it BEFORE the `tenants` table block** — `tenants` will hold an FK column to it. The new block goes immediately above the `// ─── Tenants ───` comment:
 
 ```ts
 // ─── Tenant legal versions ───────────────────────────────────────────────────
+// IMPORTANT: defined before `tenants` because `tenants.current_legal_version_id`
+// needs the FK target in scope. The opposite-direction FK (tenantId → tenants.id)
+// is enforced via the SQL ALTER TABLE in the migration only — the Drizzle column
+// stays as plain `text("tenant_id")` with no .references() callback to avoid the
+// hoisting cycle. FK integrity is preserved at the DB layer.
 export const tenantLegalVersions = pgTable(
   "tenant_legal_versions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: text("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id").notNull(), // FK enforced via SQL only — see note above
     version: integer("version").notNull(),
     policyMode: policyModeEnum("policy_mode").notNull(),
     policyText: text("policy_text"),
@@ -114,9 +83,7 @@ export const tenantLegalVersions = pgTable(
     sellerOfRecordAcknowledged: boolean("seller_of_record_acknowledged").notNull(),
     declarantName: text("declarant_name").notNull(),
     declarantRole: text("declarant_role").notNull(),
-    enteredByUserId: uuid("entered_by_user_id")
-      .notNull()
-      .references(() => neonAuthUsers.id),
+    enteredByUserId: uuid("entered_by_user_id").notNull(), // FK enforced via SQL only
     enteredByEmail: text("entered_by_email").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -125,27 +92,26 @@ export const tenantLegalVersions = pgTable(
       t.tenantId,
       t.version,
     ),
-    tenantIdx: index("idx_tenant_legal_versions_tenant").on(t.tenantId),
+    // No separate index on tenantId alone — the unique constraint above already
+    // creates a B-tree leading on tenant_id, satisfying tenant-only lookups.
   }),
 );
 ```
 
-Add `currentLegalVersionId` to the `tenants` table definition. Insert this column right after `platformRejectionReason` (around line 56), before `createdAt`:
+> **Why FKs are SQL-only here:** the only way to express `tenants ↔ tenantLegalVersions` mutual references in Drizzle without a hoisting cycle is the brittle `(): any =>` cast. Dropping `.references()` on these columns lets the SQL `ALTER TABLE` (added in Step 3) carry the FK. Drizzle's row types are unaffected.
+
+Add `currentLegalVersionId` to the `tenants` table definition. Insert this column right after `platformRejectionReason` (around line 56), before `createdAt`. Note: no `.references()`.
 
 ```ts
-  // Current legal/refund-policy version (FK to tenant_legal_versions; null until first save)
-  currentLegalVersionId: uuid("current_legal_version_id").references(
-    (): any => tenantLegalVersions.id,
-  ),
+  // Current legal/refund-policy version (FK enforced via SQL ALTER, not Drizzle)
+  currentLegalVersionId: uuid("current_legal_version_id"),
 ```
-
-> **Note:** the `(): any =>` callback breaks the otherwise-circular type reference (`tenants` → `tenantLegalVersions` → `tenants`). Drizzle resolves the FK at runtime; the `any` is necessary because TypeScript can't infer the recursive shape. Same pattern as if you had FKs that reference back to a parent table.
 
 Add `legalVersionId` to the `orders` table definition. Insert it right after the `userId` column (around line 125), before `createdAt`:
 
 ```ts
-    // Snapshot of the policy version in force at order time (for audit)
-    legalVersionId: uuid("legal_version_id").references(() => tenantLegalVersions.id),
+    // Snapshot of the policy version in force at order time (audit only)
+    legalVersionId: uuid("legal_version_id"),
 ```
 
 At the bottom of the file, after `export type TenantRow = typeof tenants.$inferSelect;`, add:
@@ -154,30 +120,90 @@ At the bottom of the file, after `export type TenantRow = typeof tenants.$inferS
 export type TenantLegalVersionRow = typeof tenantLegalVersions.$inferSelect;
 ```
 
-- [ ] **Step 3: Apply the migration to your dev DB**
-
-Run from repo root:
+- [ ] **Step 2: Generate the migration**
 
 ```bash
-pnpm --filter web exec drizzle-kit push
+pnpm --filter web exec drizzle-kit generate
 ```
 
-Expected: drizzle-kit detects the new table + 2 columns, asks for confirmation, applies. If it tries to also generate ALTER for `neon_auth."user"` rows, decline (those are external — see `external-schema.ts` and PR #8 / `completed.md` §4.9 for the exclusion mechanism).
+Expected output: a new `apps/web/drizzle/0010_<random_name>.sql` (drizzle-kit picks the random suffix, like `0009_petite_the_phantom.sql`), plus a `meta/0010_snapshot.json` and an updated `meta/_journal.json`.
 
-- [ ] **Step 4: Verify types**
+The generated SQL will include `CREATE TYPE policy_mode`, `CREATE TABLE tenant_legal_versions`, `CREATE UNIQUE INDEX`, and two `ALTER TABLE … ADD COLUMN` statements for the new uuid columns on `tenants` and `orders`.
 
-Run:
+- [ ] **Step 3: Hand-extend the generated SQL with FK + check constraints**
+
+Open the generated `0010_*.sql` and append:
+
+```sql
+-- FKs (Drizzle column doesn't model these; enforced at DB layer)
+ALTER TABLE "tenant_legal_versions"
+  ADD CONSTRAINT "tenant_legal_versions_tenant_id_fkey"
+  FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE;
+
+ALTER TABLE "tenant_legal_versions"
+  ADD CONSTRAINT "tenant_legal_versions_entered_by_user_id_fkey"
+  FOREIGN KEY ("entered_by_user_id") REFERENCES "neon_auth"."user"("id");
+
+ALTER TABLE "tenants"
+  ADD CONSTRAINT "tenants_current_legal_version_id_fkey"
+  FOREIGN KEY ("current_legal_version_id") REFERENCES "tenant_legal_versions"("id");
+
+ALTER TABLE "orders"
+  ADD CONSTRAINT "orders_legal_version_id_fkey"
+  FOREIGN KEY ("legal_version_id") REFERENCES "tenant_legal_versions"("id");
+
+-- Check constraint enforcing text-XOR-url
+ALTER TABLE "tenant_legal_versions"
+  ADD CONSTRAINT "tenant_legal_versions_mode_check"
+  CHECK (
+    ("policy_mode" = 'text' AND "policy_text" IS NOT NULL AND "policy_url" IS NULL)
+    OR
+    ("policy_mode" = 'url'  AND "policy_url"  IS NOT NULL AND "policy_text" IS NULL)
+  );
+```
+
+- [ ] **Step 4: Hand-edit `meta/0010_snapshot.json` (only if drizzle-kit dragged in `neon_auth.user`)**
+
+If the snapshot includes a `neon_auth.user` table entry, remove it (same surgery PR #8 / `completed.md` §4.9 documented). If not, skip.
+
+- [ ] **Step 5: Apply the migration to your dev DB**
+
+```bash
+pnpm --filter web exec drizzle-kit migrate
+```
+
+Expected: drizzle-kit reads the journal, applies `0010_*.sql` against your dev Neon DB, records the application in `__drizzle_migrations`.
+
+- [ ] **Step 6: Verify types + sanity-check the schema**
 
 ```bash
 pnpm check-types:web
 ```
 
-Expected: clean (zero errors).
+Then in the Neon SQL editor:
 
-- [ ] **Step 5: Commit**
+```sql
+\d tenant_legal_versions
+\d tenants
+\d orders
+```
+
+Confirm: table exists with the `tenant_legal_versions_mode_check` constraint; tenants has `current_legal_version_id`; orders has `legal_version_id`; FKs are present in each `\d` output.
+
+- [ ] **Step 7: Verify Stack Auth issues UUID user IDs (cheap insurance)**
+
+The `entered_by_user_id` column is a uuid FK to `neon_auth.user(id)`. The `SessionUser.id` from `lib/auth/authorization.ts` is typed `string` — but Stack Auth issues UUIDs in practice (PR #7 was the column-type alignment for this very reason). Probe in the Neon SQL editor:
+
+```sql
+SELECT id FROM neon_auth.user LIMIT 3;
+```
+
+Confirm the IDs look like UUIDs (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`). If they don't, stop and ask before proceeding — the action will throw at insert time when it casts a non-UUID `user.id` to the FK column.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/web/drizzle/0010_tenant_legal_versions.sql apps/web/src/db/schema.ts
+git add apps/web/drizzle/0010_*.sql apps/web/drizzle/meta/_journal.json apps/web/drizzle/meta/0010_snapshot.json apps/web/src/db/schema.ts
 git commit -m "$(cat <<'EOF'
 feat(db): add tenant_legal_versions table + FK columns
 
@@ -185,8 +211,11 @@ New versioned table stores per-tenant refund-policy submissions with
 ACL + seller-of-record acknowledgements and declarant name/role. FK on
 tenants points at the current version; FK on orders snapshots which
 version was in force at order time (audit trail only — no UI reads it).
-Check constraint enforces text-XOR-url at the DB layer; zod will mirror
-it at the action layer.
+
+FK constraints + the text-XOR-url check live in the SQL migration, not
+in the Drizzle column callbacks — this avoids the brittle (): any =>
+hoisting cycle when two tables FK each other. Row types are unaffected;
+DB integrity is preserved by the ALTER TABLE constraints.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -195,7 +224,73 @@ EOF
 
 ---
 
-## Task 2: Zod schema
+## Task 2: Lift `isUniqueConstraintError` to a shared module
+
+**Files:**
+- Create: `apps/web/src/lib/db/unique-constraint.ts`
+- Modify: `apps/web/src/app/api/orders/route.ts`
+
+> **Why a separate task:** `editTenantLegal` (Task 4) needs this helper. Importing from a route module into a server-action module is fragile — pulls a Next.js route handler into a non-route compilation graph. Lifting unconditionally now keeps the dependency direction clean.
+
+- [ ] **Step 1: Create the shared module**
+
+Create `apps/web/src/lib/db/unique-constraint.ts`:
+
+```ts
+/**
+ * Detect Postgres unique-constraint violations (SQLSTATE 23505) from any
+ * thrown error originating in the neon-http driver. Optionally narrow on a
+ * specific constraint name (matches `pgError.constraint`).
+ */
+export function isUniqueConstraintError(error: unknown, constraintName?: string): boolean {
+  const pgError = error as { code?: string; constraint?: string };
+  if (pgError?.code !== "23505") return false;
+  if (constraintName && pgError.constraint !== constraintName) return false;
+  return true;
+}
+```
+
+> If the existing helper in `api/orders/route.ts` has a slightly different shape (e.g. it inspects nested `cause` chains), copy that exact shape — the goal is byte-for-byte preservation, not a rewrite.
+
+- [ ] **Step 2: Update `api/orders/route.ts` to import from the new module**
+
+Open `apps/web/src/app/api/orders/route.ts`. Find the local `function isUniqueConstraintError` declaration (around line 26) and delete it. Add to the imports at the top:
+
+```ts
+import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
+```
+
+The existing call sites (around lines 225 and 232) need no change.
+
+- [ ] **Step 3: Verify types**
+
+```bash
+pnpm check-types:web
+```
+
+Expected: clean.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/web/src/lib/db/unique-constraint.ts apps/web/src/app/api/orders/route.ts
+git commit -m "$(cat <<'EOF'
+refactor(db): lift isUniqueConstraintError to shared module
+
+Was module-private inside api/orders/route.ts. The upcoming
+editTenantLegal action also needs collision-retry on a unique
+constraint, and importing from a route handler module into a server
+action would mix compilation graphs. Move to lib/db/ so both the route
+and the action depend on a non-route module.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+## Task 3: Zod schema
 
 **Files:**
 - Modify: `apps/web/src/lib/platform/schema.ts`
@@ -239,7 +334,7 @@ export const tenantLegalSchema = z.discriminatedUnion("mode", [
 export type TenantLegal = z.infer<typeof tenantLegalSchema>;
 ```
 
-> **Why `policyUrl: z.undefined().optional()` on the text branch (and vice-versa):** the discriminated union otherwise has no opinion on the *other* branch's field. Marking it `undefined` makes the type narrow correctly at use sites — TypeScript will only suggest `policyText` when `mode === "text"`.
+> **Why `policyUrl: z.undefined().optional()` on the text branch (and vice-versa):** marks the *other* branch's field as `undefined` so TypeScript's discriminated narrowing only suggests the right field per `mode`.
 
 - [ ] **Step 2: Verify types**
 
@@ -268,19 +363,19 @@ EOF
 
 ---
 
-## Task 3: `editTenantLegal` server action + collision-retry
+## Task 4: `editTenantLegal` server action + helper queries
 
 **Files:**
-- Modify: `apps/web/src/app/platform/tenants/[id]/actions.ts`
 - Modify: `apps/web/src/db/queries.ts`
+- Modify: `apps/web/src/app/platform/tenants/[id]/actions.ts`
 
-- [ ] **Step 1: Add a helper query**
+- [ ] **Step 1: Add helper queries**
 
-Append to `apps/web/src/db/queries.ts` (anywhere — they're loose helpers):
+Append to `apps/web/src/db/queries.ts`:
 
 ```ts
 import { tenantLegalVersions } from "./schema";
-// ↑ if not already imported at the top of the file
+// ↑ if not already imported; same for `eq`, `sql`, `tenants` if missing
 
 export async function getTenantLegalVersion(id: string) {
   const [row] = await db
@@ -289,16 +384,6 @@ export async function getTenantLegalVersion(id: string) {
     .where(eq(tenantLegalVersions.id, id))
     .limit(1);
   return row ?? null;
-}
-
-export async function getCurrentLegalVersionForTenant(tenantId: string) {
-  const [tenant] = await db
-    .select({ currentLegalVersionId: tenants.currentLegalVersionId })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
-  if (!tenant?.currentLegalVersionId) return null;
-  return getTenantLegalVersion(tenant.currentLegalVersionId);
 }
 
 export async function getMaxLegalVersionForTenant(tenantId: string): Promise<number> {
@@ -310,7 +395,9 @@ export async function getMaxLegalVersionForTenant(tenantId: string): Promise<num
 }
 ```
 
-> If `sql` and `eq` are not already imported at the top of `queries.ts`, add them: `import { eq, sql } from "drizzle-orm";`. Same for `tenants`.
+Confirm imports at the top of `queries.ts` include: `import { eq, sql } from "drizzle-orm";` and `import { tenants, tenantLegalVersions } from "./schema";`. Add anything missing.
+
+> **No `getCurrentLegalVersionForTenant` helper** — both call sites (Task 5 route, Task 11 page) already load the tenant row, so they can do `tenant.currentLegalVersionId ? getTenantLegalVersion(tenant.currentLegalVersionId) : null` directly. One round-trip instead of two.
 
 - [ ] **Step 2: Add the server action**
 
@@ -319,10 +406,8 @@ Append to `apps/web/src/app/platform/tenants/[id]/actions.ts`:
 ```ts
 import { tenantLegalVersions } from "@/db/schema";
 import { tenantLegalSchema } from "@/lib/platform/schema";
-import { getCurrentLegalVersionForTenant, getMaxLegalVersionForTenant } from "@/db/queries";
-import { isUniqueConstraintError } from "@/app/api/orders/route";
-
-// ↑ if isUniqueConstraintError isn't exported from that route file yet, see Step 3 below.
+import { getTenantLegalVersion, getMaxLegalVersionForTenant } from "@/db/queries";
+import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
 
 export async function editTenantLegal(id: string, input: unknown) {
   const user = await requirePlatformAdmin();
@@ -330,16 +415,18 @@ export async function editTenantLegal(id: string, input: unknown) {
   if (!parsed.ok) return { ok: false as const, error: parsed.error };
 
   const [tenant] = await db
-    .select({ id: tenants.id })
+    .select({ id: tenants.id, currentLegalVersionId: tenants.currentLegalVersionId })
     .from(tenants)
     .where(eq(tenants.id, id))
     .limit(1);
   if (!tenant) return { ok: false as const, error: "Tenant not found" };
 
-  // Diff against the current version (if any) to short-circuit no-op saves.
-  const current = await getCurrentLegalVersionForTenant(id);
+  const current = tenant.currentLegalVersionId
+    ? await getTenantLegalVersion(tenant.currentLegalVersionId)
+    : null;
   const next = parsed.data;
 
+  // Diff against current to short-circuit no-op saves (mirrors editTenantBranding).
   const sameMode = current?.policyMode === next.mode;
   const sameContent =
     sameMode &&
@@ -349,17 +436,16 @@ export async function editTenantLegal(id: string, input: unknown) {
   const sameDeclarant =
     current?.declarantName === next.declarantName &&
     current?.declarantRole === next.declarantRole;
-  // Acks come pre-ticked from the prior version; they're always === true here.
-  // No-op when policy + declarant unchanged.
+
   if (current && sameContent && sameDeclarant) {
     return { ok: true as const };
   }
 
   const changedFields: string[] = [];
+  if (!current) changedFields.push("initial");
   if (!sameMode) changedFields.push("mode");
   if (!sameContent) changedFields.push("policy");
   if (!sameDeclarant) changedFields.push("declarant");
-  if (!current) changedFields.push("initial");
 
   // Insert new version with retry on (tenant_id, version) collision.
   let inserted: { id: string; version: number } | null = null;
@@ -396,7 +482,6 @@ export async function editTenantLegal(id: string, input: unknown) {
     return { ok: false as const, error: "Could not allocate a version number; please retry" };
   }
 
-  // Point the tenant at the new version + bump updatedAt for cache busting.
   await db
     .update(tenants)
     .set({ currentLegalVersionId: inserted.id, updatedAt: new Date() })
@@ -410,19 +495,15 @@ export async function editTenantLegal(id: string, input: unknown) {
   });
 
   revalidatePath(`/platform/tenants/${id}`);
+  // The "layout" flag cascades to all routes under /[tenant]/, including
+  // /[tenant]/refund-policy. Matches editTenantBranding's pattern (actions.ts:14).
   revalidatePath(`/${id}`, "layout");
 
   return { ok: true as const, version: inserted.version };
 }
 ```
 
-- [ ] **Step 3: Export `isUniqueConstraintError` from the orders route (so it's reusable)**
-
-Open `apps/web/src/app/api/orders/route.ts`. Find the existing `isUniqueConstraintError` declaration (around line 25). Change `function isUniqueConstraintError(...)` to `export function isUniqueConstraintError(...)`. No other change.
-
-If for any reason that helper is locally scoped (i.e. inside another function), instead lift it into a new file `apps/web/src/lib/db/unique-constraint.ts` containing only that function, and update both `route.ts` and `actions.ts` to import from there.
-
-- [ ] **Step 4: Verify types**
+- [ ] **Step 3: Verify types**
 
 ```bash
 pnpm check-types:web
@@ -430,21 +511,21 @@ pnpm check-types:web
 
 Expected: clean.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add apps/web/src/app/platform/tenants/[id]/actions.ts apps/web/src/db/queries.ts apps/web/src/app/api/orders/route.ts
+git add apps/web/src/app/platform/tenants/[id]/actions.ts apps/web/src/db/queries.ts
 git commit -m "$(cat <<'EOF'
 feat(platform): editTenantLegal server action
 
 Mints a new tenant_legal_versions row + bumps tenants.current_legal_
-version_id atomically (with a 3-try retry on the unique (tenant_id,
-version) constraint, mirroring the orders_pkey retry pattern). Diffs
-against the prior version to short-circuit no-op saves, returning the
-same { ok: true as const } shape as editTenantBranding. PostHog event
-fires server-side with computed changedFields (mode, policy, declarant,
-initial). Revalidates both the tenant detail page and the parent-shop
-layout.
+version_id (with a 3-try retry on the unique (tenant_id, version)
+constraint, mirroring orders_pkey retry in api/orders/route.ts).
+Diffs against the prior version to short-circuit no-op saves, returning
+the same { ok: true as const } shape as editTenantBranding. PostHog
+event fires server-side with computed changedFields (initial, mode,
+policy, declarant). Revalidates tenant detail page + parent-shop layout
+(layout flag cascades to the resurrected /[tenant]/refund-policy route).
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -453,20 +534,20 @@ EOF
 
 ---
 
-## Task 4: `/[tenant]/refund-policy` route
+## Task 5: `/[tenant]/refund-policy` route
 
 **Files:**
 - Create: `apps/web/src/app/[tenant]/refund-policy/page.tsx`
 
-- [ ] **Step 1: Verify Next.js `redirect()` accepts off-origin URLs**
+> **No off-origin-redirect smoke test:** Next.js's `redirect()` from `next/navigation` has supported absolute URLs since 13.4. We trust the API.
 
-Quick check before writing the route. Grep for any existing off-origin `redirect()` usage:
+- [ ] **Step 1: Confirm `MobileShell`'s import path**
 
 ```bash
-rg "redirect\(\"https?://" apps/web/src --type ts -l
+rg "export (default )?function MobileShell|export (const|class) MobileShell" apps/web/src/components --type tsx -l
 ```
 
-If you find one (e.g. inside the Stripe Connect onboarding flow), the API works. If not, run a smoke test in dev: temporarily edit any server component to `import { redirect } from "next/navigation"; redirect("https://example.com");`, hit the route, confirm a 307 to example.com with no error. Revert the smoke change. (If it errors with "Invalid URL" or "External URLs not supported", fall back to a route-handler `Response.redirect(url, 307)` — see fallback below.)
+Use whatever path that returns. The example below assumes `@/components/mobile-shell`; substitute as needed.
 
 - [ ] **Step 2: Write the route**
 
@@ -474,8 +555,7 @@ Create `apps/web/src/app/[tenant]/refund-policy/page.tsx`:
 
 ```tsx
 import { notFound, redirect } from "next/navigation";
-import { getTenant } from "@/db/queries";
-import { getCurrentLegalVersionForTenant } from "@/db/queries";
+import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
 
 export default async function RefundPolicyPage({
@@ -483,11 +563,15 @@ export default async function RefundPolicyPage({
 }: {
   params: Promise<{ tenant: string }>;
 }) {
-  const { tenant: tenantSlug } = await params;
-  const tenant = await getTenant(tenantSlug);
+  // The [tenant] route param is the tenant id (slug == id in this codebase —
+  // see TENANTS in lib/data.ts and getTenant's signature in db/queries.ts).
+  const { tenant: tenantId } = await params;
+  const tenant = await getTenant(tenantId);
   if (!tenant) notFound();
 
-  const version = await getCurrentLegalVersionForTenant(tenant.id);
+  const version = tenant.currentLegalVersionId
+    ? await getTenantLegalVersion(tenant.currentLegalVersionId)
+    : null;
   if (!version) notFound();
 
   if (version.policyMode === "url") {
@@ -521,10 +605,6 @@ export default async function RefundPolicyPage({
 }
 ```
 
-> **If the off-origin `redirect()` smoke test failed**, replace this `page.tsx` with a route handler `apps/web/src/app/[tenant]/refund-policy/route.ts` that returns `Response.redirect(version.policyUrl, 307)` for url-mode and renders the text-mode HTML manually. Most installs of Next 15+/16 support off-origin `redirect()`, so try the simpler approach first.
-
-> **`MobileShell` import path:** confirm it's `@/components/mobile-shell` by grepping. If it lives at a different path (e.g. `@/components/MobileShell`), use that.
-
 - [ ] **Step 3: Verify types**
 
 ```bash
@@ -542,11 +622,11 @@ feat(parent): resurrect /[tenant]/refund-policy route
 
 Server component. notFound() when the tenant has no current legal
 version (parents shouldn't see a half-broken page; the platform-admin
-banner is the affordance to fix it). 307-redirects to the school's URL
-in url-mode, renders inline plain-text in text-mode (whitespace-pre-wrap,
-no markdown), with declarant attribution at the bottom. Reuses
-MobileShell + tenant accent for consistency with the rest of the parent
-surface.
+banner is the affordance to fix it). Next's redirect() to the school's
+external URL in url-mode (HTTP 307); renders inline plain-text in
+text-mode (whitespace-pre-wrap, no markdown), with declarant attribution
+at the bottom. Reuses MobileShell + tenant accent for parent-surface
+consistency.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -555,7 +635,7 @@ EOF
 
 ---
 
-## Task 5: Email templates + lib/email/index.ts
+## Task 6: Email templates + lib/email/index.ts
 
 **Files:**
 - Modify: `apps/web/src/lib/email/index.ts`
@@ -578,7 +658,34 @@ Update the destructuring defaults (around line 48):
   refundPolicyUrl = null,
 ```
 
-Replace the existing footer-text IIFE (lines ~110–131) with this conditional:
+The current footer-text IIFE (lines ~110–131) looks exactly like this — confirm before editing:
+
+```tsx
+            <Text style={footerText}>
+              {(() => {
+                const safeName = tenantName?.trim();
+                const safeEmail = shopEmail?.trim();
+                const validEmail = safeEmail && safeEmail.includes("@") ? safeEmail : null;
+                if (!safeName) {
+                  return "For refund or exchange questions, please contact your school directly.";
+                }
+                if (validEmail) {
+                  return (
+                    <>
+                      For refund or exchange questions, contact {safeName} at{" "}
+                      <Link href={`mailto:${validEmail}`} style={link}>
+                        {validEmail}
+                      </Link>
+                      .
+                    </>
+                  );
+                }
+                return `For refund or exchange questions, contact ${safeName} directly.`;
+              })()}
+            </Text>
+```
+
+Replace it with this block:
 
 ```tsx
             <Text style={footerText}>
@@ -623,11 +730,11 @@ Replace the existing footer-text IIFE (lines ~110–131) with this conditional:
             </Text>
 ```
 
-> Wording tweak from "refund or exchange questions" to "refund policy questions" matches the route name and the spec §5.5.
+> Wording shift from "refund or exchange questions" to "refund policy questions" matches the route name.
 
 - [ ] **Step 2: Update `OrderReady.tsx` props + footer**
 
-In `apps/web/src/lib/email/templates/OrderReady.tsx`, add to the interface (around line 22):
+In `apps/web/src/lib/email/templates/OrderReady.tsx`, extend the interface (around line 22):
 
 ```ts
   orderUrl: string;
@@ -635,7 +742,7 @@ In `apps/web/src/lib/email/templates/OrderReady.tsx`, add to the interface (arou
   refundPolicyUrl: string | null;
 ```
 
-Add `shopEmail` to the destructuring defaults (around line 32) — it's currently passed neither as a prop nor a default; add both:
+Add to the destructuring defaults (around line 32):
 
 ```ts
   orderUrl = "#",
@@ -688,7 +795,7 @@ Insert a new footer block immediately *before* the corporate `<Hr style={footerH
             </Text>
 ```
 
-Also append the `link` and `footerText` style consts at the bottom of `OrderReady.tsx` (this template doesn't currently define them — copy from `OrderConfirmation.tsx`):
+`OrderReady.tsx` doesn't currently define `link` and `footerText` style consts. Append them at the bottom of the file (copy the values from `OrderConfirmation.tsx`):
 
 ```ts
 const link = {
@@ -704,9 +811,9 @@ const footerText = {
 };
 ```
 
-- [ ] **Step 3: Update `lib/email/index.ts` to resolve `refundPolicyUrl` and pass it through**
+- [ ] **Step 3: Update `lib/email/index.ts`**
 
-Find both `props` constructions (around lines 70–87 and 138–147). In both, add the resolved URL:
+In both `sendOrderConfirmationEmail` and `sendOrderReadyEmail`, just above each `props` literal, add:
 
 ```ts
 const refundPolicyUrl = tenant.currentLegalVersionId
@@ -714,9 +821,9 @@ const refundPolicyUrl = tenant.currentLegalVersionId
   : null;
 ```
 
-Compute it once just above each `props` literal, then add `refundPolicyUrl` (and for `OrderReady`, also `shopEmail: tenant.shopEmail`) to each `props` object.
+Then add `refundPolicyUrl` to each `props` object. For `sendOrderReadyEmail`, also add `shopEmail: tenant.shopEmail` (the column exists at `schema.ts:43` as `shopEmail: text("shop_email")`).
 
-So `sendOrderConfirmationEmail`'s `props` becomes:
+`sendOrderConfirmationEmail`'s `props` becomes:
 
 ```ts
 const refundPolicyUrl = tenant.currentLegalVersionId
@@ -744,7 +851,7 @@ const props = {
 };
 ```
 
-And `sendOrderReadyEmail`'s `props`:
+`sendOrderReadyEmail`'s `props`:
 
 ```ts
 const refundPolicyUrl = tenant.currentLegalVersionId
@@ -785,7 +892,7 @@ null. When the tenant has a current legal version, the footer renders a
 "refund policy" link (styled with the tenant accent) plus the contact
 line as backup. When no policy is set, the footer falls back to the
 existing contact-only line. OrderReady previously had no refund footer
-at all — this adds one for parity (parents at the "ready for pickup"
+at all — added one here for parity (parents at the "ready for pickup"
 stage are about to receive product and might genuinely need it).
 
 Wording tweaked to "refund policy questions" to match the route name.
@@ -797,18 +904,24 @@ EOF
 
 ---
 
-## Task 6: Order snapshot — `legalVersionId` on `POST /api/orders`
+## Task 7: Order snapshot — `legalVersionId` on `POST /api/orders`
 
 **Files:**
 - Modify: `apps/web/src/app/api/orders/route.ts`
 
-- [ ] **Step 1: Read the tenant's `currentLegalVersionId` before insert**
+- [ ] **Step 1: Read the tenant's `currentLegalVersionId` in the outer POST scope**
 
-Find the existing `tenant` lookup near the top of the POST handler (it's the same `tenant` row used to validate the tenant exists / Stripe is connected). If it doesn't currently select `currentLegalVersionId`, extend the SELECT to include it.
-
-If you can't find an existing tenant lookup that returns the column you need, add this just before the `insertOrder` declaration (around line 178):
+Open `apps/web/src/app/api/orders/route.ts`. If `tenants` isn't already in the imports, add it (mirror `lib/email/index.ts`):
 
 ```ts
+import { db, orders, orderLines, tenants } from "@/db";
+```
+
+In the POST handler, just before the `insertOrder` arrow function is declared (around line 178), add:
+
+```ts
+// Snapshot the policy version in force at order time (audit trail).
+// Read in the outer scope so insertOrder's closure captures it.
 const [tenantRow] = await db
   .select({ currentLegalVersionId: tenants.currentLegalVersionId })
   .from(tenants)
@@ -817,17 +930,21 @@ const [tenantRow] = await db
 const legalVersionId = tenantRow?.currentLegalVersionId ?? null;
 ```
 
-> If the file doesn't already import `tenants` from `@/db`, add it: `import { db, orders, orderLines, tenants } from "@/db";` (mirroring `lib/email/index.ts`).
+If the file already loads a `tenant` row with multiple columns somewhere upstream of this point, just extend that SELECT to include `currentLegalVersionId` and read it from there. Avoid the second round-trip if you can.
 
-- [ ] **Step 2: Add `legalVersionId` to the insert**
+- [ ] **Step 2: Add `legalVersionId` to the `insertOrder` insert payload**
 
-Inside the `insertOrder` function (around line 200), add the field to the `db.insert(orders).values({ ... })` payload:
+`insertOrder` is an arrow function declared in the same outer scope. Its body closes over `legalVersionId` from Step 1 — no need to pass it as a parameter.
+
+Inside the existing `db.insert(orders).values({ ... })` literal (around line 200), add the field after `parentNote`:
 
 ```ts
         userId: authResult.user.id,
         parentNote: normalizedParentNote,
         legalVersionId,
 ```
+
+> **Closure capture:** `legalVersionId` is captured from the outer POST scope. JavaScript handles this normally — no special wiring needed.
 
 - [ ] **Step 3: Verify types**
 
@@ -857,12 +974,34 @@ EOF
 
 ---
 
-## Task 7: `LegalCard` (read-only summary)
+## Task 8: `LegalCard` (read-only summary) + `LegalEditDrawer` skeleton
 
 **Files:**
 - Create: `apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx`
+- Create: `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx` (placeholder; full body in Task 9)
 
-- [ ] **Step 1: Write the card**
+> **Why both files in one task:** LegalCard imports LegalEditDrawer. The previous plan structure split them and produced an unavoidable type-check failure mid-task. Bundling avoids that.
+
+- [ ] **Step 1: Create the drawer placeholder**
+
+Create `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx` with a stub so LegalCard's import resolves:
+
+```tsx
+"use client";
+import type { TenantRow, TenantLegalVersionRow } from "@/db/schema";
+
+export function LegalEditDrawer(_: {
+  tenant: TenantRow;
+  currentVersion: TenantLegalVersionRow | null;
+  onClose: () => void;
+}) {
+  return null;
+}
+```
+
+This will be replaced in Task 9.
+
+- [ ] **Step 2: Create the LegalCard**
 
 Create `apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx`:
 
@@ -952,32 +1091,43 @@ function truncate(s: string, n: number): string {
 }
 ```
 
-> **Why this is a `"use client"` component despite being read-only:** because it owns the `editing` boolean and conditionally renders `LegalEditDrawer`. Same pattern as `BrandingCard`. The summary content itself is server-rendered output passed in via props.
+> **Deviation from spec §5.1:** spec called LegalCard a "server component"; in practice it owns the `editing` boolean and conditionally renders the drawer, so it has to be `"use client"`. Same pattern as `BrandingCard`. Summary content is server-fed via props.
 
-- [ ] **Step 2: Verify types**
+- [ ] **Step 3: Verify types**
 
 ```bash
 pnpm check-types:web
 ```
 
-Expected: error pointing at `LegalEditDrawer` (not yet created). That's expected — the next task creates it. **Do not commit yet.**
+Expected: clean (drawer is a stub, but the type signature satisfies the import).
 
-If you see other errors (e.g. `truncate` typing, `TenantLegalVersionRow` import), fix those before continuing.
+- [ ] **Step 4: Commit**
 
-> If you'd rather have a clean type-check before committing, skip Step 3's commit and bundle Tasks 7 + 8 into a single commit. The plan's default is to commit per task; this is one of two natural exceptions.
+```bash
+git add apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx
+git commit -m "$(cat <<'EOF'
+feat(platform): LegalCard summary + LegalEditDrawer stub
 
-- [ ] **Step 3: Hold the commit** until Task 8 lands the drawer.
+Read-only summary card mirrors BrandingCard's structure: header with
+Edit link, mode badge + version, content preview (200-char truncated
+text or hostname), declarant attribution. Drawer is a typed stub that
+satisfies LegalCard's import; full form lands in the next commit.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
 
 ---
 
-## Task 8: `LegalEditDrawer` (form drawer)
+## Task 9: Flesh out `LegalEditDrawer`
 
 **Files:**
-- Create: `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx`
+- Modify: `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx`
 
-- [ ] **Step 1: Write the drawer**
+- [ ] **Step 1: Replace the stub with the full drawer**
 
-Create `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx`:
+Replace the entire contents of `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx`:
 
 ```tsx
 "use client";
@@ -1013,13 +1163,22 @@ export function LegalEditDrawer({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  // Stable refs so the keydown listener isn't re-registered on every parent
+  // render (parents typically pass an inline `() => setEditing(false)`), and
+  // so async post-await setters can no-op once the drawer has unmounted.
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const mountedRef = useRef(true);
+  // Read pending via a ref inside the keydown closure so the effect's deps can
+  // stay [] — depending on [pending] would trip mountedRef.current = false on
+  // every pending toggle, which is a real bug (mid-save state would silently
+  // no-op the post-await setters).
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) onCloseRef.current();
+      if (e.key === "Escape" && !pendingRef.current) onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -1029,7 +1188,7 @@ export function LegalEditDrawer({
       document.body.style.overflow = prevOverflow;
       mountedRef.current = false;
     };
-  }, [pending]);
+  }, []);
 
   async function save() {
     setError(null);
@@ -1264,25 +1423,26 @@ pnpm check-types:web
 
 Expected: clean.
 
-- [ ] **Step 3: Commit (bundles Tasks 7 + 8)**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx
+git add apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx
 git commit -m "$(cat <<'EOF'
-feat(platform): LegalCard + LegalEditDrawer for tenant detail page
+feat(platform): flesh out LegalEditDrawer
 
-Read-only summary card mirrors BrandingCard's structure: header with
-Edit link, mode badge + version, content preview (200-char truncated
-text or hostname), declarant attribution. Drawer hosts the full form:
-text-vs-URL radio with conditional input, two ACL/seller-of-record
-acknowledgement checkboxes (full sentence labels), declarant name + role.
-Save disabled until: content valid (text ≥50 chars or HTTPS URL) + both
-acks ticked + name/role non-empty.
+Right-side drawer with: text-vs-URL radio + conditional input, two
+ACL/seller-of-record acknowledgement checkboxes (full sentence labels),
+declarant name + role inputs. Save disabled until: content valid (text
+≥50 chars OR HTTPS URL) + both acks ticked + name/role non-empty.
 
 A11y mirrors BrandingEditDrawer: aria-modal, Esc-to-close (gated on
-!pending), body-scroll-lock, isMounted guard on post-await setters,
-Cancel/X/scrim disabled while pending. Acks pre-tick from prior
-version so a Save with no other change becomes a true noop.
+!pending via a ref so the effect deps stay []), body-scroll-lock,
+isMounted guard on post-await setters, Cancel/X/scrim disabled while
+pending. The pendingRef pattern avoids the bug where [pending] in the
+effect deps would fire mountedRef.current=false on every pending toggle.
+
+Acks pre-tick from prior version so a Save with no other change becomes
+a true noop end-to-end (server diff returns { ok: true as const }).
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -1291,31 +1451,33 @@ EOF
 
 ---
 
-## Task 9: Wire banner + LegalCard into tenant detail page
+## Task 10: Wire banner + LegalCard into tenant detail page
 
 **Files:**
 - Modify: `apps/web/src/app/platform/tenants/[id]/page.tsx`
 
-- [ ] **Step 1: Add the import**
+- [ ] **Step 1: Add the imports**
 
 At the top of `apps/web/src/app/platform/tenants/[id]/page.tsx`:
 
 ```ts
 import { LegalCard } from "./cards/legal-card";
-import { getCurrentLegalVersionForTenant } from "@/db/queries";
+import { getTenantLegalVersion } from "@/db/queries";
 ```
 
 - [ ] **Step 2: Fetch the current legal version**
 
-Inside the page component, after `const tenant = await getTenant(id);`, add:
+After `const tenant = await getTenant(id);`, add:
 
 ```ts
-const currentLegalVersion = await getCurrentLegalVersionForTenant(tenant.id);
+const currentLegalVersion = tenant.currentLegalVersionId
+  ? await getTenantLegalVersion(tenant.currentLegalVersionId)
+  : null;
 ```
 
-- [ ] **Step 3: Render the banner + card**
+- [ ] **Step 3: Render the banner + card inside the cards branch**
 
-Inside the cards branch (the `<>` after `status === "setup" ? (... ) : (`), add the banner above and the card below the existing cards:
+Inside the `<>` branch after `status === "setup" ? (... ) : (`, add the banner above and the card between Branding and Operator:
 
 ```tsx
           <>
@@ -1337,7 +1499,7 @@ Inside the cards branch (the `<>` after `status === "setup" ? (... ) : (`), add 
           </>
 ```
 
-> **Why no "Add policy" button on the banner:** the LegalCard's "Edit" link already opens the same drawer. Two affordances pointing at the same modal is noise. The banner's job is to call attention to the missing state; the card's job is to expose the action.
+> **Deviation from spec §5.3:** banner has no inline "Add policy" button. The LegalCard's "Edit" link already opens the same drawer; two affordances pointing at one modal is noise. Banner = visibility nudge, LegalCard = action.
 
 - [ ] **Step 4: Verify types**
 
@@ -1367,11 +1529,11 @@ EOF
 
 ---
 
-## Task 10: Manual smoke verification
+## Task 11: Manual smoke verification
 
 **Files:** none
 
-This task is a checklist of manual verifications. Do them in order. Stop if anything fails — go back and fix the relevant earlier task.
+Checklist of manual verifications. Stop on any failure and fix the relevant earlier task.
 
 - [ ] **Step 1: Boot the dev server**
 
@@ -1379,25 +1541,28 @@ This task is a checklist of manual verifications. Do them in order. Stop if anyt
 pnpm dev:web
 ```
 
-Wait for "Ready on http://localhost:3000" (or the configured port).
-
 - [ ] **Step 2: Confirm the banner shows for a policyless tenant**
 
-Sign in as a platform admin. Visit `/platform/tenants/nsbh`. Expected: amber banner "Refund policy not set" sits above the BrandingCard. LegalCard shows the "Not set" badge.
+Sign in as a platform admin. Visit `/platform/tenants/nsbh`. Expected: amber banner above the cards. LegalCard shows "Not set" badge.
 
 - [ ] **Step 3: Save a text-mode policy**
 
-Click LegalCard's "Edit". Drawer opens with mode=text radio, both acks unchecked, name/role empty. Save button disabled. Paste a >50-char policy text, tick both acks, type a declarant name + role. Save button enables. Click Save.
+Click LegalCard's "Edit". Drawer opens with mode=text radio, both acks unchecked, name/role empty. Save disabled. Paste a >50-char policy text, tick both acks, type a declarant name + role. Save enables. Click Save.
 
-Expected: drawer closes; banner disappears; LegalCard now shows mode badge "Text", v1, truncated preview, declarant attribution. PostHog event `tenant_legal_edited` fired (check via the PostHog Insight or directly in the dashboard if convenient).
+Expected: drawer closes; banner disappears; LegalCard now shows "Text" badge, v1, truncated preview, declarant attribution. Confirm PostHog `tenant_legal_edited` event fired.
 
 - [ ] **Step 4: Save a no-op edit (verify short-circuit)**
 
-Re-open the drawer. All fields including acks pre-tick. Click Save without changing anything. Expected: drawer closes, no new version row in DB (run `select count(*) from tenant_legal_versions where tenant_id='nsbh';` in your Neon SQL editor — should still be 1).
+Re-open drawer. Acks pre-tick (loaded from current version). Click Save without changing anything. Expected: drawer closes, no new version row in DB:
+
+```sql
+SELECT count(*) FROM tenant_legal_versions WHERE tenant_id = 'nsbh';
+-- expect: 1
+```
 
 - [ ] **Step 5: Save a real edit (verify version increment)**
 
-Open drawer, change declarant role from "Bursar" → "Acting Bursar", Save. Expected: LegalCard now shows v2. Re-query the table — 2 rows for nsbh, versions 1 and 2.
+Open drawer, change declarant role from "Bursar" → "Acting Bursar", Save. Expected: LegalCard now shows v2. Re-query: 2 rows for nsbh.
 
 - [ ] **Step 6: Switch mode, save**
 
@@ -1405,7 +1570,7 @@ Open drawer, switch to URL mode, paste a valid HTTPS URL, ensure acks/name/role 
 
 - [ ] **Step 7: Visit `/[tenant]/refund-policy` in URL mode**
 
-In a new tab, navigate to `http://localhost:3000/nsbh/refund-policy`. DevTools Network tab: status 307, `Location` header matches the URL you saved. Browser follows the redirect to the external host (page won't render in your domain — that's correct).
+In a new tab: `http://localhost:3000/nsbh/refund-policy`. DevTools Network tab: status 307, `Location` header matches the saved URL. Browser follows the redirect to the external host (page won't render in your domain — correct).
 
 - [ ] **Step 8: Switch back to text mode, visit `/refund-policy` again**
 
@@ -1413,23 +1578,27 @@ Expected: page renders inline with serif heading, accent-coloured underline, pla
 
 - [ ] **Step 9: Place a real order against NSBH**
 
-Use the parent flow (`/nsbh` → add to cart → checkout → pay with Stripe test card `4242 4242 4242 4242`). After the order completes, query Neon:
+Use the parent flow (`/nsbh` → add to cart → checkout → pay with Stripe test card `4242 4242 4242 4242`). Then:
 
 ```sql
 SELECT id, legal_version_id FROM orders WHERE tenant_id = 'nsbh' ORDER BY created_at DESC LIMIT 1;
 ```
 
-Expected: `legal_version_id` is non-null and matches the current version.
+Expected: `legal_version_id` non-null, matches the current version.
 
 - [ ] **Step 10: Inspect the confirmation email**
 
-If you have email send wired in dev (Resend/Emailit), check the rendered email or use the React Email preview. Footer should include "See {tenant}'s refund policy" link to `/{tenantId}/refund-policy`. Click it — confirms the link works end-to-end.
+If email send is wired in dev, check the rendered email. Footer should include "See {tenant}'s refund policy" link to `/{tenantId}/refund-policy`. Click it — confirms end-to-end.
 
 If you don't want to send a real email, render manually with `pnpm exec react-email dev` (from `apps/web` if that script is set up) or temporarily log the rendered HTML in `sendOrderConfirmationEmail`.
 
 - [ ] **Step 11: Test policyless-tenant fallback**
 
-Open Neon SQL: `UPDATE tenants SET current_legal_version_id = NULL WHERE id = 'rgsh';` (or any tenant you can place a test order against). Place an order against that tenant. Inspect the email footer: should be the static "Contact {tenantName} for refund policy questions: {email}" line, no policy link.
+```sql
+UPDATE tenants SET current_legal_version_id = NULL WHERE id = 'rgsh';
+```
+
+Place an order against rgsh. Inspect the email footer: should be the static "Contact {tenantName} for refund policy questions: {email}" line, no policy link.
 
 - [ ] **Step 12: Final type-check**
 
@@ -1439,24 +1608,27 @@ pnpm check-types:web
 
 Expected: clean.
 
-- [ ] **Step 13: No commit** — this task only verifies; no code changes.
+- [ ] **Step 13: No commit** — verification only.
 
 ---
 
-## Self-review checklist (run after Task 10)
+## Self-review checklist (run after Task 11)
 
 Before opening the PR:
 
-1. **Spec coverage:** Cross-reference every section in the spec against the tasks above. Every numbered §-section should map to at least one task.
-2. **No-op contract symmetry:** confirm `editTenantLegal` returns `{ ok: true as const }` — no `noop` flag — matching `editTenantBranding`.
-3. **Server-action signature:** `serverCapture(user.email, "tenant_legal_edited", {...})` — email is the first arg, not the event.
-4. **Migration number:** file is `0010_…`, journal updates correctly.
-5. **`db.batch` only:** if you added any multi-statement DB writes, confirm none use `db.transaction`.
+1. **Spec coverage:** every numbered §-section in the spec maps to at least one task above.
+2. **No-op contract symmetry:** `editTenantLegal` returns `{ ok: true as const }` — no `noop` flag — matching `editTenantBranding`.
+3. **Server-action signature:** `serverCapture(user.email, "tenant_legal_edited", {...})` — email is the first arg.
+4. **Migration:** `0010_*.sql` exists, `meta/_journal.json` updated, `meta/0010_snapshot.json` exists. Generated via `drizzle-kit generate`, then hand-extended with FK + check constraints.
+5. **`db.batch` only:** any multi-statement DB writes use `db.batch`, never `db.transaction`.
 6. **Acks pre-tick from prior version:** drawer initial state shows checked boxes when `currentVersion?.aclAcknowledged === true`.
-7. **revalidatePath layout flag:** the `/${id}` revalidation uses `"layout"` second argument.
-8. **`tenant_legal_versions.entered_by_user_id` is `uuid`** in both SQL and Drizzle table definition.
+7. **`revalidatePath` layout flag:** `/${id}` revalidation uses `"layout"` second argument; this cascades to `/${id}/refund-policy`.
+8. **`tenant_legal_versions.entered_by_user_id` is `uuid`** in the SQL ALTER (Task 1 Step 3) and as `uuid("entered_by_user_id")` in Drizzle.
+9. **`isUniqueConstraintError` lifted** to `lib/db/unique-constraint.ts`; both `actions.ts` and `api/orders/route.ts` import from there.
+10. **Drawer `useEffect` deps are `[]`** — pending state read via `pendingRef.current` to avoid mid-save mountedRef teardown.
+11. **Deviations from spec called out** (LegalCard is `"use client"`; banner has no inline button) and either accepted or backported into the spec.
 
-If any check fails, fix in place; no need for a separate review pass.
+If any check fails, fix in place; no separate review pass.
 
 ---
 
@@ -1466,7 +1638,7 @@ Title: `feat: tenant legal capture & per-tenant refund-policy route`
 
 Body:
 
-> Closes `docs/remaining_work.md` §3.10 follow-up #1 + #2. Adds versioned `tenant_legal_versions` table, `editTenantLegal` server action (mirrors PR #18's branding pattern), `LegalCard` + `LegalEditDrawer` on `/platform/tenants/[id]` with a post-provision banner, resurrected `/[tenant]/refund-policy` route (text-inline or 307-redirect), conditional `refundPolicyUrl` link in both order emails, and `orders.legal_version_id` audit snapshot.
+> Closes `docs/remaining_work.md` §3.10 follow-up #1 + #2. Adds versioned `tenant_legal_versions` table, `editTenantLegal` server action (mirrors PR #18's branding pattern), `LegalCard` + `LegalEditDrawer` on `/platform/tenants/[id]` with a post-provision banner, resurrected `/[tenant]/refund-policy` route (text-inline or 307-redirect), conditional `refundPolicyUrl` link in both order emails, and `orders.legal_version_id` audit snapshot. Lifts `isUniqueConstraintError` to a shared module so the new action and the orders route share one helper.
 >
 > Spec: `docs/superpowers/specs/2026-05-11-tenant-legal-and-refund-policy-design.md`
 > Plan: `docs/superpowers/plans/2026-05-11-tenant-legal-and-refund-policy.md`

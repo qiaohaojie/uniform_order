@@ -139,8 +139,8 @@ export const tenantLegalSchema = z.discriminatedUnion('mode', [
 
 `apps/web/src/app/platform/tenants/[id]/cards/legal-card.tsx`
 
-- Server component, takes `tenant: TenantRow` and `currentVersion: TenantLegalVersionRow | null` props.
-- Header: "Legal & refund policy" + Edit link (opens drawer via small client wrapper).
+- `"use client"` component (owns the `editing` boolean and conditionally renders `LegalEditDrawer` — same pattern as `BrandingCard`). Takes `tenant: TenantRow` and `currentVersion: TenantLegalVersionRow | null` props; summary content is server-fed via props.
+- Header: "Legal & refund policy" + Edit link (opens drawer).
 - Body when `currentVersion` is null: `Not set` badge + helper copy.
 - Body when set:
   - Mode badge (Text / URL).
@@ -179,9 +179,8 @@ Mirrors `BrandingEditDrawer`:
 On `/platform/tenants/[id]/page.tsx`, when `tenant.currentLegalVersionId === null`, render an amber banner above the card grid:
 
 > **Refund policy not set.** Add it to enable a per-tenant refund-policy link in confirmation emails.
-> [Add policy] (button)
 
-Button opens the same `LegalEditDrawer`. The banner disappears as soon as the tenant has any version.
+The banner is text-only — no inline "Add policy" button. The LegalCard's "Edit" link sitting just below already opens the drawer; two affordances pointing at one modal is noise. Banner = visibility nudge, LegalCard = action. Banner disappears as soon as the tenant has any version.
 
 ### 5.4 `/[tenant]/refund-policy` route
 
