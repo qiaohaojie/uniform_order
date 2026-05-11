@@ -29,14 +29,29 @@ No automated accessibility checks run today. `remaining_work.md` §3.8 names thr
 
 ## Method
 
-**Tooling:** Playwright (already in workspace devDependencies from §3.9) + `@axe-core/playwright` (new dep). Axe-core run with the rule tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`. Output is JSON per screen.
+**Tooling:** Playwright (already at workspace-root `package.json` as `playwright@1.59.1`, used by §3.9) + `@axe-core/playwright` (new dep, same location). Axe-core run with the rule tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`. Output is JSON per screen.
 
-**Manual overlay:** keyboard-only walkthrough of each of the 6 screens. Tab / Shift-Tab through every interactive element; verify visible focus ring; verify Esc dismisses overlays; verify Enter / Space activates correctly; note any trap or off-screen focus jump. Findings recorded in `keyboard-walkthrough.md`.
+**Reused from §3.9:** the navigation routine + sample-cart `localStorage` seeding from `docs/superpowers/audits/2026-05-11-mobile/capture.mjs`. **Stripped:** that script's `VIEWPORTS` loop. §3.8 runs a single viewport (iPhone SE 375 × 667) — axe rule coverage doesn't change with viewport at this scale, and the single-viewport choice halves the artefact volume without losing signal.
+
+**Manual overlay:** keyboard-only walkthrough of each of the 6 screens. Tab / Shift-Tab through every interactive element; verify visible focus ring; verify Esc dismisses overlays; verify Enter / Space activates correctly; note any trap or off-screen focus jump. Findings recorded in `keyboard-walkthrough.md`, per-screen, against this checklist template:
+
+```
+### <screen>
+- [ ] Tab order matches visual reading order
+- [ ] Visible focus ring on every interactive element
+- [ ] Esc closes any overlay / drawer / dialog
+- [ ] No keyboard trap (Tab eventually leaves the screen)
+- [ ] Enter / Space activates buttons and links as expected
+
+Notes: <free-form>
+```
+
+Boxes are checked per-screen so the artefact is itself reviewable — every check is an explicit assertion, not implied by silence.
 
 **Authenticated checkout:** Better-Auth dev session captured once via a one-off helper script:
 
 1. Developer runs `node docs/superpowers/audits/2026-05-11-a11y/setup-auth.mjs` (headed Playwright, no automation of the sign-in itself).
-2. Script opens `/auth/sign-in`, then waits for the developer to complete sign-in interactively (whatever the dev environment is configured for — magic-link via console log, Google OAuth, etc.). Detection: poll for a session cookie on the current origin, or a known post-sign-in URL.
+2. Script opens `/auth/sign-in`, then waits for the developer to complete sign-in interactively (whatever the dev environment is configured for — magic-link via console log, Google OAuth, etc.). Detection: poll for Better-Auth's session cookie on the current origin. The exact cookie name is determined in the plan by inspecting `lib/auth/*` in this repo's Better-Auth config (default in current versions: `better-auth.session_token`); script asserts the name explicitly rather than guessing.
 3. On success, script saves the resulting cookies + origin storage to `auth-storage.json` in the audit dir and exits.
 4. `auth-storage.json` is gitignored; `audit.mjs` loads it via Playwright's `storageState` option on every run.
 5. If the file is missing, `audit.mjs` prints the setup pointer and exits non-zero.
@@ -48,7 +63,7 @@ This keeps the audit reproducible without ever encoding a credential into the re
 | Severity | Definition | Ship-block? |
 |---|---|---|
 | **P0** | axe `critical` (keyboard trap, ARIA hidden focusable, missing form label on payment/checkout input, button without accessible name, etc.) | Yes |
-| **P1** | axe `serious` + any keyboard finding that blocks task completion (focus order that skips a required field, contrast < 4.5:1 on actionable text, button reachable only by mouse) | Yes |
+| **P1** | axe `serious` + any keyboard finding that blocks task completion (focus order that skips a required field, button reachable only by mouse). Axe's `color-contrast` rule inherits its own WCAG 1.4.3 thresholds (4.5:1 normal text, 3:1 large text ≥ 18pt or 14pt bold) and is not down-rated. | Yes |
 | **Observation** | axe `moderate`/`minor`, contrast on decorative or non-essential text, heading-order quirks, redundant landmarks, decorative SVG name issues, dev-only quirks | No — fix post-launch if reported |
 
 **Burgundy accent (`#7A1F2B`) specific check:** before running axe, compute contrast ratios for `#7A1F2B` against `--color-parchment` (`#FAF6EE`), `--color-paper` (`#FDFBF6`), and `#fff`. Any actionable text (button label, link) below 4.5:1 is P1. Decorative usage (e.g. accent strokes on dividers) is acceptable.
@@ -65,12 +80,12 @@ This keeps the audit reproducible without ever encoding a credential into the re
 - New dir `docs/superpowers/audits/2026-05-11-a11y/` with `audit.mjs`, `setup-auth.mjs`, per-screen axe JSON in `axe/`, `findings.md`, `keyboard-walkthrough.md`, `auth-setup.md` (instructions). `auth-storage.json` is gitignored.
 - `findings.md` table lists P0s + P1s with: screen, WCAG SC reference (e.g. `2.1.1 Keyboard`), axe rule id (e.g. `button-name`), element selector, affected viewports, proposed fix shape.
 - `remaining_work.md` §3.8 entry rewritten to "audit complete; fixes pending" pattern (same as §3.9 Phase A).
-- PR title: `feat(a11y): §3.8 audit — WCAG 2.1 A+AA pass on parent flow`.
+- PR title: `chore(a11y): §3.8 audit — WCAG 2.1 A+AA pass on parent flow`. (`chore`, not `feat`: Phase A ships zero user-facing change; `feat(a11y):` is reserved for the Phase B fix PR.)
 
 ### Phase B — fixes (drafted only after Phase A findings reviewed)
 
 - One commit per P0/P1 fix; small Tailwind / aria-label / focus-management changes typical of an a11y pass.
-- Re-run `audit.mjs` producing `axe/after/<screen>.json`. Diff against Phase A: P0 + P1 violation counts drop to zero.
+- Re-run `audit.mjs` producing 6 new JSON files in `axe/after/` (sibling to the Phase A `axe/` dir). Diff against Phase A: P0 + P1 violation counts drop to zero.
 - `findings.md` gets a "Fixes shipped (Phase B)" section, same shape as §3.9's.
 - §3.8 collapses to ✅ in `remaining_work.md`; full write-up in `completed.md`.
 
@@ -84,14 +99,14 @@ If Phase A finds zero P0 + zero P1, Phase B collapses to a single docs commit cl
   - `setup-auth.mjs` — one-time storage-state capture.
   - `axe/` — 6 JSON result files.
   - `findings.md`, `keyboard-walkthrough.md`, `auth-setup.md`.
-- **Modify:** `.gitignore` — add `auth-storage.json` for this audit dir.
+- **Modify:** `.gitignore` — add the narrow path `docs/superpowers/audits/2026-05-11-a11y/auth-storage.json` (not a bare `auth-storage.json` — narrow ignores are easier to audit later).
 - **Modify:** `docs/remaining_work.md` §3.8 — flip to "audit complete; fixes pending".
 
 ## Correctness gate (Phase A)
 
 - `audit.mjs` exits 0 and writes 6 axe JSON files.
 - `findings.md` accurately summarises the JSON (no claim of "0 P0" if a P0 row exists in the data).
-- `pnpm check-types:web` clean (the audit dir is outside `apps/web/src` so should be a no-op — confirm).
+- `pnpm check-types:web` clean (no-op for the audit dir, which lives outside `apps/web/`; included as a gate against incidental touches to source).
 - PR opened, ready for George to read findings before drafting Phase B.
 
 ## Known risks
