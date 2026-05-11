@@ -4,7 +4,7 @@
 
 **Goal:** Resolve the 3 a11y findings surfaced in Phase A (A1 P0 select label, A2 P1 Stripe aria-hidden-focus, A3 P1 gold-text contrast), perform the deferred manual keyboard walkthrough, and re-audit to confirm P0 + P1 = 0 on the parent flow.
 
-**Architecture:** Five sequential commits on the current worktree branch. Three fix commits (one per finding), one walkthrough commit (audit-only, no code), one re-audit/close-out commit (parameterises `audit.mjs`, runs it into `axe/after/`, and migrates §3.8 from `remaining_work.md` to `completed.md`). No new tests — `audit.mjs` IS the test, with the contrast-math check and the manual smoke test as supplementary local gates.
+**Architecture:** Six sequential commits on the current worktree branch. One audit-runner parameterisation commit (lands first so the Phase A baseline at `axe/*.json` is never overwritten by intermediate runs), three fix commits (one per finding), one walkthrough commit (audit-only, no code), one re-audit/close-out commit (runs the parameterised audit into `axe/after/` and migrates §3.8 from `remaining_work.md` to `completed.md`). No new tests — `audit.mjs` IS the test, with the contrast-math check and the manual smoke test as supplementary local gates.
 
 **Tech Stack:** Next.js 16 App Router (RSC + client components), Tailwind CSS v4 with `@theme` tokens, `@stripe/stripe-js` (direct, not the React wrapper), Playwright + `@axe-core/playwright`, Neon Auth for the `/checkout` session.
 
@@ -217,16 +217,51 @@ EOF
 
 ---
 
-## Task 3: A2 — upgrade `@stripe/stripe-js`, smoke-test, conditional exclude
+## Task 3: A2 — parameterise audit runner, upgrade `@stripe/stripe-js`, smoke-test, conditional exclude
 
 **Files:**
+- Modify: `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` (parameterise output subdir; later steps conditionally add a Stripe exclude)
 - Modify: `apps/web/package.json` (line containing `@stripe/stripe-js`)
 - Modify: `pnpm-lock.yaml` (automated by `pnpm install`)
-- Conditional modify: `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` (only if A2 persists after upgrade)
 
 Phase A flagged `.__PrivateStripeElement-input` (injected by `@stripe/stripe-js` into our DOM, outside the iframe) as `aria-hidden="true"` yet focusable. Path: upgrade first, fall back to a documented `.exclude(...)` only if the upgrade doesn't resolve it.
 
-- [ ] **Step 1: Check the current latest of `@stripe/stripe-js`**
+The runner is parameterised **first** so the intermediate post-upgrade check writes to `axe/tmp/` instead of overwriting the Phase A baseline at `axe/*.json`. This keeps the baseline intact for Task 5's before/after diff and is reused by Task 5 (the closing re-audit writes to `axe/after/`).
+
+- [ ] **Step 1: Parameterise `audit.mjs` output subdir**
+
+Edit `docs/superpowers/audits/2026-05-11-a11y/audit.mjs`. Modify the constants block near the top so it reads:
+
+```js
+const BASE = "http://localhost:3000";
+const TENANT = "nsbh";
+const OUT_DIR = "docs/superpowers/audits/2026-05-11-a11y";
+const OUT_SUBDIR = process.env.AUDIT_OUT_SUBDIR ?? "";
+const AXE_DIR = join(OUT_DIR, "axe", OUT_SUBDIR);
+const STORAGE = join(OUT_DIR, "auth-storage.json");
+mkdirSync(AXE_DIR, { recursive: true });
+```
+
+`OUT_SUBDIR` defaults to empty (writes to `axe/`, matching Phase A's path). Callers pass `AUDIT_OUT_SUBDIR=tmp` for the intermediate Stripe check (Step 7 below) and `AUDIT_OUT_SUBDIR=after` for Task 5's closing re-run. The existing idempotency wipe at lines 18-20 already scopes to `AXE_DIR`, so it correctly only wipes the active subdir — no further change there.
+
+- [ ] **Step 2: Commit the runner change as its own commit**
+
+```bash
+git add docs/superpowers/audits/2026-05-11-a11y/audit.mjs
+git commit -m "$(cat <<'EOF'
+chore(a11y): parameterise audit.mjs output subdir
+
+Adds AUDIT_OUT_SUBDIR env var (default ""), so intermediate Phase B
+runs can write to axe/tmp/ or axe/after/ without clobbering the Phase A
+baseline at axe/*.json. Existing idempotency wipe (lines 18-20)
+auto-scopes to whichever subdir is active.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+- [ ] **Step 3: Check the current latest of `@stripe/stripe-js`**
 
 Run from worktree root:
 
@@ -236,7 +271,17 @@ npm view @stripe/stripe-js version
 
 Expected: prints a version string, e.g. `9.x.y` or higher. Record the value — call it `$LATEST`.
 
-- [ ] **Step 2: Bump the version**
+- [ ] **Step 4: Confirm the package.json line still says `^9.4.0` before editing**
+
+Sanity-check that nobody bumped Stripe between plan and execution:
+
+```bash
+grep '"@stripe/stripe-js"' apps/web/package.json
+```
+
+Expected: `    "@stripe/stripe-js": "^9.4.0",`. If the version differs, **stop** and reconcile — re-read whether the upgrade is still pending; the rest of this task assumes the current pin is `^9.4.0`.
+
+- [ ] **Step 5: Bump the version**
 
 Edit `apps/web/package.json`. Change the existing line:
 
@@ -250,9 +295,9 @@ to:
 "@stripe/stripe-js": "^<LATEST>",
 ```
 
-…substituting the version recorded in Step 1.
+…substituting the version recorded in Step 3.
 
-- [ ] **Step 3: Install**
+- [ ] **Step 6: Install**
 
 Run from worktree root:
 
@@ -262,7 +307,7 @@ pnpm install
 
 Expected: lockfile updates; no errors. `pnpm-lock.yaml` will be modified.
 
-- [ ] **Step 4: Boot dev server (kept running for Step 5 and later tasks)**
+- [ ] **Step 7: Boot dev server (kept running for the rest of Task 3 and all later tasks)**
 
 If not already running, start it in a background terminal:
 
@@ -272,7 +317,7 @@ pnpm dev:web
 
 Expected: ready on `http://localhost:3000`. Wait for the first compile to finish before continuing.
 
-- [ ] **Step 5: Manual checkout smoke test**
+- [ ] **Step 8: Manual checkout smoke test**
 
 Open `http://localhost:3000/nsbh` in a browser. Add an item to cart. Proceed to checkout (sign in via Neon Auth if prompted). Fill the form. Enter test card `4242 4242 4242 4242`, any future expiry, any 3-digit CVC, any postcode. Submit.
 
@@ -281,34 +326,40 @@ Expected:
 - Form submits without Stripe errors
 - Page redirects to `/nsbh/order/placed?...`
 
-If anything fails (card won't mount, payment errors), **revert** the bump (`git checkout apps/web/package.json pnpm-lock.yaml`, re-run `pnpm install`) and fall through to Step 8's exclude-only path with the original `^9.4.0` retained.
+If anything fails (card won't mount, payment errors), **revert** the bump (`git checkout apps/web/package.json pnpm-lock.yaml`, re-run `pnpm install`) and fall through to Step 10's exclude-only path with the original `^9.4.0` retained.
 
-- [ ] **Step 6: Re-run the audit once (single-screen, checkout only)**
+- [ ] **Step 9: Re-run the audit into a throwaway `axe/tmp/` subdir**
 
-This isn't the full re-audit — it's a single-screen check to confirm whether A2 cleared post-upgrade. The full re-audit lives in Task 5. Verify `auth-storage.json` is fresh first; if `/checkout` audited authenticated in Phase A, re-running `audit.mjs` from a stale session will throw at line 71. If unsure, re-run `node docs/superpowers/audits/2026-05-11-a11y/setup-auth.mjs` to refresh.
+This isn't the closing re-audit — it's an intermediate check to confirm whether A2 cleared post-upgrade. The full re-audit lives in Task 5 and writes to `axe/after/`. Verify `auth-storage.json` is fresh first; if `/checkout` audited authenticated in Phase A, re-running from a stale session will throw at `audit.mjs:71`. If unsure, re-run `node docs/superpowers/audits/2026-05-11-a11y/setup-auth.mjs` to refresh.
 
 Run (with dev server still up):
 
 ```bash
-node docs/superpowers/audits/2026-05-11-a11y/audit.mjs
+AUDIT_OUT_SUBDIR=tmp node docs/superpowers/audits/2026-05-11-a11y/audit.mjs
 ```
 
-Expected: prints 6 lines, one per screen. Look at the `checkout` line specifically:
+Note: this runs all 6 screens (the runner has no single-screen mode), but writes them into `axe/tmp/` because of the env var — the Phase A baseline at `axe/*.json` is untouched. Output we care about is the `checkout` line specifically:
 
-- If `ser=` count for checkout is `0` and the new `axe/checkout.json` has no `aria-hidden-focus` violation: **A2 cleared**. Skip Step 7. The runner overwrote the Phase A `axe/*.json` files — that's OK for this single-screen check; Task 5 reinstates a clean `axe/` baseline via the parameterised re-run.
-- If `aria-hidden-focus` still appears in the new `axe/checkout.json`: **A2 persists** — proceed to Step 7.
+- If `ser=` count for checkout is `0` and `axe/tmp/checkout.json` has no `aria-hidden-focus` violation: **A2 cleared**. Skip Step 10.
+- If `aria-hidden-focus` still appears in `axe/tmp/checkout.json`: **A2 persists** — proceed to Step 10.
 
 To inspect just the checkout result:
 
 ```bash
-jq '.violations[] | select(.id=="aria-hidden-focus")' docs/superpowers/audits/2026-05-11-a11y/axe/checkout.json
+jq '.violations[] | select(.id=="aria-hidden-focus")' docs/superpowers/audits/2026-05-11-a11y/axe/tmp/checkout.json
 ```
 
 Expected: empty output if A2 cleared, or a violation object if not.
 
-- [ ] **Step 7: Conditional — add documented exclude if A2 persists**
+After deciding, delete the throwaway results so they don't get committed:
 
-Only if Step 6 showed A2 still firing. Edit `docs/superpowers/audits/2026-05-11-a11y/audit.mjs`. Locate the existing `.exclude("iframe[name^='__privateStripeFrame']")` near line 81 and add a sibling `.exclude(...)` line so that block reads:
+```bash
+rm -rf docs/superpowers/audits/2026-05-11-a11y/axe/tmp
+```
+
+- [ ] **Step 10: Conditional — add documented exclude if A2 persists**
+
+Only if Step 9 showed A2 still firing. Edit `docs/superpowers/audits/2026-05-11-a11y/audit.mjs`. Locate the existing `.exclude("iframe[name^='__privateStripeFrame']")` near line 81 and add a sibling `.exclude(...)` line so that block reads:
 
 ```js
 const results = await new AxeBuilder({ page })
@@ -323,9 +374,9 @@ const results = await new AxeBuilder({ page })
   .analyze();
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 11: Commit**
 
-If Step 5/6 succeeded without needing the exclude:
+If Step 9 cleared without needing the exclude:
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml
@@ -342,7 +393,7 @@ EOF
 )"
 ```
 
-If Step 7 was taken (exclude path), commit both the bump and the audit-script change together:
+If Step 10 was taken (exclude path), commit both the bump and the audit-script change together:
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml docs/superpowers/audits/2026-05-11-a11y/audit.mjs
@@ -465,7 +516,7 @@ With dev server running on :3000 and the sample cart seeded (the audit's `addIni
 
 Tick each box (replace `- [ ]` with `- [x]`) or mark `[FAIL]` with a one-line note about what went wrong and the selector/text involved.
 
-For `/checkout`: also confirm focus can enter the Stripe Card Element (`.__PrivateStripeElement-input` wrapper / iframe), the digits can be typed, and Tab eventually exits to the next form control.
+For `/checkout`: also confirm (a) Tab reaches the Stripe Card Element iframe, (b) once focus is inside the iframe, digits can be typed and field-to-field navigation within the Card Element works via Tab (Stripe handles this internally), and (c) Tab eventually exits the iframe and reaches the next surrounding form control.
 
 - [ ] **Step 3: If any failures, add findings and fix commits**
 
@@ -499,41 +550,14 @@ EOF
 ## Task 5: Re-audit + close-out
 
 **Files:**
-- Modify: `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` (parameterise output subdir; preserves Phase A baseline)
 - Create: `docs/superpowers/audits/2026-05-11-a11y/axe/after/*.json` (6 files via runner)
 - Modify: `docs/superpowers/audits/2026-05-11-a11y/findings.md` (append "Fixes shipped (Phase B)" section)
 - Modify: `docs/remaining_work.md` (flip §3.8 to ✅, correct burgundy-red-herring text)
 - Modify: `docs/completed.md` (add §3.8 write-up)
 
-The current `audit.mjs:18-20` wipes `axe/*.json` on every run, which would destroy Phase A's baseline. Parameterise the output subdir so Phase B writes to `axe/after/` without touching `axe/`.
+The runner was parameterised in Task 3 Step 1, so the Phase A baseline at `axe/*.json` is intact. This task runs the audit into `axe/after/` and migrates §3.8 from `remaining_work.md` to `completed.md`.
 
-- [ ] **Step 1: Restore the Phase A baseline if Task 3 Step 6 overwrote it**
-
-Task 3 Step 6 ran `audit.mjs` for a single-screen check. That overwrote the original Phase A `axe/*.json` files. Restore them from the merged main branch before parameterising:
-
-```bash
-git checkout origin/main -- docs/superpowers/audits/2026-05-11-a11y/axe/
-```
-
-Expected: `axe/` directory is restored to its Phase A state (6 baseline JSON files matching `15b90cb`).
-
-- [ ] **Step 2: Parameterise `audit.mjs` output subdir**
-
-Edit `docs/superpowers/audits/2026-05-11-a11y/audit.mjs`. Modify the constants block near the top so it reads:
-
-```js
-const BASE = "http://localhost:3000";
-const TENANT = "nsbh";
-const OUT_DIR = "docs/superpowers/audits/2026-05-11-a11y";
-const OUT_SUBDIR = process.env.AUDIT_OUT_SUBDIR ?? "";
-const AXE_DIR = join(OUT_DIR, "axe", OUT_SUBDIR);
-const STORAGE = join(OUT_DIR, "auth-storage.json");
-mkdirSync(AXE_DIR, { recursive: true });
-```
-
-`OUT_SUBDIR` defaults to empty (= `axe/`, preserving the Phase A run path). For Phase B, callers pass `AUDIT_OUT_SUBDIR=after` to write into `axe/after/`. The idempotency wipe at lines 18-20 already scopes to `AXE_DIR`, so it correctly only wipes the active subdir — no further change there.
-
-- [ ] **Step 3: Verify auth-storage validity**
+- [ ] **Step 1: Verify auth-storage validity**
 
 Confirm the Neon Auth session in `auth-storage.json` is still good. From worktree root:
 
@@ -549,7 +573,7 @@ node docs/superpowers/audits/2026-05-11-a11y/setup-auth.mjs
 
 Follow its interactive sign-in prompt. Script saves a fresh `auth-storage.json` on success.
 
-- [ ] **Step 4: Run the re-audit into `axe/after/`**
+- [ ] **Step 2: Run the re-audit into `axe/after/`**
 
 With dev server still running on :3000:
 
@@ -578,7 +602,7 @@ Expected output (the numbers below are illustrative; the gate is `crit=0 ser=0` 
 
 `incomplete` counts may match or differ from Phase A — they're observation-grade and don't gate. **Gate: every screen reports `crit=0 ser=0`.** If any screen reports a non-zero crit/ser count, the corresponding violation must be investigated and fixed (add A4+ commit) before continuing.
 
-- [ ] **Step 5: Append "Fixes shipped (Phase B)" to `findings.md`**
+- [ ] **Step 3: Append "Fixes shipped (Phase B)" to `findings.md`**
 
 Edit `docs/superpowers/audits/2026-05-11-a11y/findings.md`. After the last existing section (Methodology notes), append:
 
@@ -618,9 +642,15 @@ P0 + P1 = 0 across all 6 screens post-fix. §3.8 closes.
 
 Replace placeholder shas with the actual commit hashes (use `git log --oneline -10` to find them). Pick the appropriate A2 wording based on whether the upgrade alone cleared it or the documented `.exclude()` was added.
 
-- [ ] **Step 6: Update `remaining_work.md`**
+- [ ] **Step 4: Update `remaining_work.md`**
 
-Edit `docs/remaining_work.md`. Find the §3.8 entry and:
+First locate the §3.8 entry — the executor needs the exact current line to write an unambiguous edit:
+
+```bash
+grep -n "§3.8\|3\.8 " docs/remaining_work.md
+```
+
+Expected: one or two matching lines. Read the surrounding context (e.g. `sed -n '<line>,$p' docs/remaining_work.md | head -20` or just open the file). Then:
 
 1. Flip its status marker to ✅ (matching the convention §3.9 used after its Phase B).
 2. Correct the burgundy-contrast prose. The original entry framed contrast risk as the burgundy `#7A1F2B` accent. Phase A debunked that (verified 9.46–10.20:1 across backgrounds). Replace the burgundy reference with text explicitly noting it as a debunked hint and pointing to gold as the real risk now resolved. Example replacement:
@@ -631,51 +661,70 @@ Edit `docs/remaining_work.md`. Find the §3.8 entry and:
 
 3. Remove §3.8 from any outstanding-Quality list it appeared in.
 
-- [ ] **Step 7: Update `completed.md`**
+- [ ] **Step 5: Update `completed.md`**
 
 Edit `docs/completed.md`. Add a §3.8 entry following the pattern §3.9 used. Reference both PRs (#23 for Phase A, the about-to-open Phase B PR), the audit dir, and the fix shape (3 axe findings + keyboard walkthrough).
 
-- [ ] **Step 8: Type-check + sanity grep**
+- [ ] **Step 6: Type-check + scoped sanity grep**
 
-Run from worktree root:
+Type-check:
 
 ```bash
-pnpm check-types:web && \
-grep -RIn "var(--color-gold)" apps/web/src --include="*.tsx" | grep -v "components/admin/pick-slip.tsx\|components/chip.tsx\|components/section-title.tsx\|components/admin-shell.tsx\|components/admin/order-activity-strip.tsx\|components/platform/tenant-activity-feed.tsx" | grep "text-\[11px\] font-bold" && \
-echo "FAIL: small-bold-gold parent-flow eyebrow still references --color-gold" || \
-echo "PASS: no small-bold-gold parent-flow eyebrows still on --color-gold"
+pnpm check-types:web
 ```
 
-Expected:
-- `pnpm check-types:web` clean
-- Final grep prints `PASS: ...` — no parent-flow small-bold-gold eyebrows still on the old token. (The grep allowlist excludes the legitimate accent/chip/decorative uses; failure means a missed swap in Task 2.)
+Expected: clean.
 
-- [ ] **Step 9: Commit**
+Scoped grep — confirm no parent-flow small-bold-gold eyebrow still references the old `--color-gold` token. Restricting the search to the three files we modified in Task 2 is more durable than an exclude allowlist. Use `grep -F` (fixed strings) so the `[11px]` literal doesn't get interpreted as a bracket expression:
 
 ```bash
-git add docs/superpowers/audits/2026-05-11-a11y/audit.mjs \
-        docs/superpowers/audits/2026-05-11-a11y/axe/after/ \
+grep -nF "var(--color-gold)" \
+  apps/web/src/app/home-client.tsx \
+  apps/web/src/app/orders/[orderId]/order-detail-client.tsx
+```
+
+Expected: **no output** (exit code 1). Any match means a missed swap in Task 2 — investigate.
+
+Optional broader check for any future small-bold-gold eyebrow that crept in elsewhere along the parent flow (informational only):
+
+```bash
+grep -RnF "var(--color-gold)" apps/web/src/app/[tenant] apps/web/src/app/page.tsx apps/web/src/app/orders 2>/dev/null
+```
+
+Expected: no matches in any small-bold-text context. The admin `pick-slip.tsx:164` deferral is out of scope under §3.8 and lives outside these paths.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add docs/superpowers/audits/2026-05-11-a11y/axe/after/ \
         docs/superpowers/audits/2026-05-11-a11y/findings.md \
         docs/remaining_work.md \
         docs/completed.md
 git commit -m "$(cat <<'EOF'
 chore(a11y): §3.8 re-audit — P0+P1 = 0; close
 
-Parameterised audit.mjs with AUDIT_OUT_SUBDIR (default "" preserves
-Phase A baseline). Re-ran into axe/after/: every screen crit=0 ser=0.
-Appended Fixes-shipped section to findings.md with per-screen
-before/after table and commit references. remaining_work.md §3.8
-flipped to ✅, burgundy-red-herring text corrected (real risk was
-gold, fixed via A3). completed.md gains the §3.8 entry.
+Re-ran audit.mjs into axe/after/ (Phase A baseline at axe/*.json
+preserved via AUDIT_OUT_SUBDIR parameterisation from earlier commit).
+Every screen crit=0 ser=0. Appended Fixes-shipped section to
+findings.md with per-screen before/after table and commit references.
+remaining_work.md §3.8 flipped to ✅, burgundy-red-herring text
+corrected (real risk was gold, fixed via A3). completed.md gains the
+§3.8 entry.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
 
-- [ ] **Step 10: Open PR**
+- [ ] **Step 8: PAUSE — confirm with user before pushing and opening PR**
 
-Push the branch and open the PR:
+`git push` and `gh pr create` are shared-state actions visible to others, not local-only. Stop here and ask the user before running either. Show the user:
+
+- Output of `git log --oneline origin/main..HEAD` (the 6 commits Phase B introduces)
+- Output of `git status` (should be clean)
+- The proposed PR title and summary (below)
+
+Only after the user explicitly confirms, run:
 
 ```bash
 git push -u origin worktree-async-doodling-unicorn
@@ -709,16 +758,17 @@ EOF
 **Spec coverage:**
 - A1 fix → Task 1 ✓
 - A3 fix (`--color-gold-text` + 3 swaps) → Task 2 ✓
-- A2 upgrade + conditional exclude → Task 3 ✓
+- Runner parameterisation (`AUDIT_OUT_SUBDIR`) → Task 3 Steps 1–2 (own commit, lands before any re-run) ✓
+- A2 upgrade + conditional exclude → Task 3 Steps 3–11 ✓
 - Keyboard walkthrough (6 screens, same as `audit.mjs` SCREENS) → Task 4 ✓
-- Runner parameterisation (`AUDIT_OUT_SUBDIR`) → Task 5 Step 2 ✓
-- Auth-storage prerequisite → Task 5 Step 3 ✓
-- Re-audit into `axe/after/`, P0+P1=0 gate → Task 5 Step 4 ✓
+- Auth-storage prerequisite → Task 5 Step 1 ✓
+- Re-audit into `axe/after/`, P0+P1=0 gate → Task 5 Step 2 ✓
 - Contrast-math correctness gate → Task 2 Step 2 ✓
-- `findings.md` "Fixes shipped (Phase B)" section → Task 5 Step 5 ✓
-- `remaining_work.md` flip + burgundy correction → Task 5 Step 6 ✓
-- `completed.md` write-up → Task 5 Step 7 ✓
+- `findings.md` "Fixes shipped (Phase B)" section → Task 5 Step 3 ✓
+- `remaining_work.md` flip + burgundy correction → Task 5 Step 4 (with locator grep) ✓
+- `completed.md` write-up → Task 5 Step 5 ✓
+- Push + PR gated behind user confirmation → Task 5 Step 8 ✓
 
-**Type consistency:** `FieldLabel` signature change is consistent across Steps 1 + 2 of Task 1 (`htmlFor: string`, used on every call site). Token name `--color-gold-text` consistent across Task 2 Steps 1, 3, 4 + Task 5 grep. `AUDIT_OUT_SUBDIR` env var consistent across Task 5 Steps 2 + 4.
+**Type consistency:** `FieldLabel` signature change is consistent across Steps 1 + 2 of Task 1 (`htmlFor: string`, used on every call site). Token name `--color-gold-text` consistent across Task 2 Steps 1, 3, 4 + Task 5 Step 6 grep. `AUDIT_OUT_SUBDIR` env var consistent across Task 3 Step 1 (definition), Task 3 Step 9 (`=tmp`), and Task 5 Step 2 (`=after`).
 
-**Risks acknowledged in plan:** Stripe upgrade regression (Task 3 Step 5 revert path), contrast-math miscalculation (Task 2 Step 2 darken-and-retry loop), stale auth (Task 5 Step 3 setup-auth re-run), Task 3 Step 6 overwriting Phase A baseline (Task 5 Step 1 git-restore).
+**Risks acknowledged in plan:** Stripe upgrade regression (Task 3 Step 8 revert path), contrast-math miscalculation (Task 2 Step 2 darken-and-retry loop), stale auth (Task 5 Step 1 setup-auth re-run), version drift between plan and execution (Task 3 Step 4 sanity grep), accidental shared-state action (Task 5 Step 8 pause-for-confirmation).
