@@ -42,3 +42,5 @@ my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
 
 # playwright-cli artifacts
 .playwright-cli/
+# §3.8 a11y audit — local Neon Auth session, never commit
+docs/superpowers/audits/2026-05-11-a11y/auth-storage.json
