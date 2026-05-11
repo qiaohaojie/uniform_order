@@ -28,7 +28,7 @@ The Uniform Online Order System digitizes the traditional paper-based school uni
 ### 3.2 Administrator/Shop Operator Portal
 
 - **Order Management Dashboard:** View, fulfill, and update the status of incoming orders.
-- **Inventory Management:** Update stock levels, sizes, and pricing dynamically.
+- **Catalog Management:** Update sizes and pricing dynamically. Stock-level tracking is intentionally out of scope — out-of-stock handling is operator-mediated (uniform shops fulfil from a storeroom and absorb oversells operationally), not system-tracked.
 - **Tenant Management (Multi-Tenant):** Support for multiple schools (e.g., `nsbh`, `rgsh`) under a single platform.
 
 ### 3.3 Payments & Financials

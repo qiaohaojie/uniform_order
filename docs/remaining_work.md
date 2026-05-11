@@ -128,15 +128,17 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 | # | Item | Source |
 |---|---|---|
-| 4.2 | "New product" and "Export" buttons on Dashboard wired up | Audit §2 / Dashboard |
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
-| 4.5 | Inventory stock counts (the schema has none — quantities are unbounded) | PDP §3.2 hints at "Update stock levels" |
 | 4.6 | Operator audit log (who marked the order ready, who refunded) | Inferred from refund work |
 | 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
 | 4.8 | Drizzle migrations checked into the repo (currently schema is push-only) | Ops |
 
 > §4.1 (size hint), §4.9 (size-hint implementation), §4.10 (commit-split note), §4.11 (drizzle-kit `neon_auth.*` exclusion) are complete — moved to `docs/completed.md` §4.6–§4.10. IDs preserved for cross-reference; no renumbering.
+>
+> §4.5 (inventory stock counts) **dropped 2026-05-11** — not a product fit. School uniform shops fulfil from a storeroom; oversells are absorbed operationally (e.g., "two-week wait") and stale stock numbers create a known operator burden. Out-of-stock handling stays operator-mediated, not system-tracked. PDP §3.2 softened to match. ID preserved; do not re-raise without an explicit school request.
+>
+> §4.2 (Dashboard "New product" + "Export" buttons) **resolved 2026-05-11** — "New product" now links to `/admin/[tenant]/catalog` (where the add-item drawer lives). "Export" deleted as redundant with the real CSV exporter on the Reports page. ID preserved.
 
 ---
 
@@ -162,8 +164,8 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 |---|---|
 | "Add another child" button on school picker | ✅ Done — `completed.md` §4.12; ops verifications → §2.11 |
 | "Riley wore size X last year" hint (hardcoded) | ✅ Done — `completed.md` §4.8 |
-| Dashboard "New product" button not wired | §4.2 |
-| Dashboard "Export" button not wired | §4.2 |
+| Dashboard "New product" button not wired | ✅ Resolved 2026-05-11 — links to `/admin/[tenant]/catalog` |
+| Dashboard "Export" button not wired | ✅ Resolved 2026-05-11 — deleted as redundant with Reports CSV export |
 | Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 3 |
 | Super-admin / platform portal — tenants list, provision wizard, billing overview, branding editor | ✅ Done — `completed.md` §4.16–§4.20 (PRs #14, #15, #16, #17, #18) |
 | Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) | §3.1 |
