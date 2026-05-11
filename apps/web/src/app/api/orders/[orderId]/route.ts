@@ -6,10 +6,12 @@ import { sendOrderReadyEmail } from "@/lib/email";
 import {
   ensureParentEmailAccess,
   ensureTenantAccess,
+  isPlatformAdminEmail,
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
 import { serverCaptureException } from "@/lib/analytics/server";
+import { logAuditEvent } from "@/lib/audit/log";
 
 const ORDER_STATUSES = ["pending_payment", "new", "packing", "ready", "collected"] as const;
 type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -86,6 +88,7 @@ export async function PATCH(
     if (tenantAccessResponse) return tenantAccessResponse;
 
     if (status === "ready") {
+      const previousStatus = order.status;
       const flipped = await db
         .update(orders)
         .set({ status: "ready", updatedAt: new Date() })
@@ -93,6 +96,18 @@ export async function PATCH(
         .returning({ id: orders.id });
 
       if (flipped.length === 1) {
+        await logAuditEvent({
+          tenantId: order.tenantId,
+          actorEmail: authResult.user.email,
+          actorRole: isPlatformAdminEmail(authResult.user.email)
+            ? "platform_admin"
+            : "operator",
+          action: "order.marked_ready",
+          targetType: "order",
+          targetId: orderId,
+          payload: { previousStatus },
+        });
+
         try {
           await sendOrderReadyEmail(orderId);
         } catch (err) {

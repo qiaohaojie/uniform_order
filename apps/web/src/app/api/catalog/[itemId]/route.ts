@@ -4,10 +4,15 @@ import {
   getCatalogItemById,
   updateCatalogItem,
 } from "@/db/queries";
-import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
+import {
+  ensureTenantAccess,
+  isPlatformAdminEmail,
+  requireSessionUser,
+} from "@/lib/auth/authorization";
 import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
 import { catalogItemPatchSchema } from "@/lib/schemas/catalog";
 import { applyRateLimit } from "@/lib/rate-limit";
+import { logAuditEvent } from "@/lib/audit/log";
 
 // PATCH /api/catalog/:itemId — partial update; if `variants` provided, replace.
 export async function PATCH(
@@ -56,6 +61,52 @@ export async function PATCH(
     const input = parsed.data;
 
     const { variants, ...fields } = input;
+
+    // Diff parsed input vs pre-write DB state. Only diff scalar fields the
+    // operator can edit; `variants` is handled separately because the column
+    // doesn't live on catalogItems.
+    // Diff over every field accepted by catalogItemPatchSchema. Keep this
+    // list in sync with the patch schema; a missing entry would mean a real
+    // change is treated as a no-op and never persisted.
+    const scalarCandidates = [
+      "name",
+      "category",
+      "description",
+      "imageUrl",
+      "active",
+      "sortOrder",
+    ] as const;
+    const existingRecord = item as Record<string, unknown>;
+    const changedFields: string[] = [];
+    for (const f of scalarCandidates) {
+      if (fields[f] !== undefined && fields[f] !== existingRecord[f]) {
+        changedFields.push(f);
+      }
+    }
+    if (variants !== undefined) {
+      const existingVariantKey = item.variants
+        .map((v) => `${v.id}|${v.label}|${String(v.price)}|${v.active}`)
+        .sort()
+        .join(",");
+      const incomingVariantKey = variants
+        .map(
+          (v) =>
+            `${v.id ?? ""}|${v.label}|${String(v.price.toFixed(2))}|${v.active ?? true}`,
+        )
+        .sort()
+        .join(",");
+      if (existingVariantKey !== incomingVariantKey) {
+        changedFields.push("variants");
+      }
+    }
+
+    if (changedFields.length === 0) {
+      return NextResponse.json(
+        { id: itemId, ok: true, noop: true },
+        { status: 200 }
+      );
+    }
+
     await updateCatalogItem(itemId, fields, variants);
 
     // H2: clean up old image when imageUrl changed (replace or clear).
@@ -78,6 +129,18 @@ export async function PATCH(
         );
       }
     }
+
+    await logAuditEvent({
+      tenantId: item.tenantId,
+      actorEmail: authResult.user.email,
+      actorRole: isPlatformAdminEmail(authResult.user.email)
+        ? "platform_admin"
+        : "operator",
+      action: "catalog_item.updated",
+      targetType: "catalog_item",
+      targetId: itemId,
+      payload: { changedFields },
+    });
 
     return NextResponse.json({ id: itemId, ok: true }, { status: 200 });
   } catch (err) {
@@ -133,6 +196,21 @@ export async function DELETE(
         console.warn(`UploadThing cleanup failed for ${deleted.imageUrl}:`, cleanupErr);
       }
     }
+
+    await logAuditEvent({
+      tenantId: item.tenantId,
+      actorEmail: authResult.user.email,
+      actorRole: isPlatformAdminEmail(authResult.user.email)
+        ? "platform_admin"
+        : "operator",
+      action: "catalog_item.deleted",
+      targetType: "catalog_item",
+      targetId: itemId,
+      payload: {
+        name: item.name,
+        category: item.category,
+      },
+    });
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {

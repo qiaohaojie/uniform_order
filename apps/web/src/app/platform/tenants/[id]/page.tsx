@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import type { TenantStatus } from "@/lib/platform/queries";
+import { loadTenantActivity } from "@/lib/audit/load-tenant-activity";
+import { TenantActivityFeed } from "@/components/platform/tenant-activity-feed";
 import { BrandingCard } from "./cards/branding-card";
 import { LegalCard } from "./cards/legal-card";
 import { OperatorCard } from "./cards/operator-card";
@@ -34,6 +36,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   const currentLegalVersion = tenant.currentLegalVersionId
     ? await getTenantLegalVersion(tenant.currentLegalVersionId)
     : null;
+  const activity = await loadTenantActivity(id);
 
   return (
     <>
@@ -64,6 +67,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
             ) : null}
             <BrandingCard tenant={tenant} />
             <LegalCard tenant={tenant} currentVersion={currentLegalVersion} />
+            <TenantActivityFeed events={activity} />
             <OperatorCard tenant={tenant} />
             <StripeCard tenant={tenant} />
             <DangerCard tenant={tenant} status={status} />

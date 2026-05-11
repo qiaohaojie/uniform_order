@@ -236,5 +236,26 @@ export const parentChildren = pgTable(
   })
 );
 
+// ─── Audit events ────────────────────────────────────────────────────────────
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    tenantId: text("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    actorEmail: text("actor_email").notNull(),
+    actorRole: text("actor_role").notNull(),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    payload: jsonb("payload").default({}).notNull(),
+  },
+  (t) => ({
+    tenantTimeIdx: index("idx_audit_events_tenant_time").on(t.tenantId, t.createdAt.desc()),
+    targetIdx: index("idx_audit_events_target").on(t.targetType, t.targetId, t.createdAt.desc()),
+    actorTimeIdx: index("idx_audit_events_actor_time").on(t.actorEmail, t.createdAt.desc()),
+  }),
+);
+
 export type TenantRow = typeof tenants.$inferSelect;
 export type TenantLegalVersionRow = typeof tenantLegalVersions.$inferSelect;
