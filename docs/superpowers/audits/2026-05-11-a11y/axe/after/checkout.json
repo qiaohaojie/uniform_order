@@ -1,0 +1,23 @@
+{
+  "screen": "checkout",
+  "url": "http://localhost:3000/nsbh/checkout",
+  "auth": true,
+  "timestamp": "2026-05-11T16:23:13.419Z",
+  "counts": {
+    "critical": 0,
+    "serious": 0,
+    "moderate": 0,
+    "minor": 0,
+    "incomplete": 1,
+    "passes": 24
+  },
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "bypass",
+      "impact": "serious",
+      "help": "Page must have means to bypass repeated blocks",
+      "nodes": 1
+    }
+  ]
+}
