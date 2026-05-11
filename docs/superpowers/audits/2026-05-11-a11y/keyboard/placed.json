@@ -1,0 +1,69 @@
+{
+  "screen": "placed",
+  "url": "http://localhost:3000/nsbh/order/placed?total=149.00&delivery=pickup&orderId=NSBH-A11Y",
+  "auth": false,
+  "status": "ok",
+  "focusableCount": 5,
+  "focusOrder": [
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "View order details",
+      "id": null,
+      "href": "/orders/NSBH-A11Y",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "View order details",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "Back to home",
+      "id": null,
+      "href": "/",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "Back to home",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "nextjs-portal",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    }
+  ],
+  "escapedToBody": true,
+  "trapDetected": false,
+  "escStateChanges": [],
+  "notes": [],
+  "timestamp": "2026-05-11T16:00:25.526Z"
+}

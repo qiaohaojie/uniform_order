@@ -1,0 +1,14 @@
+{
+  "screen": "checkout",
+  "url": "http://localhost:3000/nsbh/checkout",
+  "auth": true,
+  "status": "deferred",
+  "reason": "auth-storage.json absent in this worktree; programmatic auth walk skipped. Re-run setup-auth.mjs and re-execute this script, or perform the /checkout pass manually.",
+  "focusableCount": 0,
+  "focusOrder": [],
+  "escapedToBody": null,
+  "trapDetected": null,
+  "escStateChanges": [],
+  "notes": [],
+  "timestamp": "2026-05-11T16:00:23.593Z"
+}
