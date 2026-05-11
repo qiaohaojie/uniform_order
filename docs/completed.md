@@ -475,5 +475,5 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Quality** — print stylesheet QA on real A4 (§3.7); accessibility audit (§3.8); mobile viewport edge cases (§3.9).
+- **Quality** — print stylesheet QA on real A4 (§3.7); accessibility audit (§3.8).
 - **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7).
