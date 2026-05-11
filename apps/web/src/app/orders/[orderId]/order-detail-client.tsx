@@ -217,7 +217,7 @@ export function OrderDetailClient({
             className="rounded-lg border p-3 mb-4"
             style={{ borderColor: "var(--color-rule)", background: "var(--color-parchment)" }}
           >
-            <div className="text-[11px] font-bold tracking-[1.2px] uppercase mb-1" style={{ color: "var(--color-gold)" }}>
+            <div className="text-[11px] font-bold tracking-[1.2px] uppercase mb-1" style={{ color: "var(--color-gold-text)" }}>
               Your note to the school
             </div>
             <div className="text-[13px] leading-[1.5]" style={{ color: "var(--color-ink)" }}>

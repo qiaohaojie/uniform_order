@@ -96,7 +96,7 @@ export function HomeClient(props: Props) {
         </div>
 
         <div className="px-6 pt-6 pb-2">
-          <div className="text-[11px] font-bold tracking-[1.4px] uppercase" style={{ color: "var(--color-gold)" }}>
+          <div className="text-[11px] font-bold tracking-[1.4px] uppercase" style={{ color: "var(--color-gold-text)" }}>
             Welcome
           </div>
           <h1 className="font-serif text-[28px] font-medium mt-2 mb-1.5 leading-[1.15] tracking-[-0.4px]">
@@ -185,7 +185,7 @@ export function HomeClient(props: Props) {
       </div>
 
       <div className="px-6 pt-6 pb-2">
-        <div className="text-[11px] font-bold tracking-[1.4px] uppercase" style={{ color: "var(--color-gold)" }}>
+        <div className="text-[11px] font-bold tracking-[1.4px] uppercase" style={{ color: "var(--color-gold-text)" }}>
           Welcome back
         </div>
         <h1 className="font-serif text-[30px] font-medium mt-2 mb-1.5 leading-[1.15] tracking-[-0.4px]">
