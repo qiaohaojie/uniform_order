@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, orders, orderLines } from "@/db";
+import { db, orders, orderLines, tenants } from "@/db";
 import {
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
@@ -170,6 +170,14 @@ export async function POST(req: NextRequest) {
     }
 
     const prefix = tenantId.toUpperCase();
+    // Snapshot the policy version in force at order time (audit trail).
+    // Read in the outer scope so insertOrder's closure captures it.
+    const [tenantRow] = await db
+      .select({ currentLegalVersionId: tenants.currentLegalVersionId })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    const legalVersionId = tenantRow?.currentLegalVersionId ?? null;
     const insertOrder = async (orderId: string) => {
       // neon-http driver doesn't support interactive db.transaction; use db.batch
       // which runs all statements atomically in a single HTTP round-trip.
@@ -192,6 +200,7 @@ export async function POST(req: NextRequest) {
         refundPolicyAcceptedAt: new Date(),
         userId: authResult.user.id,
         parentNote: normalizedParentNote,
+        legalVersionId,
       });
       const linesInsert = db.insert(orderLines).values(
         lines.map((line) => ({
