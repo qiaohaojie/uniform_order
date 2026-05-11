@@ -510,7 +510,11 @@ batch pick-slip print."
 
 - [ ] **Step 1: Add `@page` rule and the break utility**
 
-In `apps/web/src/index.css`, inside the existing `@media print { … }` block (currently ending at line 107), add an `@page` rule. The block becomes:
+In `apps/web/src/index.css`, inside the existing `@media print { … }` block (currently ending at line 107), add an `@page` rule.
+
+**Scope note for future readers:** `@page` is a global CSS at-rule. Once added, every `window.print()` invocation anywhere in the app inherits A4 + 12 mm margins. There are no other print callers today (the only other reference to `window.print` is `components/print-button.tsx`, which is itself used by the order detail page). If a future print view needs different paper or margins, scope it with named pages (`@page slip { … } .slip { page: slip; }`) rather than redefining the global rule.
+
+The block becomes:
 
 ```css
 @media print {
@@ -602,20 +606,34 @@ onNewCountChange?: (count: number) => void;
 
 Accept it in the destructure: `({ tenantId, tenant, searchQuery, onNewCountChange })`.
 
-- [ ] **Step 3: Extend the order type to include lines**
+- [ ] **Step 3: Extend the order type with `lines` and any `PickSlipOrder` fields it is missing**
 
-Wherever the local `Order` (or `OrderRow`) interface is declared in this file, add a `lines` field matching `PickSlipLine` (a re-export from `pick-slip.tsx`):
+The local `Order` / `DbOrder` type in this file currently only carries the fields the Kanban cards render. To feed the print block, every field on `PickSlipOrder` (Task 1) must be present. Verified against `db/schema.ts` (`orders` table): `parentNote` and `stripeRef` are nullable, everything else is `notNull`.
 
 ```ts
 import type { PickSlipLine } from "@/components/admin/pick-slip";
 
 interface Order {
   // ...existing fields stay here
+
+  // Fields required by PickSlipOrder — add any that aren't already present:
+  parentEmail: string;
+  parentMobile: string;
+  parentNote: string | null;
+  studentName: string;
+  studentYear: string;
+  studentRoll: string;
+  delivery: string;
+  total: string;
+  gst: string;
+  stripeRef: string | null;
+  createdAt: string; // ISO string — comes over the wire as JSON
+
   lines: PickSlipLine[]; // populated by the withLines=1 fetch
 }
 ```
 
-If the file already imports types from elsewhere for `Order`, add `lines` to that source instead. Decimal fields on lines (`unitPrice`, `lineTotal`) come over the wire as strings — that matches `PickSlipLine` already.
+If the file already imports types from elsewhere for `Order`, add the missing fields to that source instead. Decimal fields on lines (`unitPrice`, `lineTotal`) come over the wire as strings — that matches `PickSlipLine` already.
 
 - [ ] **Step 4: Change the fetch URL to include `withLines=1`**
 
@@ -631,11 +649,30 @@ to:
 const res = await fetch(`/api/orders?tenantId=${encodeURIComponent(tenantId)}&withLines=1`);
 ```
 
-- [ ] **Step 5: Add `data-no-print` to the Kanban root and render the hidden batch-print block**
+- [ ] **Step 5: Add `data-no-print` to the Kanban root and render the hidden batch-print block as a sibling fragment**
 
-Find the JSX block that renders the columns (around line 224 — the `filtered.filter((o) => o.status === col.id)` loop). The outermost wrapping element of this Kanban is the root container — add `data-no-print` to that element.
+Find the JSX block that renders the columns (around line 224 — the `filtered.filter((o) => o.status === col.id)` loop). The outermost wrapping element of this Kanban is the root container — currently `<div className="flex-1 p-6 overflow-hidden">`. Add `data-no-print` to that element.
 
-After the Kanban root's closing tag (still inside the component's returned fragment), append the hidden batch-print section. Import `PickSlip` at the top of the file:
+**Critical — return must become a fragment, not nest.** The component currently returns a single `<div>`. Wrap the return in a fragment so the new print block becomes a **sibling** of the Kanban root. Do **not** nest the print block inside that `<div>` — its `overflow-hidden` would clip multi-page print output past the first page.
+
+Target shape:
+
+```tsx
+return (
+  <>
+    <div data-no-print className="flex-1 p-6 overflow-hidden">
+      {/* …existing Kanban columns/cards stay exactly as they are… */}
+    </div>
+    <div className="print:block hidden" aria-hidden>
+      {/* batch-print block — code below */}
+    </div>
+  </>
+);
+```
+
+**Loading-state invariant (do not "fix"):** The early `if (loading) return <div…>Loading orders…</div>` returns before the print block is reachable. This is intentional: the topbar button is disabled until `newCount > 0`, and `newCount` is `0` while loading, so the print pathway is unreachable in that window. Leave the early return as-is.
+
+Import `PickSlip` at the top of the file:
 
 ```ts
 import { PickSlip, type PickSlipOrder, type PickSlipLine } from "@/components/admin/pick-slip";
@@ -709,6 +746,7 @@ Run `pnpm dev:web` and open `http://localhost:3000/admin/nsbh/orders`.
 - Open browser devtools → Rendering tab → enable "Emulate CSS media type: print" (or use `Cmd+P` to open print preview).
 - Confirm: the Kanban disappears, and a sequence of pick slips appears in its place, one per page (page breaks between them), oldest-`createdAt` first. **No trailing blank page after the last slip.**
 - If `break-after-page` does not produce page breaks, go back to Task 3 step 2 and add the `@layer utilities` fallback now, then re-check.
+- **If the print preview is clipped past page 1** (only the first slip prints, or content cuts off mid-slip), an ancestor of `OrdersBoard` has an active `overflow-hidden`/`max-height` in print mode. Inspect the elements walking up from the print block in devtools with print-emulation on; add a targeted `@media print { .[ancestor-class] { overflow: visible !important; height: auto !important; } }` rule in `src/index.css` for the culprit. This is unlikely with the fragment-sibling structure from Step 5, but flagged in case the admin shell layout enforces overflow upstream.
 - Disable print emulation when done.
 
 - [ ] **Step 9: Commit**
