@@ -51,7 +51,7 @@ These are flagged as follow-up; see "Manual follow-up needed" at the bottom.
 - **Focus chain:** Back → 3 × (Decrease, Increase) row controls → Checkout link → Checkout button → `<nextjs-portal>`
 - **Notes:** **Anomaly worth surfacing:** "Checkout" appears in the focus chain as both an `<a>` and a separate `<button>` immediately after — likely a link-wrapping-a-button or a button-shaped link sibling. Two Tab stops for a single visual control means keyboard users press Tab twice to skip past the same CTA. Recommend reviewing `apps/web/src/app/[tenant]/cart/cart-screen.tsx` (or wherever the cart CTA lives) and collapsing to a single interactive. **Filing as a supplemental Phase B finding** — see follow-up.
 
-  The "Remove" affordance for each cart row was not in the focus chain — confirm whether it's keyboard-reachable (e.g. via long-press only on touch, or hidden behind a menu). If removal is mouse-only, that's a P1 keyboard-parity issue.
+  Initial pass also flagged a missing "Remove" affordance in the focus chain. **Investigated post-walk and dismissed:** `apps/web/src/app/[tenant]/cart/cart-screen.tsx` has no Remove control at all — the cart row only exposes +/- quantity buttons (both proper `<button>` elements with `aria-label`s, keyboard-accessible by default). The "missing from focus chain" observation is a **feature gap, not a keyboard-accessibility bug**; out of scope for §3.8.
 
 ## /nsbh/checkout
 
@@ -75,7 +75,6 @@ Before/alongside the Phase B closing re-audit:
 2. **Esc on overlays:** No overlays were open during the automated walk, so the heuristic registered zero state changes. Manually open any mobile-shell menus / drawers / variant pickers / size sheets, Tab inside, press Esc, confirm dismissal returns focus to the trigger.
 3. **Enter / Space activation:** Press Enter on a representative `<a>` and Space on a representative `<button>` on each screen and confirm activation parity with mouse click.
 4. **/checkout walk:** Re-run `setup-auth.mjs` to refresh `auth-storage.json`, then re-execute `node docs/superpowers/audits/2026-05-11-a11y/keyboard-walkthrough.mjs checkout` (or do the /checkout walk by hand). The Stripe Payment Element iframe is upstream and carved out of Phase B coverage — confirm only the outer form fields are reachable and labelled.
-5. **Cart row "Remove" reachability:** Confirm there is a keyboard-reachable way to remove a line from the cart, not just a mouse/touch gesture.
 
 ## Summary
 
@@ -83,4 +82,8 @@ Before/alongside the Phase B closing re-audit:
 - **Traps detected:** 0
 - **Anomalies in focus order:** 2 — duplicate `<a>` + `<button>` CTAs on /cart ("Checkout") and /placed ("View order details", "Back to home"). Two Tab stops per visual control; recommend collapsing to a single interactive. **Supplemental Phase B finding.**
 - **Label-hygiene observations:** 2 — duplicated badge+name on school cards (home), and price concatenated to product/variant titles with no separator (catalog, item). Cosmetic; suggest Phase C label-hygiene pass.
-- **Manual follow-up items:** 5 (focus-ring eyeball, Esc on overlays, Enter/Space activation, /checkout once auth refreshed, cart remove reachability)
+- **Manual follow-up items:** 4 (focus-ring eyeball, Esc on overlays, Enter/Space activation, /checkout once auth refreshed)
+- **Severity classification of automated findings:**
+  - Duplicate `<a>` + `<button>` CTA pattern on /cart and /placed: **P2** (annoyance, not task-blocking — keyboard users press Tab twice to skip a single visual CTA but completion is unaffected). Not a §3.8 ship-blocker; deferred to a future polish pass.
+  - Label-hygiene observations (school-card badge duplication, price-concatenation): **observation** (SR experience nit, no functional blocker).
+  - No axe P0/P1 surfaced from the keyboard walk beyond what was already in `findings.md` A1/A2/A3.
