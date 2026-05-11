@@ -124,7 +124,7 @@ export const tenantLegalSchema = z.discriminatedUnion('mode', [
    The version-increment race is mitigated by the `unique (tenant_id, version)` constraint plus a small retry loop. On `unique_violation` (PG code 23505) for `(tenant_id, version)`, re-SELECT max version and retry up to ~3 times. Same shape as the `orders_pkey` collision-retry in `apps/web/src/app/api/orders/route.ts:225` (`isUniqueConstraintError(error, "orders_pkey")`). In practice the race is rare — typically a single platform admin per tenant — but the constraint guarantees we never get duplicate version numbers.
 6. Compute `changedFields: ('mode'|'policy'|'declarant'|'acks')[]` server-side.
 7. `serverCapture(user.email, 'tenant_legal_edited', { tenantId, mode, version, changedFields })`. Matches the existing call signature at `app/platform/tenants/[id]/actions.ts:102` and `app/platform/tenants/new/actions.ts:38`. Single event per save.
-8. `revalidatePath(\`/platform/tenants/${tenantId}\`)` and `revalidatePath(\`/${tenantId}\`, 'layout')`. The layout flag is required because `/[tenant]/refund-policy` lives under the tenant layout — matches the pattern used by `editTenantBranding` (`actions.ts:14`).
+8. `revalidatePath(\`/platform/tenants/${tenantId}\`)` always; `revalidatePath(\`/${tenantId}\`, 'layout')` only when `tenant.platformApprovalStatus === 'approved'`. The layout flag is required because `/[tenant]/refund-policy` lives under the tenant layout — matches the pattern used by `editTenantBranding` (`actions.ts:108`), which gates the layout cascade on approval status because non-approved tenants can't take payments and thus never trigger emails or refund-policy visits.
 9. Return `{ ok: true as const, version }`.
 
 ### 4.4 Errors

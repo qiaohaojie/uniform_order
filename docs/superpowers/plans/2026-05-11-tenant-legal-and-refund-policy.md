@@ -456,14 +456,23 @@ export async function editTenantLegal(id: string, input: unknown) {
   if (!sameContent) changedFields.push("policy");
   if (!sameDeclarant) changedFields.push("declarant");
 
-  // Insert new version with retry on (tenant_id, version) collision.
+  // Insert new version + flip tenants pointer atomically in one db.batch
+  // round-trip (project rule: never db.transaction; neon-http doesn't support
+  // it). Generate the row id client-side so both statements can reference it
+  // without an interleaved RETURNING. Same pattern db/queries.ts:600/651/700
+  // uses for catalog INSERT-then-related-writes.
+  //
+  // Retry loop guards the (tenant_id, version) unique constraint — narrows
+  // the SELECT-MAX/INSERT race but doesn't eliminate it (see queries.ts
+  // race-window note above).
   let inserted: { id: string; version: number } | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const nextVersion = (await getMaxLegalVersionForTenant(id)) + 1;
+    const newId = randomUUID();
     try {
-      const [row] = await db
-        .insert(tenantLegalVersions)
-        .values({
+      await db.batch([
+        db.insert(tenantLegalVersions).values({
+          id: newId,
           tenantId: id,
           version: nextVersion,
           policyMode: next.mode,
@@ -475,9 +484,13 @@ export async function editTenantLegal(id: string, input: unknown) {
           declarantRole: next.declarantRole,
           enteredByUserId: user.id,
           enteredByEmail: user.email,
-        })
-        .returning({ id: tenantLegalVersions.id, version: tenantLegalVersions.version });
-      inserted = row;
+        }),
+        db
+          .update(tenants)
+          .set({ currentLegalVersionId: newId, updatedAt: new Date() })
+          .where(eq(tenants.id, id)),
+      ]);
+      inserted = { id: newId, version: nextVersion };
       break;
     } catch (e) {
       if (isUniqueConstraintError(e, "tenant_legal_versions_tenant_version_unique")) {
@@ -491,11 +504,6 @@ export async function editTenantLegal(id: string, input: unknown) {
     return { ok: false as const, error: "Could not allocate a version number; please retry" };
   }
 
-  await db
-    .update(tenants)
-    .set({ currentLegalVersionId: inserted.id, updatedAt: new Date() })
-    .where(eq(tenants.id, id));
-
   await serverCapture(user.email, "tenant_legal_edited", {
     tenantId: id,
     mode: next.mode,
@@ -504,12 +512,37 @@ export async function editTenantLegal(id: string, input: unknown) {
   });
 
   revalidatePath(`/platform/tenants/${id}`);
-  // The "layout" flag cascades to all routes under /[tenant]/, including
-  // /[tenant]/refund-policy. Matches editTenantBranding's pattern (actions.ts:14).
-  revalidatePath(`/${id}`, "layout");
+  // Mirror editTenantBranding (actions.ts:108): only cascade the parent-shop
+  // layout cache when the tenant is actually approved. Non-approved tenants
+  // can't take payments (Stripe gate in api/stripe/payment-intent), so no
+  // orders → no emails → no /refund-policy visits — busting the cache pre-
+  // approval would be wasted work.
+  if (tenant.platformApprovalStatus === "approved") {
+    revalidatePath(`/${id}`, "layout");
+  }
 
   return { ok: true as const, version: inserted.version };
 }
+```
+
+Add the `randomUUID` import at the top of `actions.ts` (alongside the other imports added in Step 2):
+
+```ts
+import { randomUUID } from "node:crypto";
+```
+
+Note the SELECT in Step 2 (`db.select({ id: tenants.id, currentLegalVersionId: tenants.currentLegalVersionId })`) needs to also pull `platformApprovalStatus` so the gate above resolves — extend it:
+
+```ts
+const [tenant] = await db
+  .select({
+    id: tenants.id,
+    currentLegalVersionId: tenants.currentLegalVersionId,
+    platformApprovalStatus: tenants.platformApprovalStatus,
+  })
+  .from(tenants)
+  .where(eq(tenants.id, id))
+  .limit(1);
 ```
 
 - [ ] **Step 3: Verify types**
@@ -1653,7 +1686,7 @@ Title: `feat: tenant legal capture & per-tenant refund-policy route`
 
 Body:
 
-> Closes `docs/remaining_work.md` §3.10 follow-up #1 + #2. Adds versioned `tenant_legal_versions` table, `editTenantLegal` server action (mirrors PR #18's branding pattern), `LegalCard` + `LegalEditDrawer` on `/platform/tenants/[id]` with a post-provision banner, resurrected `/[tenant]/refund-policy` route (text-inline or 307-redirect), conditional `refundPolicyUrl` link in both order emails, and `orders.legal_version_id` audit snapshot. Lifts `isUniqueConstraintError` to a shared module so the new action and the orders route share one helper.
+> Closes `docs/remaining_work.md` §3.10 follow-up #1 + #2. Adds versioned `tenant_legal_versions` table, `editTenantLegal` server action (mirrors PR #18's branding pattern, including the layout-revalidate-only-when-approved gate), `LegalCard` + `LegalEditDrawer` on `/platform/tenants/[id]` with a post-onboarding banner (renders only after the tenant exits "setup" status), resurrected `/[tenant]/refund-policy` route (text-inline or 307-redirect), conditional `refundPolicyUrl` link in both order emails, and `orders.legal_version_id` audit snapshot. Lifts `isUniqueConstraintError` to a shared module so the new action and the orders route share one helper. INSERT + UPDATE pair for the new version is atomic via `db.batch` with a client-generated UUID.
 >
 > Spec: `docs/superpowers/specs/2026-05-11-tenant-legal-and-refund-policy-design.md`
 > Plan: `docs/superpowers/plans/2026-05-11-tenant-legal-and-refund-policy.md`
