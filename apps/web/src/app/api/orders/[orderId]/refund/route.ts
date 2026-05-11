@@ -170,8 +170,11 @@ export async function POST(
       reconcile_pending: reconcilePending,
     });
 
-    // Audit log — only emit once the DB refund row landed. If reconcile is
-    // pending, the charge.refunded webhook owns the eventual audit emission.
+    // Audit log — only emit when the DB refund row landed in this request. If
+    // reconcile is pending (Stripe succeeded but the DB insert was deferred),
+    // the charge.refunded webhook will reconcile the refund row + order status
+    // but does NOT emit an audit event today. That reconcile path is a known
+    // audit gap, tracked as a follow-up.
     if (dbRecorded) {
       const refundedLineItems = body.lineId
         ? await db
