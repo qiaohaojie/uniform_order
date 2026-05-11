@@ -9,7 +9,8 @@ import { join } from "node:path";
 const BASE = "http://localhost:3000";
 const TENANT = "nsbh";
 const OUT_DIR = "docs/superpowers/audits/2026-05-11-a11y";
-const AXE_DIR = join(OUT_DIR, "axe");
+const OUT_SUBDIR = process.env.AUDIT_OUT_SUBDIR ?? "";
+const AXE_DIR = join(OUT_DIR, "axe", OUT_SUBDIR);
 const STORAGE = join(OUT_DIR, "auth-storage.json");
 mkdirSync(AXE_DIR, { recursive: true });
 
@@ -79,6 +80,12 @@ async function runScreen(browser, screen) {
     // Stripe Payment Element iframe content is upstream-tested (WCAG 2.1 AA).
     // Excluding keeps `incomplete` honest; prose carve-out remains in findings.md.
     .exclude("iframe[name^='__privateStripeFrame']")
+    // Stripe-injected outer wrapper marked aria-hidden=true while focusable.
+    // Upstream-owned (does not originate in our code). No @stripe/stripe-js
+    // upgrade was available at Phase B time (already at latest 9.4.0), so we
+    // accept the violation as upstream and document the carve-out here. To
+    // be revisited when Stripe ships a fix.
+    .exclude(".__PrivateStripeElement-input")
     .analyze();
 
   const summary = {

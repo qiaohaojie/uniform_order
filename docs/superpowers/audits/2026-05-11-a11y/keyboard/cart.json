@@ -1,0 +1,124 @@
+{
+  "screen": "cart",
+  "url": "http://localhost:3000/nsbh/cart",
+  "auth": false,
+  "status": "ok",
+  "focusableCount": 10,
+  "focusOrder": [
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": "Back",
+      "text": "",
+      "id": null,
+      "href": "/nsbh",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": "Decrease",
+      "text": "−",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": "Increase",
+      "text": "+",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": "Decrease",
+      "text": "−",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": "Increase",
+      "text": "+",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": "Decrease",
+      "text": "−",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": "Increase",
+      "text": "+",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "Checkout",
+      "id": null,
+      "href": "/nsbh/checkout",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "Checkout",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "nextjs-portal",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    }
+  ],
+  "escapedToBody": true,
+  "trapDetected": false,
+  "escStateChanges": [],
+  "notes": [],
+  "timestamp": "2026-05-11T16:00:23.592Z"
+}

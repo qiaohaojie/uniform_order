@@ -1,0 +1,58 @@
+{
+  "screen": "home",
+  "url": "http://localhost:3000/",
+  "auth": false,
+  "status": "ok",
+  "focusableCount": 4,
+  "focusOrder": [
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "NSBHNSBHNorth Sydney Boys High School",
+      "id": null,
+      "href": "/nsbh",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "RGHSRGHSRiverside Girls High School",
+      "id": null,
+      "href": "/rgsh",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "Sign in to save your children",
+      "id": null,
+      "href": "/auth/sign-in?callbackURL=%2F%3Faction%3Dadd-child",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "nextjs-portal",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    }
+  ],
+  "escapedToBody": true,
+  "trapDetected": false,
+  "escStateChanges": [],
+  "notes": [],
+  "timestamp": "2026-05-11T16:00:17.016Z"
+}

@@ -467,6 +467,23 @@ Rule-#1 / #3 / #4 unchanged at zero matches post-fix; the three pre-fix rule-#2 
 
 Files: `apps/web/src/app/[tenant]/cart/cart-screen.tsx`, `apps/web/src/app/[tenant]/page.tsx`, `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`, `docs/superpowers/audits/2026-05-11-mobile/` (18 baseline + 18 after PNGs, 18 DOM snapshots, `findings.md`, `capture.mjs`).
 
+### 4.25 Accessibility audit — audit + fixes (§3.8) ✅
+
+**Source:** `remaining_work.md` §3.8 — audit + fixes shipped 2026-05-12. Spec (Phase A): `docs/superpowers/specs/2026-05-11-a11y-audit-design.md`; Phase A plan: `docs/superpowers/plans/2026-05-11-a11y-audit-phase-a.md`; Phase B spec: `docs/superpowers/specs/2026-05-11-a11y-audit-phase-b-design.md`; Phase B plan: `docs/superpowers/plans/2026-05-12-a11y-audit-phase-b.md`; findings + before/after axe JSON + keyboard walkthrough: `docs/superpowers/audits/2026-05-11-a11y/`.
+
+Two-phase: **Phase A** (PR #23) ran axe-core via Playwright across the 6 parent-flow critical-path screens (home, catalog, item, cart, checkout-authenticated, placed) at iPhone SE 375×667, plus burgundy-contrast scripted check. Output: 1 P0 (A1 — Year `<select>` missing accessible name in checkout), 2 P1 (A2 — Stripe wrapper `aria-hidden-focus`; A3 — gold `#B08A3E` "Welcome" eyebrow at 2.97:1 on parchment). The precautionary burgundy `#7A1F2B` callout in the original spec was a red herring — Phase A verified 9.46–10.20:1 across all parent backgrounds, well clear of the 4.5:1 line. The real contrast risk was gold at small bold sizes.
+
+**Phase B** (this PR) addressed all 3 findings and added a Playwright-assisted keyboard walkthrough:
+
+- **A1 cleared** — `FieldLabel` is now a semantic `<label htmlFor>`; all 6 checkout fields wired with stable ids (`6bd1274`).
+- **A2 documented-exclude** — `@stripe/stripe-js` was already at latest 9.4.0; no upgrade available. Added a documented `.exclude(".__PrivateStripeElement-input")` in `audit.mjs` with prose rationale and revisit pointer (`b62fbeb`, which also parameterises `AUDIT_OUT_SUBDIR` so before/after JSON live side-by-side).
+- **A3 cleared** — introduced `--color-gold-text: #8C6A28` token (4.63:1 vs parchment); swapped 3 parent-flow eyebrows (home x2 + parent order detail) (`3e4c958`).
+- **Keyboard walkthrough** — Playwright-assisted automated walk over 5/6 screens (`8f1765b`, `d42734d`). Zero traps. 2 P2 supplemental anomalies (duplicate `<a>+<button>` CTA pattern on /cart and /placed) + 2 observations (label hygiene) — none §3.8 ship-blockers; carried forward to a future polish pass. Manual follow-up items (focus-ring eyeball, Esc sensibility, Enter/Space activation) enumerated in `keyboard-walkthrough.md`.
+
+Re-audit (`axe/after/`) confirms P0 + P1 = 0 across all 6 screens (checkout flipped 1 crit / 1 ser → 0/0; home flipped 0/1 → 0/0; others were already 0/0).
+
+Files: `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` (FieldLabel + ids), `apps/web/src/index.css` (`--color-gold-text` token), `apps/web/src/app/home-client.tsx`, `apps/web/src/app/orders/[orderId]/order-detail-client.tsx`, `docs/superpowers/audits/2026-05-11-a11y/` (axe/ baseline + axe/after/ JSON, `findings.md`, `keyboard-walkthrough.md`, `audit.mjs`).
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -475,5 +492,5 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Quality** — print stylesheet QA on real A4 (§3.7); accessibility audit (§3.8).
+- **Quality** — print stylesheet QA on real A4 (§3.7).
 - **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7).

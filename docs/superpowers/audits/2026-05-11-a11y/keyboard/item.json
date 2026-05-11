@@ -1,0 +1,179 @@
+{
+  "screen": "item",
+  "url": "http://localhost:3000/nsbh/item/shirt-ls",
+  "auth": false,
+  "status": "ok",
+  "focusableCount": 15,
+  "focusOrder": [
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": "Back",
+      "text": "",
+      "id": null,
+      "href": "/nsbh",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "a",
+      "type": null,
+      "role": null,
+      "ariaLabel": "Cart",
+      "text": "4",
+      "id": null,
+      "href": "/nsbh/cart",
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "10–24$28",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "10",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "12",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "14",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "16",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "18",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "20",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "22",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "24",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "−",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "role": null,
+      "ariaLabel": null,
+      "text": "+",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "Add to cart · $28",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    },
+    {
+      "tag": "nextjs-portal",
+      "type": null,
+      "role": null,
+      "ariaLabel": null,
+      "text": "",
+      "id": null,
+      "href": null,
+      "disabled": false,
+      "tabindex": null
+    }
+  ],
+  "escapedToBody": true,
+  "trapDetected": false,
+  "escStateChanges": [],
+  "notes": [],
+  "timestamp": "2026-05-11T16:00:21.617Z"
+}

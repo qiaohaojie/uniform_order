@@ -1,0 +1,23 @@
+{
+  "screen": "placed",
+  "url": "http://localhost:3000/nsbh/order/placed?total=149.00&delivery=pickup&orderId=NSBH-A11Y",
+  "auth": false,
+  "timestamp": "2026-05-11T16:23:15.062Z",
+  "counts": {
+    "critical": 0,
+    "serious": 0,
+    "moderate": 0,
+    "minor": 0,
+    "incomplete": 1,
+    "passes": 20
+  },
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 1
+    }
+  ]
+}
