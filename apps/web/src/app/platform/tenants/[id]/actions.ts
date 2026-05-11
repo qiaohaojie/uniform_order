@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
 import { brandingEditSchema } from "@/lib/platform/schema";
-import { serverCapture } from "@/lib/analytics/server";
+import { logAuditEvent } from "@/lib/audit/log";
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
@@ -99,9 +99,14 @@ export async function editTenantBranding(id: string, input: unknown) {
     })
     .where(eq(tenants.id, id));
 
-  await serverCapture(user.email, "platform_branding_edited", {
+  await logAuditEvent({
     tenantId: id,
-    changedFields,
+    actorEmail: user.email,
+    actorRole: "platform_admin",
+    action: "tenant.branding_updated",
+    targetType: "tenant",
+    targetId: id,
+    payload: { changedFields },
   });
 
   revalidatePath(`/platform/tenants/${id}`);
