@@ -232,19 +232,21 @@ function PhoneNav({ tenant, cartCount, title }: { tenant: Tenant; cartCount: num
       </div>
       <Link
         href={`/${tenant.id}/cart`}
-        className="w-9 flex justify-end relative"
+        className="w-9 h-9 flex items-center justify-center"
         style={{ color: "var(--color-ink)" }}
         aria-label="Cart"
       >
-        <CartIcon size={22} />
-        {cartCount > 0 && (
-          <span
-            className="absolute -top-1 right-0 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center text-white"
-            style={{ background: tenant.accent }}
-          >
-            {cartCount}
-          </span>
-        )}
+        <span className="relative">
+          <CartIcon size={22} />
+          {cartCount > 0 && (
+            <span
+              className="absolute -top-1 -right-1 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center text-white"
+              style={{ background: tenant.accent }}
+            >
+              {cartCount}
+            </span>
+          )}
+        </span>
       </Link>
     </div>
   );
