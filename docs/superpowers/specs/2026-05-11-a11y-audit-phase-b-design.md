@@ -63,7 +63,7 @@ If A2 is gone post-upgrade: the upgrade commit alone closes it. If A2 persists: 
 
 ### Keyboard walkthrough
 
-Execute the spec's per-screen checklist over all 6 parent-flow screens:
+Execute the spec's per-screen checklist over the same 6 screens as `audit.mjs`'s `SCREENS` array (`home`, `catalog`, `item`, `cart`, `checkout`, `placed`) — keeping axe and keyboard coverage aligned. For each screen:
 - Tab order matches visual reading order
 - Visible focus ring on every interactive element
 - Esc closes any overlay / drawer / dialog
@@ -74,7 +74,11 @@ Capture findings in `docs/superpowers/audits/2026-05-11-a11y/keyboard-walkthroug
 
 ### Closing the audit
 
-Re-run `audit.mjs` producing 6 new JSON files in `docs/superpowers/audits/2026-05-11-a11y/axe/after/`. Append a "Fixes shipped (Phase B)" section to `findings.md` listing before/after counts per screen and confirming P0 + P1 = 0. Flip §3.8 to ✅ in `docs/remaining_work.md` and migrate the section to `docs/completed.md` with the standard Phase A + Phase B write-up.
+**Prerequisite:** before re-running, verify the Neon Auth dev session in `auth-storage.json` is still valid. `audit.mjs:71-75` throws a hard error if `/checkout` bounces back to `/auth/*`. If stale, re-run `node docs/superpowers/audits/2026-05-11-a11y/setup-auth.mjs` per Phase A's documented procedure.
+
+**Runner change:** `audit.mjs:18-20` currently wipes every `.json` in `axe/` at the start of each run — re-running as-is would destroy the Phase A results that `findings.md` references. Parameterise the runner: add an optional output-subdir argument (e.g. `OUT_SUBDIR` env var or CLI flag), default to current behavior (writing to `axe/`), and pass `after` for the Phase B re-run so it writes to `axe/after/`. The wipe scopes to whichever subdir is active. The Phase A `axe/*.json` baseline is preserved untouched.
+
+Re-run `audit.mjs` with the new flag, producing 6 new JSON files in `docs/superpowers/audits/2026-05-11-a11y/axe/after/`. Append a "Fixes shipped (Phase B)" section to `findings.md` listing before/after counts per screen and confirming P0 + P1 = 0. Flip §3.8 to ✅ in `docs/remaining_work.md`, correcting the stale "burgundy `#7A1F2B` accent" contrast hint at the same time (Phase A debunked it — real risk was gold, fixed via A3). Migrate the section to `docs/completed.md` with the standard Phase A + Phase B write-up.
 
 ## File map
 
@@ -83,11 +87,11 @@ Re-run `audit.mjs` producing 6 new JSON files in `docs/superpowers/audits/2026-0
 - **Modify:** `apps/web/src/app/home-client.tsx` — lines 99 and 188, switch inline `color:var(--color-gold)` to `var(--color-gold-text)`.
 - **Modify:** `apps/web/src/app/orders/[orderId]/order-detail-client.tsx` — line 220, same swap.
 - **Modify:** `apps/web/package.json` (+ `pnpm-lock.yaml`) — bump `@stripe/stripe-js`.
-- **Modify (conditional):** `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` — `.exclude('.__PrivateStripeElement-input')` only if upgrade doesn't resolve A2.
+- **Modify:** `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` — parameterise output subdir (default `""`; pass `after` for Phase B re-run). Conditional second change in the same file: `.exclude('.__PrivateStripeElement-input')` only if Stripe upgrade doesn't resolve A2.
 - **Create:** `docs/superpowers/audits/2026-05-11-a11y/keyboard-walkthrough.md`.
 - **Create:** `docs/superpowers/audits/2026-05-11-a11y/axe/after/*.json` (6 files).
 - **Modify:** `docs/superpowers/audits/2026-05-11-a11y/findings.md` — append "Fixes shipped (Phase B)" section.
-- **Modify:** `docs/remaining_work.md` — flip §3.8 to ✅, remove from outstanding list.
+- **Modify:** `docs/remaining_work.md` — flip §3.8 to ✅, remove from outstanding list, and correct the burgundy-contrast hint (debunked by Phase A; real risk was gold).
 - **Modify:** `docs/completed.md` — add §3.8 write-up.
 
 ## Commit shape (target sequence)
