@@ -7,6 +7,8 @@ import { DoubleRule } from "@/components/double-rule";
 import { Crest } from "@/components/crest";
 import { OrderDetailActions } from "./order-detail-actions";
 import { PrintButton } from "@/components/print-button";
+import { loadOrderActivity } from "@/lib/audit/load-order-activity";
+import { OrderActivityStrip } from "@/components/admin/order-activity-strip";
 
 function Barcode({ orderId }: { orderId: string }) {
   const widths = [3, 1, 2, 1, 1, 3, 1, 2, 3, 1, 1, 2, 3, 2, 1, 1, 3, 1, 2, 1, 1, 3, 2, 1];
@@ -49,6 +51,7 @@ export default async function OrderDetailPage({
 
   const refunds = await getOrderRefunds(orderId);
   const refundedTotal = await getTotalRefunded(orderId);
+  const activityRows = await loadOrderActivity(orderId);
 
   const statusMap: Record<string, { tone: "info" | "warn" | "success" | "neutral" | "danger"; label: string }> = {
     pending_payment: { tone: "neutral", label: "Pending payment" },
@@ -302,6 +305,7 @@ export default async function OrderDetailPage({
               <Barcode orderId={order.id} />
             </div>
           </div>
+          <OrderActivityStrip rows={activityRows} />
         </div>
       </div>
     </>
