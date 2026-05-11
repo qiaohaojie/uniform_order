@@ -342,25 +342,28 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
         <div className="rounded-[10px] border bg-white p-3.5 mb-4" style={{ borderColor: "var(--color-rule)" }}>
           <div className="grid grid-cols-2 gap-2.5 mb-2.5">
             <div className="col-span-2">
-              <FieldLabel>Student name</FieldLabel>
-              <input value={student.studentName} onChange={(e) => setField("studentName", e.target.value)}
+              <FieldLabel htmlFor="studentName">Student name</FieldLabel>
+              <input id="studentName" value={student.studentName} onChange={(e) => setField("studentName", e.target.value)}
                 placeholder="e.g. Tim Taylor"
+                aria-required="true" aria-invalid={!!fieldErrors.studentName}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.studentName ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.studentName && <FieldError>{fieldErrors.studentName}</FieldError>}
             </div>
             <div>
-              <FieldLabel>Year</FieldLabel>
-              <select value={student.year} onChange={(e) => setField("year", e.target.value)}
+              <FieldLabel htmlFor="year">Year</FieldLabel>
+              <select id="year" value={student.year} onChange={(e) => setField("year", e.target.value)}
+                aria-required="true"
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none bg-white"
                 style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}>
                 {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
             <div>
-              <FieldLabel>Roll class</FieldLabel>
-              <input value={student.rollClass} onChange={(e) => setField("rollClass", e.target.value)}
+              <FieldLabel htmlFor="rollClass">Roll class</FieldLabel>
+              <input id="rollClass" value={student.rollClass} onChange={(e) => setField("rollClass", e.target.value)}
                 placeholder="e.g. 9F"
+                aria-required="true" aria-invalid={!!fieldErrors.rollClass}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.rollClass ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.rollClass && <FieldError>{fieldErrors.rollClass}</FieldError>}
@@ -369,25 +372,28 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
           <div className="h-px mb-3" style={{ background: "var(--color-rule)" }} />
           <div className="flex flex-col gap-2.5">
             <div>
-              <FieldLabel>Parent / guardian name</FieldLabel>
-              <input value={student.parentName} onChange={(e) => setField("parentName", e.target.value)}
+              <FieldLabel htmlFor="parentName">Parent / guardian name</FieldLabel>
+              <input id="parentName" value={student.parentName} onChange={(e) => setField("parentName", e.target.value)}
                 placeholder="e.g. Alex Taylor"
+                aria-required="true" aria-invalid={!!fieldErrors.parentName}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.parentName ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.parentName && <FieldError>{fieldErrors.parentName}</FieldError>}
             </div>
             <div>
-              <FieldLabel>Mobile</FieldLabel>
-              <input value={student.mobile} onChange={(e) => setField("mobile", e.target.value)}
+              <FieldLabel htmlFor="mobile">Mobile</FieldLabel>
+              <input id="mobile" value={student.mobile} onChange={(e) => setField("mobile", e.target.value)}
                 placeholder="04xx xxx xxx" type="tel"
+                aria-required="true" aria-invalid={!!fieldErrors.mobile}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.mobile ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.mobile && <FieldError>{fieldErrors.mobile}</FieldError>}
             </div>
             <div>
-              <FieldLabel>Email (receipt)</FieldLabel>
-              <input value={student.email} onChange={(e) => setField("email", e.target.value)}
+              <FieldLabel htmlFor="email">Email (receipt)</FieldLabel>
+              <input id="email" value={student.email} onChange={(e) => setField("email", e.target.value)}
                 placeholder="you@example.com" type="email"
+                aria-required="true" aria-invalid={!!fieldErrors.email}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.email ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
               {fieldErrors.email && <FieldError>{fieldErrors.email}</FieldError>}
@@ -555,11 +561,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (
-    <div className="text-[10.5px] font-semibold mb-1" style={{ color: "var(--color-ink-dim)" }}>
+    <label htmlFor={htmlFor} className="block text-[10.5px] font-semibold mb-1" style={{ color: "var(--color-ink-dim)" }}>
       {children}
-    </div>
+    </label>
   );
 }
 
