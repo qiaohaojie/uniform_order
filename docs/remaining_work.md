@@ -110,13 +110,9 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 **Follow-ups (not v1 blockers):**
 
-1. **School onboarding form must capture refund-policy data** (extension to the now-shipped provision wizard, `completed.md` §4.18):
-   - Refund policy text *or* external URL (textarea or link field)
-   - Digital declaration: "We confirm this refund policy complies with Australian Consumer Law and we accept responsibility for honoring it for purchases via uniformorder.online" — name, role, date
-   - Seller-of-record acknowledgement checkbox (school confirms they understand they are seller of record under Stripe Connect)
-   - Store on `tenants` row (new columns) or a `tenant_legal` join table; version on update
+1. ✅ **School-authored refund-policy capture** — shipped via PR #19 (`0c58484`). `tenant_legal_versions` table, `editTenantLegal` action on the platform tenant detail page, and a `/[tenant]/refund-policy` route are live. Version chain + declarant name/role/date persisted; seller-of-record acknowledgement checkbox included.
 
-2. **Re-introduce per-tenant policy link in email (v2)** once schools have authored their own content via the onboarding form above. Footer becomes "Refund policy" link to school-authored `/[tenant]/refund-policy`.
+2. **Re-introduce per-tenant policy link in email (v2)** — now unblocked by item 1 above. Order confirmation + order ready email footers should switch from inline contact-only to a "Refund policy" link pointing to the school-authored `/[tenant]/refund-policy` whenever `tenants.current_legal_version_id` is set; fall back to inline contact when null. Small change in `lib/email/templates/` + thread the policy URL through `lib/email/index.ts`.
 
 3. **Platform `/terms` page — deferred indefinitely.** Not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
 
@@ -131,11 +127,12 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
 | 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
-| 4.8 | Drizzle migrations checked into the repo (currently schema is push-only) | Ops |
 
 > §4.1 (size hint), §4.9 (size-hint implementation), §4.10 (commit-split note), §4.11 (drizzle-kit `neon_auth.*` exclusion) are complete — moved to `docs/completed.md` §4.6–§4.10. IDs preserved for cross-reference; no renumbering.
 >
 > §4.6 (operator audit log) **shipped 2026-05-11** — see `docs/completed.md` §4.21. ID preserved.
+>
+> §4.8 (Drizzle migrations committed to the repo) **resolved** — migrations have been file-tracked under `apps/web/drizzle/` since the very first migration. The original audit entry was incorrect. ID preserved; do not re-raise.
 >
 > §4.5 (inventory stock counts) **dropped 2026-05-11** — not a product fit. School uniform shops fulfil from a storeroom; oversells are absorbed operationally (e.g., "two-week wait") and stale stock numbers create a known operator burden. Out-of-stock handling stays operator-mediated, not system-tracked. PDP §3.2 softened to match. ID preserved; do not re-raise without an explicit school request.
 >

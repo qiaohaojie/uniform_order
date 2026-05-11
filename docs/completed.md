@@ -429,8 +429,9 @@ Files: `apps/web/drizzle/0011_audit_events.sql`, `apps/web/drizzle/meta/_journal
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
 
-The following audit items are **not** complete and are tracked in `docs/remaining_work.md`:
+The most material categories of open work, all tracked in `docs/remaining_work.md`:
 
-- Missing NSBH catalog items (Navy Shorts (Summer), Grey Socks (Winter), School Scarf, Swimming Briefs, Soccer Jersey, Exercise Books, Ring Binders, Prefect Tie) — `remaining_work.md` §3.1.
-- Parent-account ("add another child") production ops verifications — `remaining_work.md` §2.11.
-- Dashboard "New product" and "Export" buttons not wired — `remaining_work.md` §4.2.
+- **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
+- **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
+- **Quality** — print stylesheet QA on real A4 (§3.7); accessibility audit (§3.8); mobile viewport edge cases (§3.9).
+- **Post-launch** — per-tenant refund-policy link in email v2 (§3.10 follow-up #2); bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7).
