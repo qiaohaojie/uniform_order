@@ -128,7 +128,14 @@ pnpm --filter web exec drizzle-kit generate
 
 Expected output: a new `apps/web/drizzle/0010_<random_name>.sql` (drizzle-kit picks the random suffix, like `0009_petite_the_phantom.sql`), plus a `meta/0010_snapshot.json` and an updated `meta/_journal.json`.
 
-The generated SQL will include `CREATE TYPE policy_mode`, `CREATE TABLE tenant_legal_versions`, `CREATE UNIQUE INDEX`, and two `ALTER TABLE … ADD COLUMN` statements for the new uuid columns on `tenants` and `orders`.
+The generated SQL must include, in this order:
+1. `CREATE TYPE "policy_mode" AS ENUM ('text', 'url')` — must be the FIRST statement (before any column references it).
+2. `CREATE TABLE "tenant_legal_versions" (...)` (uses the enum).
+3. `CREATE UNIQUE INDEX "tenant_legal_versions_tenant_version_unique" ON ...`.
+4. `ALTER TABLE "tenants" ADD COLUMN "current_legal_version_id" uuid`.
+5. `ALTER TABLE "orders" ADD COLUMN "legal_version_id" uuid`.
+
+**Verify ordering:** open the generated SQL and confirm `CREATE TYPE` appears before `CREATE TABLE`. drizzle-kit normally orders by dependency graph, but enums declared inline can occasionally be misordered — if `CREATE TYPE` is missing or appears after the table, manually move it to the top of the file before continuing.
 
 - [ ] **Step 3: Hand-extend the generated SQL with FK + check constraints**
 
@@ -395,6 +402,8 @@ export async function getMaxLegalVersionForTenant(tenantId: string): Promise<num
 }
 ```
 
+> **Race window note:** `SELECT max() + INSERT` is not atomic. Two concurrent saves for the same tenant could both compute `version = N+1` and one would lose the unique-constraint race. The 3-retry loop in the action narrows but does not eliminate this. Acceptable in practice — typically a single platform admin per tenant — and the unique constraint guarantees we never persist duplicate versions. A fully atomic solution would use `INSERT … SELECT MAX+1 …` in one statement; out of scope.
+
 Confirm imports at the top of `queries.ts` include: `import { eq, sql } from "drizzle-orm";` and `import { tenants, tenantLegalVersions } from "./schema";`. Add anything missing.
 
 > **No `getCurrentLegalVersionForTenant` helper** — both call sites (Task 5 route, Task 11 page) already load the tenant row, so they can do `tenant.currentLegalVersionId ? getTenantLegalVersion(tenant.currentLegalVersionId) : null` directly. One round-trip instead of two.
@@ -540,16 +549,10 @@ EOF
 - Create: `apps/web/src/app/[tenant]/refund-policy/page.tsx`
 
 > **No off-origin-redirect smoke test:** Next.js's `redirect()` from `next/navigation` has supported absolute URLs since 13.4. We trust the API.
+>
+> **MobileShell signature** (verified at `apps/web/src/components/mobile-shell.tsx:7`): `MobileShell({ children, bg })` — accepts `children` and an optional `bg` colour string only, does NOT take a `tenant` prop. The tenant-themed header is rendered inline in the route body (already does so via the `border-b-2` styled with `tenant.accent`).
 
-- [ ] **Step 1: Confirm `MobileShell`'s import path**
-
-```bash
-rg "export (default )?function MobileShell|export (const|class) MobileShell" apps/web/src/components --type tsx -l
-```
-
-Use whatever path that returns. The example below assumes `@/components/mobile-shell`; substitute as needed.
-
-- [ ] **Step 2: Write the route**
+- [ ] **Step 1: Write the route**
 
 Create `apps/web/src/app/[tenant]/refund-policy/page.tsx`:
 
@@ -564,7 +567,7 @@ export default async function RefundPolicyPage({
   params: Promise<{ tenant: string }>;
 }) {
   // The [tenant] route param is the tenant id (slug == id in this codebase —
-  // see TENANTS in lib/data.ts and getTenant's signature in db/queries.ts).
+  // see TENANTS in lib/data.ts and getTenant's signature in db/queries.ts:712).
   const { tenant: tenantId } = await params;
   const tenant = await getTenant(tenantId);
   if (!tenant) notFound();
@@ -580,7 +583,7 @@ export default async function RefundPolicyPage({
   }
 
   return (
-    <MobileShell tenant={tenant}>
+    <MobileShell>
       <div className="px-5 py-6">
         <h1
           className="font-serif text-2xl font-semibold pb-2 mb-4 border-b-2"
@@ -605,7 +608,7 @@ export default async function RefundPolicyPage({
 }
 ```
 
-- [ ] **Step 3: Verify types**
+- [ ] **Step 2: Verify types**
 
 ```bash
 pnpm check-types:web
@@ -613,7 +616,7 @@ pnpm check-types:web
 
 Expected: clean.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/app/[tenant]/refund-policy/page.tsx
@@ -917,7 +920,15 @@ Open `apps/web/src/app/api/orders/route.ts`. If `tenants` isn't already in the i
 import { db, orders, orderLines, tenants } from "@/db";
 ```
 
-In the POST handler, just before the `insertOrder` arrow function is declared (around line 178), add:
+**First, scan for an upstream tenant SELECT.** Search the POST handler for any `db.select(...).from(tenants)` that runs before the `insertOrder` block:
+
+```bash
+grep -n "from(tenants)" apps/web/src/app/api/orders/route.ts
+```
+
+**If you find one, EXTEND it** to include `currentLegalVersionId` in its column list and read the value from that row. Do not add a second SELECT.
+
+**Only if no upstream SELECT exists**, add this snippet just before `insertOrder` is declared (around line 178):
 
 ```ts
 // Snapshot the policy version in force at order time (audit trail).
@@ -929,8 +940,6 @@ const [tenantRow] = await db
   .limit(1);
 const legalVersionId = tenantRow?.currentLegalVersionId ?? null;
 ```
-
-If the file already loads a `tenant` row with multiple columns somewhere upstream of this point, just extend that SELECT to include `currentLegalVersionId` and read it from there. Avoid the second round-trip if you can.
 
 - [ ] **Step 2: Add `legalVersionId` to the `insertOrder` insert payload**
 
@@ -990,6 +999,10 @@ Create `apps/web/src/app/platform/tenants/[id]/cards/legal-edit-drawer.tsx` with
 "use client";
 import type { TenantRow, TenantLegalVersionRow } from "@/db/schema";
 
+// TODO(plan-task-9): replace with the full drawer in the next commit.
+// This stub exists only so LegalCard (shipped in this commit) type-checks
+// against an importable LegalEditDrawer; clicking Edit on the card would
+// render nothing until Task 9 lands.
 export function LegalEditDrawer(_: {
   tenant: TenantRow;
   currentVersion: TenantLegalVersionRow | null;
@@ -1576,6 +1589,8 @@ In a new tab: `http://localhost:3000/nsbh/refund-policy`. DevTools Network tab: 
 
 Expected: page renders inline with serif heading, accent-coloured underline, plain-text body (whitespace preserved), declarant footer.
 
+**Layout-cascade verification:** the action revalidates `/${id}` with the `"layout"` flag. Confirm the cascade reached `/refund-policy` by checking that the page shows the *new* (text-mode v4 or whatever you just saved) content, not stale URL-mode v3 content from the prior step. If you see stale content, the layout-flag cascade isn't doing what we expect — investigate before continuing.
+
 - [ ] **Step 9: Place a real order against NSBH**
 
 Use the parent flow (`/nsbh` → add to cart → checkout → pay with Stripe test card `4242 4242 4242 4242`). Then:
@@ -1626,7 +1641,7 @@ Before opening the PR:
 8. **`tenant_legal_versions.entered_by_user_id` is `uuid`** in the SQL ALTER (Task 1 Step 3) and as `uuid("entered_by_user_id")` in Drizzle.
 9. **`isUniqueConstraintError` lifted** to `lib/db/unique-constraint.ts`; both `actions.ts` and `api/orders/route.ts` import from there.
 10. **Drawer `useEffect` deps are `[]`** — pending state read via `pendingRef.current` to avoid mid-save mountedRef teardown.
-11. **Deviations from spec called out** (LegalCard is `"use client"`; banner has no inline button) and either accepted or backported into the spec.
+11. **Deviations from spec called out:** see the "Deviations from spec" block at the top of this plan. Both items (LegalCard is `"use client"`; banner has no inline button) have already been backported into the spec at `docs/superpowers/specs/2026-05-11-tenant-legal-and-refund-policy-design.md` §5.1 and §5.3.
 
 If any check fails, fix in place; no separate review pass.
 
