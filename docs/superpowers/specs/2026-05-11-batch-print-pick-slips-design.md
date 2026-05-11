@@ -63,7 +63,7 @@ interface PickSlipProps {
 }
 ```
 
-`Order` / `OrderLine` types: define a single shared interface in the new component file matching what `/api/orders` returns over JSON (decimals as strings, `createdAt` as ISO string). The detail page currently uses the Drizzle row type from `getOrderById`; we keep that path working by passing a normalized adapter (same fields, decimals → strings) so `<PickSlip />` accepts one shape from both call sites.
+`Order` / `OrderLine` types: define a single shared interface in the new component file. The canonical shape is the JSON-over-the-wire form (`createdAt` as ISO `string`, `unitPrice` / `lineTotal` / `total` as `string`) — the slip only needs to display these fields, not arithmetic on them, so the simpler string form wins. The detail page (which uses Drizzle's row type from `getOrderById` returning `Date`/`Decimal`) is responsible for converting `createdAt.toISOString()` and `String(decimal)` *before* passing the row into `<PickSlip />`. Conversion happens at exactly one site, in one direction, so the component never has to accept a union shape.
 
 The detail page renders `<PickSlip order={…} tenant={…} lines={…} />` inside its existing white card. There is no visual change to the single-slip print path.
 
@@ -89,7 +89,7 @@ Inside `orders-board.tsx`:
 
 3. Add `data-no-print` to the Kanban root container so the existing `@media print` rule in `src/index.css` hides it. **This is required** — the Kanban is not inside an `aside`, so the existing `aside { display: none }` rule does not catch it.
 
-4. Lift `newOrders.length` to `OrdersPageClient` via a callback prop on `<OrdersBoard onNewCountChange={…} />`. `OrdersPageClient` stores it in local state and passes it to the topbar button for the disable/confirm logic in §4.
+4. Lift `newOrders.length` to `OrdersPageClient` via a callback prop on `<OrdersBoard onNewCountChange={…} />`. `OrdersPageClient` stores it in local state and passes it to the topbar button for the disable/confirm logic in §4. The callback must fire from a `useEffect(() => onNewCountChange(newOrders.length), [newOrders.length, onNewCountChange])` — never inline during render — to avoid a parent-`setState`-during-child-render warning and a render loop.
 
 ### 3. Line items — eager fetch via `/api/orders?withLines=1`
 
