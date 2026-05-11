@@ -70,12 +70,14 @@ export async function GET(req: NextRequest) {
 
     const rows = await getOrdersByTenant(tenantId);
 
-    if (searchParams.get("withLines") === "1" && rows.length > 0) {
-      const ids = rows.map((r) => r.id);
-      const lines = await db
-        .select()
-        .from(orderLines)
-        .where(inArray(orderLines.orderId, ids));
+    if (searchParams.get("withLines") === "1") {
+      // Only the "new" bucket needs lines (it's the batch-print picking queue).
+      // Skipping historical statuses keeps the payload proportional to the
+      // active queue rather than total order count.
+      const newIds = rows.filter((r) => r.status === "new").map((r) => r.id);
+      const lines = newIds.length > 0
+        ? await db.select().from(orderLines).where(inArray(orderLines.orderId, newIds))
+        : [];
       const linesByOrderId: Record<string, typeof lines> = {};
       for (const line of lines) {
         (linesByOrderId[line.orderId] ??= []).push(line);
