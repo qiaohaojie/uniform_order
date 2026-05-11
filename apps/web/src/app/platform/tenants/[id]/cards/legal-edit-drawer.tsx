@@ -45,6 +45,12 @@ export function LegalEditDrawer({
   pendingRef.current = pending;
 
   useEffect(() => {
+    // React 18+ Strict Mode runs effects setup → cleanup → setup on initial
+    // mount in dev. Reset mountedRef on every setup so the previous cleanup's
+    // `mountedRef.current = false` doesn't permanently disable post-await
+    // setters (the bug: save() would await, hit `if (!mountedRef.current)
+    // return`, and leave pending=true forever — drawer stuck on "Saving…").
+    mountedRef.current = true;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !pendingRef.current) onCloseRef.current();
     };
