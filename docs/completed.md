@@ -405,6 +405,26 @@ Right-side overlay drawer launched from the Edit link on the tenant detail Brand
 
 Files: `app/platform/tenants/[id]/actions.ts`, `app/platform/tenants/[id]/cards/branding-card.tsx`, `app/platform/tenants/[id]/cards/branding-edit-drawer.tsx`, `app/platform/tenants/new/actions.ts`, `app/platform/tenants/new/steps/step-2-branding.tsx`, `components/platform/accent-picker.tsx`, `components/platform/branding-preview.tsx`, `lib/platform/action-helpers.ts`, `lib/platform/schema.ts` (+449 / -88).
 
+### 4.21 Operator audit log (§4.6) ✅
+
+**Source:** `remaining_work.md` §4.6 — shipped 2026-05-11.
+
+Durable `audit_events` table + instrumentation across every operator and platform-admin mutation in both portals, surfaced as two read-only viewers (per-order timeline on operator order detail; per-tenant activity feed on platform tenant detail).
+
+**Schema (migration 0011_audit_events):** `audit_events` (uuid PK, `created_at` timestamptz, `tenant_id` text FK→`tenants.id` ON DELETE SET NULL, `actor_email`, `actor_role`, `action`, `target_type`, `target_id`, jsonb `payload`); three composite indexes (`(tenant_id, created_at DESC)`, `(target_type, target_id, created_at DESC)`, `(actor_email, created_at DESC)`); two CHECK constraints on `actor_role` + `target_type`. Migration was originally numbered `0010` but rebased to `0011` after PR #19's `0010_next_black_cat` merged first (as the plan anticipated). Applied via Neon MCP `run_sql_transaction` per the drizzle-kit-migrate workaround.
+
+**Helper (`logAuditEvent`):** log-after pattern — called only after the business mutation has committed, never inside a `db.batch`. Never throws to the caller. On insert failure, emits a synthetic `audit_log_failed` PostHog event. On insert success, best-effort co-emits the action name to PostHog with the payload.
+
+**Events (12 total):** order: `marked_ready`, `refund_issued`. Catalog: `catalog_item.created/updated/deleted` (PATCH uses read-before-write DB-state diff to compute `changedFields` + no-op short-circuit; variants treated as a composite "field"). Tenant: `draft_created`, `branding_updated` (PR-#18 drawer + wizard step), `operator_updated` (with previousEmail + no-op short-circuit), `stripe_account_linked`, `catalog_cloned`, `legal_updated` (PR-#19's editTenantLegal, targetType `tenant_legal_version`), `went_live` (captures previousStatus pre-flip).
+
+**Viewers:** `OrderActivityStrip` (server component) merges audit_events + order_refunds + a virtual "Order placed by {parentName}" row, sorts newest-first, caps at 20. `TenantActivityFeed` is audit_events-only, capped at 20, with a "Showing 20 most recent" footer when at the cap. Both use a shared `formatAuditEvent` formatter (12 event templates) and `formatRelativeTime` helper.
+
+**PostHog migration:** 4 existing event names in the provision wizard renamed to dotted form — `platform_tenant_created → tenant.draft_created`, `platform_tenant_stripe_created → tenant.stripe_account_linked`, `platform_tenant_catalog_cloned → tenant.catalog_cloned`, `platform_tenant_went_live → tenant.went_live`. Pre-existing branding/legal serverCapture calls (`platform_branding_edited`, `tenant_legal_edited`) were also replaced by `logAuditEvent`. Any PostHog dashboard / funnel / alert on the old names needs migration before deploy.
+
+**Known audit gaps documented in code:** refund route's reconcile-pending path (Stripe succeeded but DB insert failed) does not emit; the `charge.refunded` webhook reconciles the refund row + order status but does not currently emit an audit event. Comment in `refund/route.ts` flags this as a follow-up.
+
+Files: `apps/web/drizzle/0011_audit_events.sql`, `apps/web/drizzle/meta/_journal.json`, `apps/web/drizzle/meta/0011_snapshot.json`, `apps/web/src/db/schema.ts`, `apps/web/src/lib/audit/{types,log,format,load-order-activity,load-tenant-activity}.ts`, `apps/web/src/components/admin/order-activity-strip.tsx`, `apps/web/src/components/platform/tenant-activity-feed.tsx`, `apps/web/src/app/api/orders/[orderId]/route.ts`, `apps/web/src/app/api/orders/[orderId]/refund/route.ts`, `apps/web/src/app/api/catalog/route.ts`, `apps/web/src/app/api/catalog/[itemId]/route.ts`, `apps/web/src/app/platform/tenants/new/actions.ts`, `apps/web/src/app/platform/tenants/[id]/actions.ts`, `apps/web/src/app/admin/[tenant]/orders/[orderId]/page.tsx`, `apps/web/src/app/platform/tenants/[id]/page.tsx`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)

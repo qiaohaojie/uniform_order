@@ -130,11 +130,12 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 |---|---|---|
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
-| 4.6 | Operator audit log (who marked the order ready, who refunded) | Inferred from refund work |
 | 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
 | 4.8 | Drizzle migrations checked into the repo (currently schema is push-only) | Ops |
 
 > §4.1 (size hint), §4.9 (size-hint implementation), §4.10 (commit-split note), §4.11 (drizzle-kit `neon_auth.*` exclusion) are complete — moved to `docs/completed.md` §4.6–§4.10. IDs preserved for cross-reference; no renumbering.
+>
+> §4.6 (operator audit log) **shipped 2026-05-11** — see `docs/completed.md` §4.21. ID preserved.
 >
 > §4.5 (inventory stock counts) **dropped 2026-05-11** — not a product fit. School uniform shops fulfil from a storeroom; oversells are absorbed operationally (e.g., "two-week wait") and stale stock numbers create a known operator burden. Out-of-stock handling stays operator-mediated, not system-tracked. PDP §3.2 softened to match. ID preserved; do not re-raise without an explicit school request.
 >
