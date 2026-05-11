@@ -8,7 +8,7 @@ import { join } from "node:path";
 const BASE = "http://localhost:3000";
 const OUT = "docs/superpowers/audits/2026-05-11-a11y/auth-storage.json";
 const SIGN_IN_PATH = "/auth/sign-in";
-const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes — interactive sign-in
+const TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes — interactive sign-in incl. magic-link round-trip
 
 if (existsSync(OUT)) {
   console.log(`auth-storage.json already exists at ${OUT}`);

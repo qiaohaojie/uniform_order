@@ -1,0 +1,79 @@
+{
+  "screen": "checkout",
+  "url": "http://localhost:3000/nsbh/checkout",
+  "auth": true,
+  "timestamp": "2026-05-11T12:44:16.982Z",
+  "counts": {
+    "critical": 1,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "incomplete": 1,
+    "passes": 22
+  },
+  "violations": [
+    {
+      "id": "aria-hidden-focus",
+      "impact": "serious",
+      "help": "ARIA hidden element must not be focusable or contain focusable elements",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/aria-hidden-focus?application=playwright",
+      "tags": [
+        "cat.name-role-value",
+        "wcag2a",
+        "wcag412",
+        "TTv5",
+        "TT6.a",
+        "EN-301-549",
+        "EN-9.4.1.2",
+        "RGAAv4",
+        "RGAA-10.8.1"
+      ],
+      "nodes": [
+        {
+          "target": [
+            ".__PrivateStripeElement-input"
+          ],
+          "html": "<input class=\"__PrivateStripeEleme...\" aria-hidden=\"true\" aria-label=\" \" autocomplete=\"false\" maxlength=\"1\" style=\"border-width: medium...\">",
+          "failureSummary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+        }
+      ]
+    },
+    {
+      "id": "select-name",
+      "impact": "critical",
+      "help": "Select element must have an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/select-name?application=playwright",
+      "tags": [
+        "cat.forms",
+        "wcag2a",
+        "wcag412",
+        "section508",
+        "section508.22.n",
+        "TTv5",
+        "TT5.c",
+        "EN-301-549",
+        "EN-9.4.1.2",
+        "ACT",
+        "RGAAv4",
+        "RGAA-11.1.1"
+      ],
+      "nodes": [
+        {
+          "target": [
+            "select"
+          ],
+          "html": "<select class=\"w-full h-10 border rounded-md px-3 text-[13px] outline-none bg-white\" style=\"border-color:var(--color-rule);color:var(--color-ink)\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "bypass",
+      "impact": "serious",
+      "help": "Page must have means to bypass repeated blocks",
+      "nodes": 1
+    }
+  ]
+}

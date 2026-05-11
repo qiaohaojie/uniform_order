@@ -1,0 +1,51 @@
+{
+  "screen": "home",
+  "url": "http://localhost:3000/",
+  "auth": false,
+  "timestamp": "2026-05-11T12:44:09.933Z",
+  "counts": {
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "incomplete": 1,
+    "passes": 18
+  },
+  "violations": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/color-contrast?application=playwright",
+      "tags": [
+        "cat.color",
+        "wcag2aa",
+        "wcag143",
+        "TTv5",
+        "TT13.c",
+        "EN-301-549",
+        "EN-9.1.4.3",
+        "ACT",
+        "RGAAv4",
+        "RGAA-3.2.1"
+      ],
+      "nodes": [
+        {
+          "target": [
+            ".text-\\[11px\\]"
+          ],
+          "html": "<div class=\"text-[11px] font-bold tracking-[1.4px] uppercase\" style=\"color:var(--color-gold)\">Welcome</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.97 (foreground color: #b08a3e, background color: #faf6ee, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 2
+    }
+  ]
+}
