@@ -433,6 +433,22 @@ Now that schools author their own refund policy via PR #19's `tenant_legal_versi
 
 Files: `apps/web/src/lib/email/index.ts`, `apps/web/src/lib/email/templates/OrderConfirmation.tsx`, `apps/web/src/lib/email/templates/OrderReady.tsx`.
 
+### 4.23 Batch print pick slips on the orders page (§3.7 code half) ✅
+
+**Source:** `remaining_work.md` §3.7 code half — shipped via PR #21 (squash-merge `11667af`, 2026-05-11). Spec: `docs/superpowers/specs/2026-05-11-batch-print-pick-slips-design.md`; plan: `docs/superpowers/plans/2026-05-11-batch-print-pick-slips.md`.
+
+The "Print pick slips" button on `/admin/[tenant]/orders` now prints one pick slip per A4 page for every order in status `new`, in the same visual format as the existing single-slip print from the order detail page. The card body was extracted into a shared `<PickSlip>` (`apps/web/src/components/admin/pick-slip.tsx`) that takes JSON-shaped props (`PickSlipOrder` with `createdAt` as ISO string, decimals as strings) and an optional `refundsSlot` so the detail page can keep its refund block rendered inside the same visual card while the batch path omits it. The barcode helper moved into the shared component as `PickSlipBarcode`.
+
+`OrdersBoard` now requests `/api/orders?tenantId=…&withLines=1` and renders a hidden `<div className="print:block hidden">` block of `<PickSlip>` components as a **fragment sibling** of the Kanban (so the Kanban's `overflow-hidden` cannot clip multi-page print output past page 1). The Kanban root carries `data-no-print` — required, since the Kanban is not inside an `aside` and would otherwise survive the existing `aside { display: none }` rule. Slip order is FIFO by `createdAt ASC`. `newOrders.length` is lifted to `OrdersPageClient` via an `onNewCountChange` callback fired from a `useEffect` keyed on the count (NOT inline during render, to avoid the parent-setState-during-child-render warning).
+
+`/api/orders` GET now handles `?withLines=1` on the operator-tenant path: it filters to `status = 'new'` order ids before issuing a single batched `inArray` query against `orderLines`, so the wire payload scales with the active picking queue (typically ≤ 50) rather than total historical order count. Non-`new` orders still appear in the response with an empty `lines: []` array. Parent-email path is unchanged.
+
+The topbar button is disabled at 0 new orders (with a tooltip), suffixes the live count to the label ("Print pick slips (7)"), and shows a `window.confirm` dialog when printing ≥ 25 slips (rough "full day" threshold to prevent accidental paper avalanches). `src/index.css` gained a global `@page { size: A4; margin: 12mm; }` inside the existing `@media print` block — note that the rule is global, so any future `window.print()` caller inherits A4 / 12 mm unless it opts out with named pages.
+
+Remaining work (manual, not code): real A4 paper QA in Chrome and Safari on macOS — single slip prints clean, batch prints one slip per page with no trailing blank, parent-note banner appears on slips that have a note, barcode renders, Kanban never appears in print output. Tracked in `remaining_work.md` §3.7.
+
+Files: `apps/web/src/components/admin/pick-slip.tsx`, `apps/web/src/app/admin/[tenant]/orders/[orderId]/page.tsx`, `apps/web/src/app/admin/[tenant]/orders/orders-board.tsx`, `apps/web/src/app/admin/[tenant]/orders/orders-page-client.tsx`, `apps/web/src/app/api/orders/route.ts`, `apps/web/src/index.css`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)

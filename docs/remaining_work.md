@@ -22,17 +22,7 @@ This document lists every item that must be resolved (or explicitly deferred) be
 
 ## 2. 🟠 High — required for an acceptable v1
 
-> §2.1 (refund/exchange UI), §2.3 (Stripe webhook handler), §2.6 (production env config — code), and §2.7 (error handling / observability — code) are now complete and have been moved to `docs/completed.md` §4. Their leftover ops/verification follow-ups are tracked below in §2.8.
->
-> §3.4 (parent order detail page), §3.5 (Stripe Connect onboarding sync), §4.1 + §4.9 (size hint), §4.10 (commit-split decision), and §4.11 (drizzle-kit `neon_auth.*` exclusion) are also complete — moved to `docs/completed.md` §4.6–§4.10.
->
-> §2.10 (`db.transaction` → `db.batch` fix, PR #10) and §3.3 ("add another child", PR #6) are complete — moved to `docs/completed.md` §4.11 and §4.12. §3.3 production ops verifications carried over to §2.11 below.
->
-> §3.10 follow-ups #1 and #2 are complete — orphan `/[tenant]/refund-policy` removal in `docs/completed.md` §4.13; school-onboarding capture + per-tenant email policy link shipped via PR #19 (see §4.22). Only the deferred platform `/terms` page remains below.
->
-> §3.1 NSBH catalog seed (PR #12, `e4ef0c7`) is complete — moved to `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt-ss/shirt-ls variant gaps are tracked in §2.12 below.
->
-> §2.2 (super-admin / platform portal — all 6 screens) is now complete and has been moved to `docs/completed.md` §4.16–§4.20. PR #18 (`1ea6055`) shipped the final branding editor drawer.
+> §2.1, §2.2, §2.3, §2.6, §2.7, §2.10, §3.1, §3.3, §3.4, §3.5, §3.10 follow-ups #1/#2, §4.1, §4.9, §4.10, §4.11 — **shipped.** See `docs/completed.md` §4. Their ops / verification follow-ups (where they exist) remain below in §2.8, §2.9, §2.11, §2.12.
 
 ### 2.8 Ops / verification follow-ups (carried over from completed code work)
 
@@ -50,7 +40,6 @@ The catalog management feature (self-service add/edit catalog items, image uploa
 - [ ] **`UPLOADTHING_TOKEN` env var** — get the token from `https://uploadthing.com/dashboard → API Keys` (single combined v7 token, no separate key/app id). Add via hPanel → Advanced → Node.js → Environment Variables, then **restart the Node.js app** from the same panel. Without this, image uploads silently fail.
 - [ ] **CSP / `next/image` host allowlist** — already wired in `apps/web/next.config.ts` for `utfs.io`, `*.utfs.io`, `*.ufs.sh` (commit `dd35a70`). Just confirm the deployed build serves the same headers (curl `-I` the homepage and check `Content-Security-Policy`).
 - [ ] **End-to-end smoke in production** — log in as a platform admin → `/admin/<tenant>/catalog` → add an item with an image upload → confirm a `https://utfs.io/f/...` URL lands in `catalog_items.image_url` and the parent shop renders it. The dev-mode HMR caused some intermediate `UploadDropzone` glitches that don't repeat in production builds (no Fast Refresh) but worth one full-loop verification.
-- [x] **Migration 0008 (`catalog_image_url`)** — already applied to Neon prod (verified 2026-05-08; `__drizzle_migrations` row id=10 matches journal entry for `0008_catalog_image_url`). Nothing to do.
 - [ ] **(Optional) UploadThing free-tier monitoring** — current plan covers 2 GB storage / 100 GB bandwidth. With ~16 product photos × 2 schools × <2 MB each, usage is negligible. Re-evaluate at tenant #5 or any image-heavy redesign (e.g. high-res hero shots, multi-angle product photos).
 
 ### 2.12 Catalog seed (NSBH paper form) — production + RGSH follow-ups
@@ -59,7 +48,6 @@ The catalog management feature (self-service add/edit catalog items, image uploa
 
 - [ ] **Run prod NSBH seed.** `apps/web/scripts/seed.mjs` is idempotent (`ON CONFLICT DO UPDATE` for items, `DELETE + INSERT` for variants). Run against production Neon once these changes deploy: `cd apps/web && node scripts/seed.mjs` with the prod `DATABASE_URL`. Today the parent shop renders from `CATALOG` in `lib/data.ts`, so the prod seed only affects the admin catalog table — it becomes load-bearing once parent-shop DB-reads land.
 - [ ] **RGSH catalog (separate task).** Needs school sign-off on the catalog list — RGSH currently inherits NSBH-only seed entries. Capture as a school-onboarding sub-task; super-admin portal now exists (`completed.md` §4.16–§4.20) so onboarding workflow can drive this.
-- [x] **Pre-existing variant misalignments** ✅ — shipped via PR #13 (`e7bccf0`, 2026-05-09); see `completed.md` §4.15.
 
 ### 2.11 Parent-account ("add another child") — production ops follow-ups
 
@@ -76,17 +64,9 @@ The parent-account / "add another child" feature shipped via PR #6 (squash-merge
 
 ## 3. 🟡 Medium — required by PDP/prototype, tolerable for soft launch
 
-### 3.1 Missing catalog items from the paper form ✅
-
-Done (NSBH). See `docs/completed.md` §4.14. RGSH catalog, production NSBH seed run, and pre-existing shirt variant gaps carried over to §2.12 below.
-
 ### 3.2 Refund-policy *page* (the actual content)
 
 Already counted in §1.5 as a blocker for the consent step. Listed again here because the content itself (copy, signed off by each school's bursar) is a content task, not a code task.
-
-### 3.3 "Add another child" flow on school picker ✅
-
-Done. See `docs/completed.md` §4.12. Production ops verifications carried over to §2.11 above.
 
 ### 3.6 GST / BAS report — auditor sign-off
 
@@ -94,9 +74,7 @@ The reports page produces monthly GST totals client-side. Before go-live, have a
 
 ### 3.7 Print stylesheet QA — manual A4 verification only
 
-**Code half shipped.** `window.print()` works for the single-slip path (order detail page) and for batch picking from the orders page (one slip per A4 page for every order in status `new`, via the shared `PickSlip` component, `@page A4` rule, and `break-after-page` between slips). See `docs/superpowers/plans/2026-05-11-batch-print-pick-slips.md` and spec `…/specs/2026-05-11-batch-print-pick-slips-design.md`.
-
-**Remaining (manual):** Real A4 paper QA in Chrome and Safari on macOS — single slip prints clean, batch prints one slip per page with no trailing blank, parent-note banner appears on slips that have a note, barcode renders, Kanban never appears in print output.
+Code half shipped via PR #21 (squash `11667af`); see `completed.md` §4.23. Remaining: real A4 paper QA in Chrome and Safari on macOS — single slip prints clean, batch prints one slip per page with no trailing blank, parent-note banner appears on slips that have a note, barcode renders, Kanban never appears in print output.
 
 ### 3.8 Accessibility audit
 
@@ -106,17 +84,11 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 
 `MobileShell` caps at 430px. Verify behaviour on iPhone SE (375px), Android landscape, and iPad split-view.
 
-### 3.10 Refund policy — capture during school onboarding (v1 ships with inline contact only)
+### 3.10 Platform `/terms` page — deferred indefinitely
 
-**v1 status (shipped):** Order confirmation email no longer links to a policy page. Footer now reads "For refund or exchange questions, contact {tenantName} at {shopEmail}." No platform-authored refund text under uniformorder.online's name. No `/terms` page. (Commit on `worktree-parent-order-detail`.)
+The two §3.10 follow-ups (school-authored refund-policy capture, per-tenant policy link in email) shipped via PR #19; see `completed.md` §4.22.
 
-**Follow-ups (not v1 blockers):**
-
-1. ✅ **School-authored refund-policy capture** — shipped via PR #19 (`0c58484`). `tenant_legal_versions` table, `editTenantLegal` action on the platform tenant detail page, and a `/[tenant]/refund-policy` route are live. Version chain + declarant name/role/date persisted; seller-of-record acknowledgement checkbox included.
-
-2. ✅ **Re-introduce per-tenant policy link in email (v2)** — shipped as part of PR #19 (`0c58484`). `lib/email/index.ts` derives `refundPolicyUrl` from `tenant.currentLegalVersionId` and threads it to both templates; `OrderConfirmation.tsx` and `OrderReady.tsx` render a "refund policy" link when set and fall back to the inline contact line when null. Moved to `docs/completed.md` §4.22.
-
-3. **Platform `/terms` page — deferred indefinitely.** Not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
+Platform-level `/terms` page is **deferred indefinitely** — not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
 
 **Reference:** `my_doc/Legal/Refund_Policy/2026-05-07-refund-policy-ownership.md` for the full reasoning across Stripe Connect, marketplace practice, business, operational, and AU legal lenses, plus the v1 vs. v2 split.
 
@@ -130,15 +102,12 @@ No automated a11y tests run today. At minimum: keyboard nav through the parent f
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
 | 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
 
-> §4.1 (size hint), §4.9 (size-hint implementation), §4.10 (commit-split note), §4.11 (drizzle-kit `neon_auth.*` exclusion) are complete — moved to `docs/completed.md` §4.6–§4.10. IDs preserved for cross-reference; no renumbering.
->
-> §4.6 (operator audit log) **shipped 2026-05-11** — see `docs/completed.md` §4.21. ID preserved.
->
-> §4.8 (Drizzle migrations committed to the repo) **resolved** — migrations have been file-tracked under `apps/web/drizzle/` since the very first migration. The original audit entry was incorrect. ID preserved; do not re-raise.
->
-> §4.5 (inventory stock counts) **dropped 2026-05-11** — not a product fit. School uniform shops fulfil from a storeroom; oversells are absorbed operationally (e.g., "two-week wait") and stale stock numbers create a known operator burden. Out-of-stock handling stays operator-mediated, not system-tracked. PDP §3.2 softened to match. ID preserved; do not re-raise without an explicit school request.
->
-> §4.2 (Dashboard "New product" + "Export" buttons) **resolved 2026-05-11** — "New product" now links to `/admin/[tenant]/catalog` (where the add-item drawer lives). "Export" deleted as redundant with the real CSV exporter on the Reports page. ID preserved.
+> Closed §4 IDs (preserved for cross-reference, no renumbering):
+> - §4.1 / §4.9 / §4.10 / §4.11 — shipped, see `completed.md` §4.6–§4.10.
+> - §4.6 — operator audit log, shipped 2026-05-11, `completed.md` §4.21.
+> - §4.8 — Drizzle migrations were already file-tracked; original audit entry was incorrect.
+> - §4.5 — inventory stock counts dropped 2026-05-11 as not a product fit (school shops fulfil from a storeroom; oversells absorbed operationally). PDP §3.2 softened to match. Do not re-raise without an explicit school request.
+> - §4.2 — Dashboard "New product" now links to `/admin/[tenant]/catalog`; "Export" deleted as redundant with the Reports CSV exporter.
 
 ---
 
