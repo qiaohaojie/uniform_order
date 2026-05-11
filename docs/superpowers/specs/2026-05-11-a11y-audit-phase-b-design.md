@@ -43,9 +43,17 @@ Why DRY at the component level rather than `aria-label` per field: (a) a real `<
 
 ### A3 — `--color-gold-text` darker variant
 
-Add `--color-gold-text` to `apps/web/src/index.css` under the existing `@theme` block, sibling to `--color-gold: #B08A3E`. The new token must clear 4.5:1 contrast against parchment `#FAF6EE`; computed target is approximately `#8C6A28`–`#947030`. Exact value picked during execution by ratio computation, choosing the lightest value that passes (preserves visual closeness to existing gold).
+Add `--color-gold-text` to `apps/web/src/index.css` under the existing `@theme` block, sibling to `--color-gold: #B08A3E`. Target value: **`#8C6A28`** (computed ≈ 4.7:1 against parchment `#FAF6EE`, clears the 4.5:1 normal-text minimum with margin). The value is verified during execution by direct contrast computation before commit (see Correctness gates).
 
-Switch the home eyebrow `<div class="text-[11px] font-bold tracking-[1.4px] uppercase" style="color:var(--color-gold)">Welcome</div>` to `color: var(--color-gold-text)`. Grep for other small-bold-gold uses across the codebase during the fix; if any qualify as "small text" under WCAG 1.4.3 (< 18pt regular or < 14pt bold), switch them too. Decorative / large / non-text uses keep `--color-gold`.
+Three small-bold-gold parent-flow eyebrows switch to `var(--color-gold-text)`:
+
+- `apps/web/src/app/home-client.tsx:99` (home "Welcome" eyebrow — the A3 finding)
+- `apps/web/src/app/home-client.tsx:188` (second small-bold-gold eyebrow on home)
+- `apps/web/src/app/orders/[orderId]/order-detail-client.tsx:220` (parent order-status page eyebrow)
+
+Out-of-scope under §3.8 (parent-flow audit) but flagged here for traceability: `apps/web/src/components/admin/pick-slip.tsx:164` uses the same small-bold-gold pattern in an admin component. Deferred to a future admin a11y audit; not changed in this PR to keep parent and admin contrast policies separately auditable.
+
+Other `--color-gold` uses across the codebase (accent strokes, chips, large decorative uses) are untouched.
 
 ### A2 — Stripe upgrade then re-verify
 
@@ -72,7 +80,8 @@ Re-run `audit.mjs` producing 6 new JSON files in `docs/superpowers/audits/2026-0
 
 - **Modify:** `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` — `FieldLabel` signature + 6 input/select `id` attributes.
 - **Modify:** `apps/web/src/index.css` — add `--color-gold-text` token.
-- **Modify:** `apps/web/src/app/page.tsx` (or wherever the home "Welcome" eyebrow lives) — switch inline `color:var(--color-gold)` to `var(--color-gold-text)`. Plan task will pinpoint the exact file.
+- **Modify:** `apps/web/src/app/home-client.tsx` — lines 99 and 188, switch inline `color:var(--color-gold)` to `var(--color-gold-text)`.
+- **Modify:** `apps/web/src/app/orders/[orderId]/order-detail-client.tsx` — line 220, same swap.
 - **Modify:** `apps/web/package.json` (+ `pnpm-lock.yaml`) — bump `@stripe/stripe-js`.
 - **Modify (conditional):** `docs/superpowers/audits/2026-05-11-a11y/audit.mjs` — `.exclude('.__PrivateStripeElement-input')` only if upgrade doesn't resolve A2.
 - **Create:** `docs/superpowers/audits/2026-05-11-a11y/keyboard-walkthrough.md`.
@@ -94,8 +103,10 @@ PR title: `feat(a11y): §3.8 fixes — WCAG 2.1 A+AA pass + keyboard walkthrough
 ## Correctness gates
 
 - `pnpm check-types:web` clean after each code commit (1, 2, 3, and any A4+ fix commits).
+- After commit 2 (A3): direct contrast computation confirms the chosen `--color-gold-text` hex resolves to ≥ 4.5:1 against `#FAF6EE`. Result recorded inline in the commit message or in `findings.md`. This is a local gate independent of the axe re-run.
 - Manual checkout smoke test after commit 3 (Stripe upgrade): card mounts, validates, confirms a test-card payment, lands on `/order/placed`.
 - Keyboard walkthrough markdown contains 6 sections, each with all 5 checks explicitly ticked or marked failing.
+- Before re-running `audit.mjs` in commit 5: confirm `auth-storage.json` still resolves an authenticated `/checkout` (audit script aborts with a pointer to `setup-auth.mjs` if the session has expired). Avoids the failure mode where stale auth produces 401-driven a11y noise rather than real findings.
 - Re-audit JSON in commit 5: P0 = 0, P1 = 0 across all 6 screens. Any unexpected new finding blocks the PR.
 
 ## Known risks
