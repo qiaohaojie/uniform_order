@@ -8,6 +8,7 @@ import { Crest } from "@/components/crest";
 import { CartIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
+import { TenantFooter } from "@/components/tenant-footer";
 import { CatalogGrid } from "./catalog-grid";
 
 const DEFAULT_CATEGORY = "Winter";
@@ -80,6 +81,9 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
         accent={tenant.accent}
       />
 
+      <TenantFooter tenant={tenantRecord} />
+      {/* Spacer so footer isn't obscured by the fixed BottomNav */}
+      <div className="pb-16" />
       <BottomNav active="shop" shopHref={`/${tenant.id}`} accent={tenant.accent} />
     </MobileShell>
   );

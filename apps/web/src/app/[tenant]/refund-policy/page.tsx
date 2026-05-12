@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
+import { TenantFooter } from "@/components/tenant-footer";
 
 // Tenant-internal document, not an SEO target.
 export const metadata: Metadata = {
@@ -51,6 +52,7 @@ export default async function RefundPolicyPage({
           })}
         </div>
       </div>
+      <TenantFooter tenant={tenant} />
     </MobileShell>
   );
 }

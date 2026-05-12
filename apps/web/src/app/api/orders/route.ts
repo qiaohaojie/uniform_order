@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines, tenants } from "@/db";
 import {
+  getActiveCatalog,
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
   getTenant,
@@ -16,6 +17,9 @@ import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
+import { priceLookupKey, round2 } from "@/lib/order-totals";
+import { SHIP_FEE_AUD } from "@/lib/shipping";
+import { getStripe } from "@/lib/stripe";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
@@ -117,7 +121,6 @@ export async function POST(req: NextRequest) {
       studentYear,
       studentRoll,
       delivery,
-      deliveryFee,
       subtotal,
       gst,
       total,
@@ -154,6 +157,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // ─── Server-authoritative totals (post-payment) ───────────────────────
+    //
+    // Payment has already been authorised by /api/stripe/payment-intent, which
+    // ran the catalog-price assertion at PI-creation time and seeded
+    // paymentIntents.create({ amount }) with the server-computed total. Stripe
+    // has now charged that amount.
+    //
+    // Re-running the catalog assertion here would introduce a paid-without-order
+    // failure mode: if an operator deactivates a variant or changes a price
+    // between PI creation and order finalisation, the assertion rejects with
+    // `totals_mismatch`, but the customer has already been charged. The
+    // recoverable path is to trust the PaymentIntent's `amount` as the
+    // authoritative total and derive the rest server-side.
+    //
+    // Structural validation (qty, unitPrice types) stays — we still want to
+    // refuse garbage payloads. Per-line unitPrice falls back to the client
+    // value when the catalog has shifted; this is fine because the total is
+    // bounded by what Stripe actually charged.
+    const piTypeError = (() => {
+      if (!Array.isArray(lines) || lines.length === 0) return "lines_invalid";
+      for (const l of lines) {
+        if (!Number.isInteger(l.qty) || l.qty <= 0) return "invalid_qty";
+        if (typeof l.unitPrice !== "number" || !Number.isFinite(l.unitPrice))
+          return "invalid_unit_price";
+      }
+      return null;
+    })();
+    if (piTypeError) {
+      return NextResponse.json(
+        { error: "totals_mismatch", reason: piTypeError },
+        { status: 400 },
+      );
+    }
+
+    // Idempotency check runs before the Stripe API round-trip so retries
+    // (double-clicks, network flakes) short-circuit at the DB lookup instead
+    // of incurring an unnecessary paymentIntents.retrieve.
     const [existingOrder] = await db
       .select({ id: orders.id, userId: orders.userId })
       .from(orders)
@@ -168,6 +208,61 @@ export async function POST(req: NextRequest) {
         { orderId: existingOrder.id, idempotent: true },
         { status: 200 }
       );
+    }
+
+    // Retrieve the PaymentIntent for authoritative total + status check.
+    let stripePI;
+    try {
+      stripePI = await getStripe().paymentIntents.retrieve(
+        normalizedStripePaymentIntentId,
+      );
+    } catch {
+      return NextResponse.json(
+        { error: "stripe_pi_not_found" },
+        { status: 400 },
+      );
+    }
+
+    // Refuse to write an order row unless the PI is in a terminal-success
+    // state. Without this, a client could submit a clientSecret while the PI
+    // is still `requires_confirmation` / `requires_action` / `processing` and
+    // slip an order row through ahead of (or instead of) a successful charge.
+    if (stripePI.status !== "succeeded") {
+      return NextResponse.json(
+        { error: "stripe_pi_not_succeeded", status: stripePI.status },
+        { status: 400 },
+      );
+    }
+
+    const authoritativeTotal = stripePI.amount / 100;
+    if (Math.abs(total - authoritativeTotal) > 0.01) {
+      return NextResponse.json(
+        {
+          error: "totals_mismatch",
+          reason: "client_total_drift",
+          expected: { total: authoritativeTotal },
+          received: { total },
+        },
+        { status: 400 },
+      );
+    }
+    const shipping = delivery === "ship" ? SHIP_FEE_AUD : 0;
+    const verifiedTotals = {
+      subtotal: round2(authoritativeTotal - shipping),
+      shipping,
+      gst: round2(authoritativeTotal / 11),
+      total: round2(authoritativeTotal),
+    };
+
+    // Per-line price snapshot: prefer the live catalog when the variant still
+    // exists (keeps receipts in sync with the shop), fall back to the client
+    // value otherwise. Either way the total is locked by Stripe above.
+    const catalog = await getActiveCatalog(tenantId);
+    const priceLookup = new Map<string, number>();
+    for (const item of catalog) {
+      for (const v of item.variants) {
+        priceLookup.set(priceLookupKey(item.id, v.label), v.price);
+      }
     }
 
     let normalizedParentNote: string | null = null;
@@ -209,10 +304,10 @@ export async function POST(req: NextRequest) {
         studentYear,
         studentRoll,
         delivery: delivery ?? "pickup",
-        deliveryFee: String(deliveryFee ?? 0),
-        subtotal: String(subtotal),
-        gst: String(gst),
-        total: String(total),
+        deliveryFee: String(verifiedTotals.shipping),
+        subtotal: String(verifiedTotals.subtotal),
+        gst: String(verifiedTotals.gst),
+        total: String(verifiedTotals.total),
         stripePaymentIntentId: normalizedStripePaymentIntentId,
         stripeRef: normalizedStripePaymentIntentId,
         refundPolicyAcceptedAt: new Date(),
@@ -221,16 +316,26 @@ export async function POST(req: NextRequest) {
         legalVersionId,
       });
       const linesInsert = db.insert(orderLines).values(
-        lines.map((line) => ({
-          orderId,
-          itemId: line.itemId,
-          itemName: line.itemName,
-          variantLabel: line.variantLabel,
-          size: line.size?.trim() || null,
-          qty: line.qty,
-          unitPrice: String(line.unitPrice),
-          lineTotal: String(line.lineTotal),
-        }))
+        lines.map((line) => {
+          // Prefer the live catalog price; fall back to the client value if
+          // the variant has been deactivated/renamed since PI creation. Total
+          // is locked by Stripe in the assertion above, so client-supplied
+          // unitPrice can't be used to under-pay the order.
+          const catalogPrice = priceLookup.get(
+            priceLookupKey(line.itemId, line.variantLabel),
+          );
+          const unitPrice = catalogPrice ?? line.unitPrice;
+          return {
+            orderId,
+            itemId: line.itemId,
+            itemName: line.itemName,
+            variantLabel: line.variantLabel,
+            size: line.size?.trim() || null,
+            qty: line.qty,
+            unitPrice: String(unitPrice),
+            lineTotal: String(round2(unitPrice * line.qty)),
+          };
+        })
       );
       await db.batch([orderInsert, linesInsert]);
     };
