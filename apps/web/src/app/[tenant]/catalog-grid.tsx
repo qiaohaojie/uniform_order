@@ -127,8 +127,9 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
       ) : (
         <div className="flex-1 px-4 pb-3 grid grid-cols-2 gap-3 content-start">
           {visible.map((it) => {
-            const minP = Math.min(...it.variants.map((v) => v.price));
-            const maxP = Math.max(...it.variants.map((v) => v.price));
+            const prices = it.variants.map((v) => v.price);
+            const minP = prices.length > 0 ? Math.min(...prices) : 0;
+            const maxP = prices.length > 0 ? Math.max(...prices) : 0;
             return (
               <Link
                 key={it.id}
