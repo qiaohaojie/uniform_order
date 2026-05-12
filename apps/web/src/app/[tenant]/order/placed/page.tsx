@@ -7,6 +7,7 @@ import { DoubleRule } from "@/components/double-rule";
 import { Btn } from "@/components/btn";
 import { CheckIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
+import { TenantFooter } from "@/components/tenant-footer";
 
 export default async function OrderPlacedPage({ params, searchParams }: PageProps<"/[tenant]/order/placed">) {
   const { tenant: slug } = await params;
@@ -74,6 +75,7 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
           </Btn>
         </Link>
       </div>
+      <TenantFooter tenant={tenantRecord} />
     </MobileShell>
   );
 }

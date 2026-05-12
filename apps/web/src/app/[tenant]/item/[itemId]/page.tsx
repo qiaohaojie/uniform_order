@@ -4,6 +4,7 @@ import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { GarmentVector } from "@/components/garment";
 import { Chip } from "@/components/chip";
 import { MobileShell } from "@/components/mobile-shell";
+import { TenantFooter } from "@/components/tenant-footer";
 import { ItemDetailInteractive } from "./interactive";
 
 export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/item/[itemId]">) {
@@ -61,6 +62,7 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
           )}
         </div>
       </ItemDetailInteractive>
+      <TenantFooter tenant={tenantRecord} />
     </MobileShell>
   );
 }

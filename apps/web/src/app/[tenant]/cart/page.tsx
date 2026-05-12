@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTenant, toTenantBrand } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
+import { TenantFooter } from "@/components/tenant-footer";
 import { CartScreen } from "./cart-screen";
 import { getActiveChild } from "@/lib/active-child.server";
 
@@ -17,6 +18,7 @@ export default async function CartPage({ params }: PageProps<"/[tenant]/cart">) 
   return (
     <MobileShell bg="var(--color-paper)">
       <CartScreen tenant={tenant} activeChild={activeChild} />
+      <TenantFooter tenant={tenantRecord} />
     </MobileShell>
   );
 }
