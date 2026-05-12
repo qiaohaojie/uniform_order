@@ -485,6 +485,38 @@ Re-audit (`axe/after/`) confirms P0 + P1 = 0 across all 6 screens (checkout flip
 
 Files: `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` (FieldLabel + ids), `apps/web/src/index.css` (`--color-gold-text` token), `apps/web/src/app/home-client.tsx`, `apps/web/src/app/orders/[orderId]/order-detail-client.tsx`, `docs/superpowers/audits/2026-05-11-a11y/` (axe/ baseline + axe/after/ JSON, `findings.md`, `keyboard-walkthrough.md`, `audit.mjs`).
 
+### 4.26 Catalog search (parent shop) ✅
+
+**Source:** `remaining_work.md` §3.11 — shipped 2026-05-12 via PR #25 (squash `409c1e3`). Spec: `docs/superpowers/specs/2026-05-12-catalog-search-design.md`; plan: `docs/superpowers/plans/2026-05-12-catalog-search.md`; identified by `my_doc/NSBH/gap-analysis.md` as the #1 credibility bug.
+
+The parent shop's "Search uniforms" pill at `app/[tenant]/page.tsx:78-86` was a static `<div>` with no input, no handler, no state — parents tapped it and nothing happened. Converted to a working client-side filter with mobile-first hygiene and a debounced screen-reader announcement.
+
+**Architecture:** New `"use client"` component `apps/web/src/app/[tenant]/catalog-grid.tsx` absorbs the search input, chips, result-count line, grid, and empty state, returned as a React Fragment so each region remains a sibling flex child of `MobileShell`. `page.tsx` stays an RSC and passes the full tenant catalog plus the URL-resolved `activeCat` down. Chip navigation stays URL-driven (`<Link href="?cat=...">`); the move into the client component doesn't change navigation semantics. New `ClearIcon` (×) added to `components/icons.tsx` matching the existing stroke style.
+
+**Behavior:**
+- Case-insensitive substring match on `(item.name + " " + item.cat).toLowerCase()`.
+- Empty query → chip-scoped (zero-JS server-rendered behavior preserved).
+- Non-empty query → spans **all categories**; chip is visually still highlighted but ignored (the chips-inert-during-search visual disconnect is tracked as issue #27 / §4.12).
+- Result-count line switches copy between `{activeCat} Uniform · N items` and `Results for "{q}" · N items in all categories`. Pluralises `item`/`items`. Suppressed when `query && visible.length === 0` so the empty state stands alone.
+- Empty state: inline `No items match "{q}". [Clear search]`. One button only — a second "Browse all" CTA would mislead because `DEFAULT_CATEGORY = "Winter"` means there's no "no chip active" state to land on.
+- `type="text"` + `inputMode="search"` + `enterKeyHint="search"` (deliberately not `type="search"` — WebKit/Chromium add a native × that would collide with our custom one).
+- Focus management: shared `clearSearch()` helper calls `inputRef.current?.focus()` so focus returns to the input from both the × button (which unmounts after clear) and the empty-state Clear button.
+- A11y live region (`role="status" aria-live="polite"`) debounced 300ms via `setTimeout` so screen readers get one announcement after typing settles rather than per-keystroke spam. Filter itself runs synchronously.
+- Focus ring on the wrapper pill via `focus-within:ring-2 focus-within:ring-offset-1 focus-within:ring-[var(--color-ink)]` — neutral colour (not tenant accent), consistent with chips.
+
+**Spec deviation called out in plan Task 2:** spec said chips would remain in `page.tsx`; they moved into `CatalogGrid` because all three flex children must live under one Fragment. `<Link>` URL semantics are unchanged.
+
+**Review fixes applied during the PR:**
+- Gemini: `Math.min/max` on a spread empty `variants` array returns `±Infinity` — guarded with a `prices.length > 0` check (pre-existing latent bug moved from `page.tsx`).
+- Redundant count line ("· 0 items in all categories") above an empty state — suppressed via a `!(query && visible.length === 0)` wrapper.
+
+**Deferred follow-ups (filed, not closed):**
+- **Issue #27** (→ `remaining_work.md` §4.12) — chips-inert visual disconnect during active search.
+- **Issue #26** (→ `remaining_work.md` §2.8) — pre-existing `useSearchParams` Suspense build failure surfaced during PR verification (`pnpm build:web` fails on `/_not-found`; verified pre-existing on main). Not introduced by this PR.
+- PostHog `catalog_search` event, synonym map, search-result highlighting, URL persistence (`?q=`) — all explicit non-goals in the spec, revisit only on PostHog signal.
+
+Files: `apps/web/src/app/[tenant]/catalog-grid.tsx` (new), `apps/web/src/app/[tenant]/page.tsx` (chip-filter logic and search/chips/h3/grid markup removed; renders `<CatalogGrid>`), `apps/web/src/components/icons.tsx` (`ClearIcon` added).
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
