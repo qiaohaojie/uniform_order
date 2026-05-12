@@ -1,0 +1,7 @@
+# Placeholder for Apple Pay domain verification.
+# Post-merge, replace this file's contents with the real
+# domain-association string from Stripe Dashboard:
+#   Stripe Dashboard → Settings → Payment methods →
+#   Apple Pay → Add new domain → uniformorder.online
+# Then redeploy. Apple Pay will not appear in the wallet tab
+# until the file matches Apple's expected content.
