@@ -526,7 +526,7 @@ export async function addCatalogItem(data: {
   imageUrl?: string | null;
   active?: boolean;
   sortOrder?: number;
-  variants: { label: string; price: number; active?: boolean }[];
+  variants: { label: string; price: number; active?: boolean; sizes?: string[] }[];
 }) {
   // neon-http driver doesn't support interactive db.transaction; use db.batch
   // which runs all statements atomically in a single HTTP round-trip.
@@ -546,6 +546,7 @@ export async function addCatalogItem(data: {
       label: v.label,
       price: String(v.price),
       active: v.active ?? true,
+      sizes: v.sizes ?? [],
     })
   );
   const stmts: [BatchItem<"pg">, ...BatchItem<"pg">[]] = [
@@ -581,6 +582,7 @@ export async function updateCatalogItem(
     label: string;
     price: number;
     active?: boolean;
+    sizes?: string[];
   }[]
 ) {
   // neon-http driver doesn't support interactive db.transaction. We read
@@ -625,6 +627,7 @@ export async function updateCatalogItem(
             label: v.label,
             price: String(v.price),
             active: v.active ?? true,
+            sizes: v.sizes ?? [],
           })
           .where(eq(catalogVariants.id, v.id))
       );
@@ -636,6 +639,7 @@ export async function updateCatalogItem(
           label: v.label,
           price: String(v.price),
           active: v.active ?? true,
+          sizes: v.sizes ?? [],
         })
       );
     }
@@ -891,7 +895,7 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
     map.get(r.itemId)!.variants.push({
       label: r.varLabel,
       price: Number(r.varPrice),
-      sizes: (r.varSizes as string[]) ?? [],
+      sizes: Array.isArray(r.varSizes) ? (r.varSizes as string[]) : [],
     });
   }
   return Array.from(map.values());
