@@ -5,9 +5,10 @@ export type AuditTargetType =
   | "order"
   | "tenant"
   | "catalog_item"
-  | "tenant_legal_version";
+  | "tenant_legal_version"
+  | "payment_intent";
 
-export type AuditActorRole = "operator" | "platform_admin";
+export type AuditActorRole = "operator" | "platform_admin" | "system";
 
 /** Drizzle row shape — what reads from `audit_events` give back. */
 export type AuditEvent = InferSelectModel<typeof auditEvents>;

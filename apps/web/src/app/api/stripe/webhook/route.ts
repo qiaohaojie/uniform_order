@@ -8,6 +8,7 @@ import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { getStripe } from "@/lib/stripe";
 import { revalidateTag } from "next/cache";
 import { tenantBillingTag } from "@/lib/platform/stripe-billing";
+import { logAuditEvent } from "@/lib/audit/log";
 
 export const runtime = "nodejs"; // required: edge runtime can't read raw body for Stripe sig
 
@@ -86,6 +87,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  // ─── payment_intent.payment_failed ────────────────────────────────────────
+  // No order row exists at this point — /api/orders inserts only after
+  // confirmPayment succeeds. We log the failure to audit_events targeted at
+  // the PaymentIntent itself, so per-tenant audit views can surface declined
+  // attempts alongside successful events.
+  if (event.type === "payment_intent.payment_failed") {
+    const pi = event.data.object as Stripe.PaymentIntent;
+    const piTenantId = typeof pi.metadata?.tenantId === "string" ? pi.metadata.tenantId : null;
+    const piParentEmail = typeof pi.metadata?.parentEmail === "string"
+      ? pi.metadata.parentEmail
+      : "stripe-webhook";
+    await logAuditEvent({
+      tenantId: piTenantId,
+      actorEmail: piParentEmail,
+      actorRole: "system",
+      action: "payment_intent.payment_failed",
+      targetType: "payment_intent",
+      targetId: pi.id,
+      payload: {
+        amount: pi.amount ? pi.amount / 100 : null,
+        currency: pi.currency,
+        lastPaymentError: pi.last_payment_error?.message ?? null,
+        declineCode: pi.last_payment_error?.decline_code ?? null,
+      },
+    });
+    return NextResponse.json({ received: true });
+  }
+
   // ─── account.updated ──────────────────────────────────────────────────────
   // Sync Stripe Connect account status to tenants table
   if (event.type === "account.updated") {
@@ -140,7 +169,7 @@ export async function POST(req: NextRequest) {
     if (refunds.length > 0 && charge.payment_intent) {
       const piId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent.id;
       const [orderRow] = await db
-        .select({ id: orders.id, total: orders.total, status: orders.status })
+        .select({ id: orders.id, total: orders.total, status: orders.status, tenantId: orders.tenantId })
         .from(orders)
         .where(eq(orders.stripePaymentIntentId, piId))
         .limit(1);
@@ -178,6 +207,24 @@ export async function POST(req: NextRequest) {
             .set({ status: newStatus, updatedAt: new Date() })
             .where(eq(orders.id, orderRow.id));
         }
+
+        const totalRefundedCents = refunds.reduce(
+          (sum, r) => sum + (r.amount ?? 0),
+          0,
+        );
+        await logAuditEvent({
+          tenantId: orderRow.tenantId,
+          actorEmail: "stripe-webhook",
+          actorRole: "system",
+          action: "order.refunded.via_dashboard",
+          targetType: "order",
+          targetId: orderRow.id,
+          payload: {
+            chargeId: charge.id,
+            amountRefundedCents: totalRefundedCents,
+            fullyRefunded: charge.refunded ?? false,
+          },
+        });
       }
     }
     return NextResponse.json({ received: true });
