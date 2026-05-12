@@ -17,12 +17,9 @@ import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
-import {
-  assertTotalsMatch,
-  TotalsMismatchError,
-  priceLookupKey,
-  round2,
-} from "@/lib/order-totals";
+import { priceLookupKey, round2 } from "@/lib/order-totals";
+import { SHIP_FEE_AUD } from "@/lib/shipping";
+import { getStripe } from "@/lib/stripe";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
@@ -160,42 +157,81 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Build catalog price lookup and assert server-authoritative totals.
+    // ─── Server-authoritative totals (post-payment) ───────────────────────
+    //
+    // Payment has already been authorised by /api/stripe/payment-intent, which
+    // ran the catalog-price assertion at PI-creation time and seeded
+    // paymentIntents.create({ amount }) with the server-computed total. Stripe
+    // has now charged that amount.
+    //
+    // Re-running the catalog assertion here would introduce a paid-without-order
+    // failure mode: if an operator deactivates a variant or changes a price
+    // between PI creation and order finalisation, the assertion rejects with
+    // `totals_mismatch`, but the customer has already been charged. The
+    // recoverable path is to trust the PaymentIntent's `amount` as the
+    // authoritative total and derive the rest server-side.
+    //
+    // Structural validation (qty, unitPrice types) stays — we still want to
+    // refuse garbage payloads. Per-line unitPrice falls back to the client
+    // value when the catalog has shifted; this is fine because the total is
+    // bounded by what Stripe actually charged.
+    const piTypeError = (() => {
+      if (!Array.isArray(lines) || lines.length === 0) return "lines_invalid";
+      for (const l of lines) {
+        if (!Number.isInteger(l.qty) || l.qty <= 0) return "invalid_qty";
+        if (typeof l.unitPrice !== "number" || !Number.isFinite(l.unitPrice))
+          return "invalid_unit_price";
+      }
+      return null;
+    })();
+    if (piTypeError) {
+      return NextResponse.json(
+        { error: "totals_mismatch", reason: piTypeError },
+        { status: 400 },
+      );
+    }
+
+    let stripePI;
+    try {
+      stripePI = await getStripe().paymentIntents.retrieve(
+        normalizedStripePaymentIntentId,
+      );
+    } catch {
+      return NextResponse.json(
+        { error: "stripe_pi_not_found" },
+        { status: 400 },
+      );
+    }
+
+    const authoritativeTotal = stripePI.amount / 100;
+    if (Math.abs(total - authoritativeTotal) > 0.01) {
+      return NextResponse.json(
+        {
+          error: "totals_mismatch",
+          reason: "client_total_drift",
+          expected: { total: authoritativeTotal },
+          received: { total },
+        },
+        { status: 400 },
+      );
+    }
+    const shipping = delivery === "ship" ? SHIP_FEE_AUD : 0;
+    const verifiedTotals = {
+      subtotal: round2(authoritativeTotal - shipping),
+      shipping,
+      gst: round2(authoritativeTotal / 11),
+      total: round2(authoritativeTotal),
+    };
+
+    // Per-line price snapshot: prefer the live catalog when the variant still
+    // exists (keeps receipts in sync with the shop), fall back to the client
+    // value otherwise. Either way the total is locked by Stripe above.
     const catalog = await getActiveCatalog(tenantId);
     const priceLookup = new Map<string, number>();
     for (const item of catalog) {
       for (const v of item.variants) {
         priceLookup.set(priceLookupKey(item.id, v.label), v.price);
       }
-    }
-
-    let verifiedTotals;
-    try {
-      verifiedTotals = assertTotalsMatch({
-        lines: lines as Array<{
-          itemId: string;
-          variantLabel: string;
-          unitPrice: number;
-          qty: number;
-        }>,
-        delivery: delivery === "ship" ? "ship" : "pickup",
-        received: { subtotal, gst, total },
-        priceLookup,
-      });
-    } catch (err) {
-      if (err instanceof TotalsMismatchError) {
-        return NextResponse.json(
-          {
-            error: "totals_mismatch",
-            reason: err.reason,
-            offendingKey: err.offendingKey,
-            expected: err.expected,
-            received: err.received,
-          },
-          { status: 400 },
-        );
-      }
-      throw err;
     }
 
     const [existingOrder] = await db
@@ -266,17 +302,14 @@ export async function POST(req: NextRequest) {
       });
       const linesInsert = db.insert(orderLines).values(
         lines.map((line) => {
-          // Guaranteed non-undefined: assertTotalsMatch above already threw on any
-          // (itemId, variantLabel) pair missing from priceLookup. Defensive check
-          // guards against future refactors that might break the invariant.
-          const authoritativeUnitPrice = priceLookup.get(
+          // Prefer the live catalog price; fall back to the client value if
+          // the variant has been deactivated/renamed since PI creation. Total
+          // is locked by Stripe in the assertion above, so client-supplied
+          // unitPrice can't be used to under-pay the order.
+          const catalogPrice = priceLookup.get(
             priceLookupKey(line.itemId, line.variantLabel),
           );
-          if (authoritativeUnitPrice === undefined) {
-            throw new Error(
-              `variant missing from priceLookup after assertion: ${line.itemId}::${line.variantLabel}`,
-            );
-          }
+          const unitPrice = catalogPrice ?? line.unitPrice;
           return {
             orderId,
             itemId: line.itemId,
@@ -284,8 +317,8 @@ export async function POST(req: NextRequest) {
             variantLabel: line.variantLabel,
             size: line.size?.trim() || null,
             qty: line.qty,
-            unitPrice: String(authoritativeUnitPrice),
-            lineTotal: String(round2(authoritativeUnitPrice * line.qty)),
+            unitPrice: String(unitPrice),
+            lineTotal: String(round2(unitPrice * line.qty)),
           };
         })
       );
