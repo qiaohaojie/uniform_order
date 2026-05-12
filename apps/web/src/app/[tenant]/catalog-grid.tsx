@@ -1,10 +1,11 @@
 "use client";
 
+import { useRef, useState } from "react";
 import Link from "next/link";
 import type { CatalogItem } from "@/lib/data";
 import { CATEGORIES } from "@/lib/data";
 import { GarmentVector } from "@/components/garment";
-import { SearchIcon } from "@/components/icons";
+import { SearchIcon, ClearIcon } from "@/components/icons";
 
 type CatalogGridProps = {
   items: CatalogItem[];
@@ -14,18 +15,50 @@ type CatalogGridProps = {
 };
 
 export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridProps) {
+  const [q, setQ] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    setQ("");
+    inputRef.current?.focus();
+  };
   const visible = items.filter((i) => i.cat === activeCat);
 
   return (
     <>
-      {/* Search (still static in this task; wired up in Task 3) */}
+      {/* Search */}
       <div className="px-4 pt-3.5 pb-1.5 flex-shrink-0">
         <div
-          className="h-10 rounded-lg bg-white flex items-center px-3 gap-2 border"
+          className="h-10 rounded-lg bg-white flex items-center px-3 gap-2 border focus-within:ring-2 focus-within:ring-offset-1 focus-within:ring-[var(--color-ink)]"
           style={{ borderColor: "var(--color-rule)" }}
         >
-          <span style={{ color: "var(--color-ink-dim)" }}><SearchIcon size={16} /></span>
-          <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>Search uniforms</span>
+          <span style={{ color: "var(--color-ink-dim)" }} aria-hidden="true">
+            <SearchIcon size={16} />
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            placeholder="Search uniforms"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search uniforms"
+            className="flex-1 bg-transparent outline-none text-[13px] focus-visible:outline-none placeholder:text-[color:var(--color-ink-dim)]"
+          />
+          {q.length > 0 && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              aria-label="Clear search"
+              className="w-6 h-6 flex items-center justify-center rounded-full"
+              style={{ color: "var(--color-ink-dim)" }}
+            >
+              <ClearIcon size={14} />
+            </button>
+          )}
         </div>
       </div>
 
