@@ -25,11 +25,23 @@ function formatZodErrors(details: ZodFlatten | unknown): string {
   return lines.length > 0 ? lines.join("; ") : "Invalid input.";
 }
 
+/** Form-level variant state — `sizes` is a raw comma-separated string. */
 type Variant = {
   /** Server-assigned id; present only for variants loaded from DB. */
   id?: string;
   label: string;
   price: string;
+  /** Comma-separated string in the form; converted to string[] on save. */
+  sizes: string;
+  active?: boolean;
+};
+
+/** Variant shape coming from the DB / parent (sizes is already string[]). */
+type InitialVariant = {
+  id?: string;
+  label: string;
+  price: string | number;
+  sizes?: string[];
   active?: boolean;
 };
 
@@ -42,7 +54,7 @@ export type ItemDrawerInitial = {
   imageUrl?: string;
   active?: boolean;
   sortOrder?: number;
-  variants?: Variant[];
+  variants?: InitialVariant[];
 };
 
 export function ItemDrawer({
@@ -65,7 +77,7 @@ export function ItemDrawer({
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [active, setActive] = useState(true);
-  const [variants, setVariants] = useState<Variant[]>([{ label: "", price: "" }]);
+  const [variants, setVariants] = useState<Variant[]>([{ label: "", price: "", sizes: "" }]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,17 +94,18 @@ export function ItemDrawer({
         ? initial.variants.map((v) => ({
             id: v.id,
             label: v.label,
-            price: v.price,
+            price: String(v.price),
+            sizes: v.sizes?.length ? v.sizes.join(", ") : "",
             active: v.active,
           }))
-        : [{ label: "", price: "" }]
+        : [{ label: "", price: "", sizes: "" }]
     );
     setError(null);
   }, [open, initial]);
 
   const setVariant = (i: number, patch: Partial<Variant>) =>
     setVariants((prev) => prev.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
-  const addVariant = () => setVariants((prev) => [...prev, { label: "", price: "" }]);
+  const addVariant = () => setVariants((prev) => [...prev, { label: "", price: "", sizes: "" }]);
   const removeVariant = (i: number) =>
     setVariants((prev) => (prev.length === 1 ? prev : prev.filter((_, idx) => idx !== i)));
 
@@ -123,6 +136,10 @@ export function ItemDrawer({
           id: v.id,
           label: v.label.trim(),
           price: Number(v.price),
+          sizes: (v.sizes || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
           active: v.active,
         })),
       };
@@ -312,7 +329,7 @@ export function ItemDrawer({
             </label>
             <div className="space-y-2">
               {variants.map((v, i) => (
-                <div key={i} className="grid grid-cols-[1fr_120px_28px] gap-2">
+                <div key={i} className="grid grid-cols-[1fr_100px_1fr_28px] gap-2">
                   <input
                     type="text"
                     placeholder="Label e.g. Size 10"
@@ -331,6 +348,15 @@ export function ItemDrawer({
                     onChange={(e) => setVariant(i, { price: e.target.value })}
                     className="h-8 px-2 text-[12.5px] rounded-md border tnum"
                     style={{ borderColor: "var(--color-rule)" }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Sizes e.g. 10, 12, 14"
+                    value={v.sizes}
+                    onChange={(e) => setVariant(i, { sizes: e.target.value })}
+                    className="h-8 px-2 text-[12.5px] rounded-md border"
+                    style={{ borderColor: "var(--color-rule)" }}
+                    aria-label={`Sizes for variant ${i + 1}`}
                   />
                   <button
                     type="button"
