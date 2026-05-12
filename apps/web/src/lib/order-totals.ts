@@ -9,13 +9,18 @@ export type LineInput = {
 
 export type ComputedTotals = {
   subtotal: number; // AUD dollars, 2dp
+  shipping: number; // AUD dollars, 2dp — SHIP_FEE_AUD when delivery=ship, 0 otherwise
   gst: number; // AUD dollars, 2dp — 1/11 of GST-inclusive total
   total: number; // AUD dollars, 2dp — subtotal + shipping
 };
 
 export type DeliveryMode = "pickup" | "ship";
 
-export type MismatchReason = "total_mismatch" | "price_mismatch" | "unknown_variant";
+export type MismatchReason =
+  | "total_mismatch"
+  | "price_mismatch"
+  | "unknown_variant"
+  | "invalid_qty";
 
 // Round to 2dp using half-away-from-zero (Math.round behaviour).
 // Matches the toFixed(2) display rounding used elsewhere.
@@ -55,10 +60,10 @@ export function computeTotals(args: {
   const subtotal = round2(
     args.lines.reduce((sum, l) => sum + l.unitPrice * l.qty, 0),
   );
-  const ship = args.delivery === "ship" ? SHIP_FEE_AUD : 0;
-  const total = round2(subtotal + ship);
+  const shipping = args.delivery === "ship" ? SHIP_FEE_AUD : 0;
+  const total = round2(subtotal + shipping);
   const gst = round2(total / 11);
-  return { subtotal, gst, total };
+  return { subtotal, shipping, gst, total };
 }
 
 export class TotalsMismatchError extends Error {
@@ -93,10 +98,18 @@ export function assertTotalsMatch(args: {
   const serverLines: { unitPrice: number; qty: number }[] = [];
   for (const l of args.lines) {
     const key = priceLookupKey(l.itemId, l.variantLabel);
+    if (!Number.isInteger(l.qty) || l.qty <= 0) {
+      throw new TotalsMismatchError(
+        { subtotal: 0, shipping: 0, gst: 0, total: 0 },
+        args.received,
+        "invalid_qty",
+        key,
+      );
+    }
     const catalogPrice = args.priceLookup.get(key);
     if (catalogPrice === undefined) {
       throw new TotalsMismatchError(
-        { subtotal: 0, gst: 0, total: 0 },
+        { subtotal: 0, shipping: 0, gst: 0, total: 0 },
         args.received,
         "unknown_variant",
         key,
@@ -104,7 +117,7 @@ export function assertTotalsMatch(args: {
     }
     if (Math.abs(catalogPrice - l.unitPrice) > PRICE_TOLERANCE) {
       throw new TotalsMismatchError(
-        { subtotal: 0, gst: 0, total: 0 },
+        { subtotal: 0, shipping: 0, gst: 0, total: 0 },
         args.received,
         "price_mismatch",
         key,
