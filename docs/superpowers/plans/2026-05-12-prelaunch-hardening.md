@@ -288,7 +288,7 @@ JSX example (catalog page — note placement above BottomNav):
 </MobileShell>
 ```
 
-- [ ] **Step 4: Create `app/[tenant]/contact/page.tsx`**
+- [ ] **Step 3: Create `app/[tenant]/contact/page.tsx`**
 
 Create `apps/web/src/app/[tenant]/contact/page.tsx`:
 
@@ -369,8 +369,8 @@ export default async function ContactPage({
             </section>
           )}
         </div>
-        <TenantFooter tenant={tenant} />
       </div>
+      <TenantFooter tenant={tenant} />
     </MobileShell>
   );
 }
@@ -382,21 +382,21 @@ Add the `TenantFooter` import alongside the other imports:
 import { TenantFooter } from "@/components/tenant-footer";
 ```
 
-- [ ] **Step 5: Type-check**
+- [ ] **Step 4: Type-check**
 
 ```bash
 pnpm check-types:web
 ```
 Expected: PASS.
 
-- [ ] **Step 6: Smoke (manual)**
+- [ ] **Step 5: Smoke (manual)**
 
 Start dev server (`pnpm dev:web`), visit:
 - `http://localhost:3000/nsbh` — footer renders at end of catalog with all four links.
 - `http://localhost:3000/nsbh/cart`, `/checkout`, `/refund-policy` — footer present.
 - `http://localhost:3000/nsbh/contact` — page renders with email, hours, address, collection instructions if present.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/components/tenant-footer.tsx apps/web/src/app/\[tenant\]
