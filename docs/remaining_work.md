@@ -65,18 +65,18 @@ The parent-account / "add another child" feature shipped via PR #6 (squash-merge
 
 Sourced from `my_doc/NSBH/gap-analysis.md` §5 (2026-05-12). Email/DNS ops items intentionally excluded — already covered by §2.8 and parked until post-development. Guest checkout (§5.2) excluded — replaced by magic-link + Google sign-in direction (see §2.14).
 
-- [ ] **Tenant footer with policy links (gap-analysis §5.5).** Add `<TenantFooter>` to `apps/web/src/components/mobile-shell.tsx` (rendered above `BottomNav` so it doesn't collide). Links: `/<tenant>/refund-policy`, `/<tenant>/contact` (§2.13 item below), `/privacy`, `/terms`. Display `tenant.shopEmail` + `tenant.shopHours` as text. **Refund-policy fallback already works at the data layer** — `tenant_legal_versions` has `policyMode` discriminator + `policyText`/`policyUrl` columns (`db/schema.ts:48-49`), and `app/[tenant]/refund-policy/page.tsx` redirects to `policyUrl` when `policyMode === "url"`, else renders `policyText`. Footer just needs to surface the existing route. ~3h.
+- [x] **Tenant footer with policy links (gap-analysis §5.5).** ✅ shipped prelaunch-hardening PR. Add `<TenantFooter>` to `apps/web/src/components/mobile-shell.tsx` (rendered above `BottomNav` so it doesn't collide). Links: `/<tenant>/refund-policy`, `/<tenant>/contact` (§2.13 item below), `/privacy`, `/terms`. Display `tenant.shopEmail` + `tenant.shopHours` as text. **Refund-policy fallback already works at the data layer** — `tenant_legal_versions` has `policyMode` discriminator + `policyText`/`policyUrl` columns (`db/schema.ts:48-49`), and `app/[tenant]/refund-policy/page.tsx` redirects to `policyUrl` when `policyMode === "url"`, else renders `policyText`. Footer just needs to surface the existing route. ~3h.
 
-- [ ] **Per-tenant Contact page (gap-analysis §5.6).** New route `apps/web/src/app/[tenant]/contact/page.tsx` rendering `tenant.shopEmail`, `shopHours`, `address`, `collectionInstructions`. **Data is already captured during onboarding** at `app/platform/tenants/new/steps/step-3-operator.tsx` (shopEmail/shopHours/collectionInstructions) and step-1 (address). RSC, use `getTenant(slug)`. Link from `<TenantFooter>`. ~2h.
+- [x] **Per-tenant Contact page (gap-analysis §5.6).** ✅ shipped prelaunch-hardening PR. New route `apps/web/src/app/[tenant]/contact/page.tsx` rendering `tenant.shopEmail`, `shopHours`, `address`, `collectionInstructions`. **Data is already captured during onboarding** at `app/platform/tenants/new/steps/step-3-operator.tsx` (shopEmail/shopHours/collectionInstructions) and step-1 (address). RSC, use `getTenant(slug)`. Link from `<TenantFooter>`. ~2h.
 
-- [ ] **SEO basics — sitemap, robots, `generateMetadata` (gap-analysis §5.4).** Today `generateMetadata` is used in exactly one file (`app/[tenant]/refund-policy/page.tsx`, only to set noindex). Platform-wide `<title>="UniformOrder"` is set at `app/layout.tsx:28-31`.
+- [x] **SEO basics — sitemap, robots, `generateMetadata` (gap-analysis §5.4).** ✅ shipped prelaunch-hardening PR. Today `generateMetadata` is used in exactly one file (`app/[tenant]/refund-policy/page.tsx`, only to set noindex). Platform-wide `<title>="UniformOrder"` is set at `app/layout.tsx:28-31`.
   - Add `generateMetadata` to `app/[tenant]/layout.tsx` returning `{ title: '${tenant.name} Uniform Shop', description: tenant.motto ?? '${tenant.name} parent shop', openGraph: { images: [{ url: tenant.logoUrl }] } }` — data exists on `tenants.motto` (`db/schema.ts:73`) and `tenants.logoUrl` (`schema.ts:74`).
   - Add `generateMetadata` to `app/[tenant]/item/[itemId]/page.tsx`: `'${item.name} — ${tenant.name}'`.
   - New `app/sitemap.ts` — enumerate `getPubliclyListedTenants()` × public catalog items per tenant.
   - New `app/robots.ts` — `disallow: ['/admin', '/platform', '/auth', '/api']` (also closes admin/platform noindex leak).
   - ~4h. No DB change.
 
-- [ ] **Apple Pay + Google Pay via Stripe `PaymentElement` (gap-analysis §5.1).** `automatic_payment_methods: { enabled: true }` is already on the PaymentIntent route (`api/stripe/payment-intent/route.ts:75`); wallets just don't render because we mount a card-only element.
+- [x] **Apple Pay + Google Pay via Stripe `PaymentElement` (gap-analysis §5.1).** ✅ shipped prelaunch-hardening PR. **Ops follow-up:** replace `apps/web/public/.well-known/apple-developer-merchantid-domain-association` with the real file from Stripe Dashboard → Settings → Payment methods → Apple Pay → Add new domain (`uniformorder.online`), then redeploy. Until verified, Apple Pay does not surface in the PaymentElement wallet tab. Google Pay is unaffected. `automatic_payment_methods: { enabled: true }` is already on the PaymentIntent route (`api/stripe/payment-intent/route.ts:75`); wallets just don't render because we mount a card-only element.
   - In `app/[tenant]/checkout/checkout-screen.tsx:90-102`, swap `elements.create("card", { hidePostalCode: true })` → `elements.create("payment", { layout: "tabs" })`.
   - Replace `stripe.confirmCardPayment(...)` → `stripe.confirmPayment({ clientSecret, elements, confirmParams: { return_url } })`.
   - Add `public/.well-known/apple-developer-merchantid-domain-association` (asset from Stripe Dashboard → Settings → Payment methods → Apple Pay → Add new domain).
@@ -87,12 +87,12 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 (2026-05-12). Email/DNS ops items
 
 These were classified as "Should" in the gap analysis but are genuine bugs / hardening, not feature work. Treat with the same urgency as anything else in §2.
 
-- [ ] **`payment_intent.payment_failed` webhook + audit log on dashboard refunds (gap-analysis §5.11).**
+- [x] **`payment_intent.payment_failed` webhook + audit log on dashboard refunds (gap-analysis §5.11).** ✅ shipped prelaunch-hardening PR. Pivoted to audit-only (Option B): declined cards never produce an order row in this codebase, so audit entries target the PaymentIntent (`targetType: 'payment_intent'`). No order-row state machinery needed.
   - Today `orders.status = 'pending_payment'` rows orphan in DB after card declines because nothing cleans them up. Add a `payment_intent.payment_failed` branch to `api/stripe/webhook/route.ts` that deletes or cancels the matched pending order (lookup by `stripePaymentIntentId`).
   - Acknowledged TODO at `api/orders/[orderId]/refund/route.ts:176-178`: the `charge.refunded` webhook branch currently skips `logAuditEvent`. Add a call with `actorRole: "system"`, `actorEmail: "stripe-webhook"`, `action: "order.refunded.via_dashboard"` so dashboard-initiated refunds appear in the per-order audit log alongside in-app refunds.
   - ~3h.
 
-- [ ] **Remove `getPreviousSizeHint` feature entirely (decision 2026-05-12).**
+- [x] **Remove `getPreviousSizeHint` feature entirely (decision 2026-05-12).** ✅ shipped prelaunch-hardening PR.
   - **Decision:** drop the "Riley wore size 14 last year" hint rather than fix it. The original gap-analysis chunk-C follow-up flagged it as a wrong-child defect for multi-child parents (`db/queries.ts:427-467` keys on `parentEmail + itemId`, ignoring active child). Fixing properly would need `orders.childId` migration + write-path change + read-path change. Mitigations (child-count guard, migration) considered and rejected: the feature is not worth the complexity to get right, and parents who want past-size info can check their order history at `/orders/[orderId]` which already lists garment + size purchased.
   - **Removal scope:**
     - Delete `getPreviousSizeHint` from `apps/web/src/db/queries.ts:427-467`.
@@ -102,7 +102,7 @@ These were classified as "Should" in the gap analysis but are genuine bugs / har
   - **Effort:** ~30min. Pure deletion, no migration, no schema change.
   - **Reversibility:** trivial — feature can be re-added later if multi-child UX work surfaces it as a real need.
 
-- [ ] **Server-side total assertion (gap-analysis §5.10).**
+- [x] **Server-side total assertion (gap-analysis §5.10).** ✅ shipped prelaunch-hardening PR. Variant-keyed catalog price lookup (`${itemId}::${variantLabel}`) — rejects unknown variants, price tampering (>1¢), and total mismatches. Both `/api/orders` and `/api/stripe/payment-intent` gated.
   - Client supplies `subtotal`, `gst`, `total` to `POST /api/orders` and the values are stored as-sent. Stripe ultimately governs cash flow, but the BAS export (`app/platform/billing/`) reads these DB columns — tampering risk is low but reconciliation risk is real.
   - New helper `apps/web/src/lib/order-totals.ts` exporting `assertTotalsMatch({ lines, deliveryFee, subtotal, gst, total })` that recomputes server-side from line items + `tenant.deliveryFeeCents`, rejects on >1¢ delta. GST is 10% inclusive (1/11 of GST-inclusive total — confirm with §3.6 accountant sign-off rule).
   - Call from `POST /api/orders` (`api/orders/route.ts` before insert) and `POST /api/stripe/payment-intent` (before `paymentIntents.create`). Return 400 with `{ code: 'totals_mismatch', expected, received }` on delta.
