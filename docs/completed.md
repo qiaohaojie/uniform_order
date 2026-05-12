@@ -514,10 +514,40 @@ The parent shop's "Search uniforms" pill at `app/[tenant]/page.tsx:78-86` was a 
 
 **Deferred follow-ups (filed, not closed):**
 - **Issue #27** (→ `remaining_work.md` §4.12) — chips-inert visual disconnect during active search.
-- **Issue #26** (→ `remaining_work.md` §2.8) — pre-existing `useSearchParams` Suspense build failure surfaced during PR verification (`pnpm build:web` fails on `/_not-found`; verified pre-existing on main). Not introduced by this PR.
+- **Issue #26** — pre-existing `useSearchParams` Suspense build failure surfaced during PR verification. Fixed in PR #28 via Suspense wrapper in `posthog-provider.tsx`; see `completed.md` §4.27.
 - PostHog `catalog_search` event, synonym map, search-result highlighting, URL persistence (`?q=`) — all explicit non-goals in the spec, revisit only on PostHog signal.
 
 Files: `apps/web/src/app/[tenant]/catalog-grid.tsx` (new), `apps/web/src/app/[tenant]/page.tsx` (chip-filter logic and search/chips/h3/grid markup removed; renders `<CatalogGrid>`), `apps/web/src/components/icons.tsx` (`ClearIcon` added).
+
+### 4.27 useSearchParams Suspense build fix (issue #26) ✅
+
+**Source:** `remaining_work.md` §2.8 (issue #26) — shipped 2026-05-12 via PR #28.
+
+`posthog-provider.tsx` called `useSearchParams` from the root layout without a Suspense boundary, causing Next.js static generation to bail on `/_not-found` and `/admin` pages (`pnpm build:web` failed). Fixed by wrapping the PostHog provider in a `<Suspense>` boundary so the hook is only called inside a suspended subtree. `next start` and `pnpm dev:web` were unaffected; only deploy pipelines requiring a clean build failed.
+
+Files: `apps/web/src/components/posthog-provider.tsx`.
+
+---
+
+### 4.28 Pre-launch hardening bundle ✅
+
+**Source:** `remaining_work.md` §2.13 (musts) + §2.14 (bug-class) — shipped 2026-05-13 via PR #29 (squash `585d4cb`, 24 files +698/−192). Plan: `docs/superpowers/plans/2026-05-12-prelaunch-hardening.md`.
+
+Seven items shipped together:
+
+**Tenant footer + contact page (`remaining_work.md` §2.13):** New `<TenantFooter>` component surfacing refund-policy, contact, privacy, and terms links across all parent-shop routes. New `app/[tenant]/contact/page.tsx` RSC rendering `shopEmail`, `shopHours`, `address`, `collectionInstructions` from the tenants table (data already captured during onboarding). Refund-policy link suppressed when `currentLegalVersionId` is null.
+
+**SEO basics (`remaining_work.md` §2.13):** `app/sitemap.ts` enumerating publicly-listed + approved tenants × catalog items. `app/robots.ts` disallowing `/admin`, `/platform`, `/auth`, `/api`. `generateMetadata` added to `app/[tenant]/layout.tsx` (per-tenant title, OG image, description) and `app/[tenant]/item/[itemId]/page.tsx` (per-item title + canonical URL).
+
+**Apple Pay + Google Pay via `PaymentElement` (`remaining_work.md` §2.13):** Replaced card-only `elements.create("card")` with `elements.create("payment", { layout: "tabs" })` in deferred-intent mode (elements mount before PI is created). `onPay` now calls `elements.submit()` then `stripe.confirmPayment(...)`. Wallet + 3DS flows redirect to `/[tenant]/order/placed`; card payments stay inline. Apple Pay requires post-deploy domain verification in Stripe Dashboard (ops follow-up in `remaining_work.md` §2.8). Placeholder `public/.well-known/apple-developer-merchantid-domain-association` committed. Google Pay needs no verification.
+
+**`payment_intent.payment_failed` webhook + audit log (`remaining_work.md` §2.14):** New webhook branch logs a `payment_intent.declined` audit entry targeting the PaymentIntent (`targetType: 'payment_intent'`), capturing `decline_code` and `lastPaymentError`. Pivoted to audit-only (no order-row cleanup needed — orders are created post-`confirmPayment`, so declined cards never produce an order row). `charge.refunded` branch also now calls `logAuditEvent` (was a TODO at `refund/route.ts:176-178`). Both branches deduplicate by `event.id` stamped into the audit payload. Extended `AuditActorRole` with `'system'` and `AuditTargetType` with `'payment_intent'`.
+
+**Server-side total assertion (`remaining_work.md` §2.14):** New helpers `lib/shipping.ts` (`SHIP_FEE_AUD = 9.5`) and `lib/order-totals.ts` (`computeTotals`, `assertTotalsMatch`). `POST /api/stripe/payment-intent` runs full catalog-keyed validation: unknown-variant rejection, per-line price check (>1¢ delta → `price_mismatch`), server-recomputed subtotal/gst/total. `POST /api/orders` (post-payment path) trusts the Stripe PI amount instead of re-running the catalog assertion — avoids a paid-without-order failure if a variant is deactivated between PI creation and order finalisation. PI `status === 'succeeded'` required before writing the order row. Idempotency `SELECT` hoisted above `paymentIntents.retrieve` to short-circuit retries at the DB level.
+
+**`getPreviousSizeHint` removal (`remaining_work.md` §2.14):** Dropped the "Riley wore size 14 last year" feature rather than fix the wrong-child bug for multi-child parents. Removed `getPreviousSizeHint` from `db/queries.ts`, the `/api/orders/size-hint/` route, and the hint render block from `interactive.tsx`. Parents can check past sizes via order history at `/orders/[orderId]`.
+
+Files: `apps/web/src/app/[tenant]/` (contact page, layout metadata, item metadata, footer in 6 route files), `src/components/tenant-footer.tsx` (new), `src/app/api/orders/route.ts`, `src/app/api/stripe/payment-intent/route.ts`, `src/app/api/stripe/webhook/route.ts`, `src/app/api/orders/size-hint/route.ts` (deleted), `src/app/robots.ts` (new), `src/app/sitemap.ts` (new), `src/db/queries.ts`, `src/lib/audit/types.ts`, `src/lib/order-totals.ts` (new), `src/lib/shipping.ts` (new), `public/.well-known/apple-developer-merchantid-domain-association` (placeholder).
 
 ---
 
@@ -525,7 +555,7 @@ Files: `apps/web/src/app/[tenant]/catalog-grid.tsx` (new), `apps/web/src/app/[te
 
 The most material categories of open work, all tracked in `docs/remaining_work.md`:
 
-- **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
+- **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions, Apple Pay domain verification (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Quality** — print stylesheet QA on real A4 (§3.7).
-- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7).
+- **Schema** — `sizes jsonb` on `catalog_variants` to unblock self-service onboarding past tenant #2 (§2.14).
+- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); stock disabled-not-hidden on PDP, shop hours on checkout, PDP photo support, catalog collections (§3.12).

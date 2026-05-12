@@ -32,7 +32,7 @@ The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verificat
 - **Production env (from §2.6):** Switch from Stripe test keys to live keys; pin production `DATABASE_URL`; configure Hostinger Node.js app env groups (preview vs production); assign production domain + TLS.
 - **Observability (from §2.7):** Verify PostHog project key is set in production Hostinger env vars (and confirm events are arriving from production after first deploy).
 - **Stripe webhook events (from §3.5):** Verify the production Stripe webhook endpoint subscribes to `account.updated` in addition to `payment_intent.succeeded` and `charge.refunded`.
-- **`pnpm build:web` failure — `useSearchParams` Suspense (issue #26):** Pre-existing on `main` (not caused by §3.11). Surfaces during static page generation (`/_not-found`, `/admin`); `posthog-provider.tsx:4` calls `useSearchParams` from the root layout without a Suspense wrapper. `next start` and `pnpm dev:web` still work; deploy pipelines that require a clean build will fail. Track + fix before the next prod deploy.
+- **Apple Pay domain verification (from §2.13):** Replace `apps/web/public/.well-known/apple-developer-merchantid-domain-association` with the real file from Stripe Dashboard → Settings → Payment methods → Apple Pay → Add new domain (`uniformorder.online`), then redeploy. Until done, Apple Pay does not surface in the PaymentElement wallet tab. Google Pay is unaffected.
 
 ### 2.9 Catalog management — production deployment follow-ups
 
