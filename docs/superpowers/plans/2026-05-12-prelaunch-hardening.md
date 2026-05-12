@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship 7 pre-launch hardening items in one squash-merged PR: tenant footer, per-tenant Contact page, SEO basics, Stripe PaymentElement (Apple/Google Pay) via deferred-intent, `payment_intent.payment_failed` handling + dashboard-refund audit log + retry transition, server-side total assertion, and removal of the `getPreviousSizeHint` feature.
+**Goal:** Ship 7 pre-launch hardening items in one squash-merged PR: tenant footer, per-tenant Contact page, SEO basics, Stripe PaymentElement (Apple/Google Pay) via deferred-intent, audit-log entries for `payment_intent.payment_failed` + dashboard-initiated refunds, server-side total assertion with catalog-variant price validation, and removal of the `getPreviousSizeHint` feature.
 
-**Architecture:** 7 tasks → 7 commits on a feature branch → squash-merged to `main`. Intra-PR commits exist for review readability, not `git bisect` (squash collapses them). The codebase works in **dollars (AUD)** end-to-end — only the Stripe API boundary converts to integer cents via `Math.round(total * 100)`. Stripe Elements moves to **deferred-intent mode** (`stripe.elements({ mode: 'payment', amount, currency })`) so the PaymentElement can mount before the PaymentIntent is created. New helpers live in `apps/web/src/lib/shipping.ts` and `apps/web/src/lib/order-totals.ts` for single-source-of-truth totals shared by client display, server assertion, and the Reports page. **Server-side line validation:** the totals helper does not trust client-supplied `unitPrice` — Task 5 looks up authoritative prices from `getActiveCatalog(tenantId)` and rejects mismatches.
+**Architecture:** 7 tasks → 7 commits on a feature branch → squash-merged to `main`. Intra-PR commits exist for review readability, not `git bisect` (squash collapses them). The codebase works in **dollars (AUD)** end-to-end — only the Stripe API boundary converts to integer cents via `Math.round(total * 100)`. Stripe Elements moves to **deferred-intent mode** (`stripe.elements({ mode: 'payment', amount, currency })`) so the PaymentElement can mount before the PaymentIntent is created. New helpers live in `apps/web/src/lib/shipping.ts` and `apps/web/src/lib/order-totals.ts`. **Server-side line validation:** the totals helper does not trust client-supplied `unitPrice` — Task 5 builds a `Map<${itemId}::${variantLabel}, price>` from `getActiveCatalog(tenantId)` (prices live on `catalog_variants.price`, per-variant) and rejects mismatches. **`payment_intent.payment_failed`** is observed via **audit-log entries targeting the PaymentIntent** (Task 6 Option B) — there is no `'payment_failed'` order status because declined cards never produce order rows in this codebase.
 
 **Tech Stack:** Next.js 16 (App Router, RSC), Drizzle + neon-http (Postgres on Neon), Stripe Connect (destination charges) + Stripe.js, Tailwind v4 + HeroUI v3, PostHog, Hostinger Node.js deploy.
 
@@ -65,13 +65,11 @@ Resolved during plan authoring (do not re-investigate):
 | `apps/web/src/app/[tenant]/layout.tsx` | Add `generateMetadata` for per-tenant title/description/OG |
 | `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx` | Remove size-hint fetch + state + JSX (Task 1) |
 | `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` | PaymentElement swap (Task 7); import `SHIP_FEE_AUD` (Task 4) |
-| `apps/web/src/db/queries.ts` | Delete `getPreviousSizeHint`; add `WHERE status != 'payment_failed'` filter in `listOrdersForParent` |
-| `apps/web/src/db/schema.ts` | Add `'payment_failed'` to `orderStatusEnum` |
-| `apps/web/src/lib/audit/types.ts` | Add `"system"` to `AuditActorRole` |
-| `apps/web/src/app/api/stripe/webhook/route.ts` | Add `payment_intent.payment_failed` branch + audit log in `charge.refunded` |
-| `apps/web/src/app/api/stripe/payment-intent/route.ts` | Call `assertTotalsMatch`; transition `payment_failed → pending_payment` on retry |
-| `apps/web/src/app/api/orders/route.ts` | Call `assertTotalsMatch`; use server-computed totals in insert |
-| `apps/web/drizzle/<next-number>_payment_failed_enum.sql` | New migration file with `ALTER TYPE` |
+| `apps/web/src/db/queries.ts` | Delete `getPreviousSizeHint` + `SizeHint` type |
+| `apps/web/src/lib/audit/types.ts` | Add `"system"` to `AuditActorRole`; add `"payment_intent"` to `AuditTargetType` |
+| `apps/web/src/app/api/stripe/webhook/route.ts` | Add `payment_intent.payment_failed` branch (audit-log only); add audit log to `charge.refunded` |
+| `apps/web/src/app/api/stripe/payment-intent/route.ts` | Call `assertTotalsMatch`; add `tenantId` to PI metadata |
+| `apps/web/src/app/api/orders/route.ts` | Call `assertTotalsMatch`; use server-computed totals + server-authoritative per-variant prices in insert |
 | `docs/completed.md` | Note size-hint removal under §4.8 |
 
 ### Deleted files
@@ -619,14 +617,16 @@ export function round2(n: number): number {
  *
  * GST model: 1/11 of the **GST-inclusive total** (subtotal + shipping).
  * This treats shipping as GST-applicable, which is the AU norm for domestic
- * deliveries by a GST-registered business. Must stay consistent with the
- * Reports page calculation in `app/platform/billing/` and
- * `app/admin/[tenant]/reports/` — those locations should switch to importing
- * this helper as part of this PR's consolidation.
+ * deliveries by a GST-registered business.
  *
- * If shipping is ever moved to GST-free, the formula needs to change to
- * `(subtotal / 11)` and a regression test against historical Reports rows
- * should be run before deploying.
+ * Reports page (`app/platform/billing/`, `app/admin/[tenant]/reports/`) has
+ * its own GST calculation today. Consolidating to this helper is tracked as
+ * a follow-up in `docs/remaining_work.md` and is NOT done in this PR —
+ * accountant sign-off (§3.6) will reconcile any formula drift between the
+ * two callsites first.
+ *
+ * If shipping is ever moved to GST-free, change to `(subtotal / 11)` and
+ * audit historical Reports rows before deploying.
  */
 export function computeTotals(args: {
   lines: LineInput[];
@@ -724,7 +724,9 @@ Server-side enforcement lands in the next commit."
 
 **Spec:** §2.6 enforcement
 
-**Critical:** Earlier plan revisions accepted client-supplied `unitPrice` and only validated sums. That's theatre — a tampering client sends `unitPrice: 0.01, qty: 1` and passes a self-consistent assertion. This task looks up authoritative prices from `getActiveCatalog(tenantId)` per line, rejects unknown items, and recomputes totals from server-side prices.
+**Critical:** Earlier plan revisions accepted client-supplied `unitPrice` and only validated sums. That's theatre — a tampering client sends `unitPrice: 0.01, qty: 1` and passes a self-consistent assertion. This task looks up authoritative prices from `getActiveCatalog(tenantId)` per **(itemId, variantLabel)** pair, rejects unknown items/variants, and recomputes totals from server-side prices.
+
+**Pricing model (verified):** prices live on `catalog_variants.price` (`numeric(10,2)`, AUD dollars), NOT on `catalog_items`. Each item has 1+ variants; a Boys 10/64cm trouser and a Mens 8/102cm trouser of the same item have different prices. The lookup key must be `${itemId}::${variantLabel}` — keying on itemId alone would over-reject (legitimate non-base-price variants) or under-reject (tampered orders that swap to a non-base variant). `getActiveCatalog(tenantId)` already returns `CatalogItem[]` with nested `variants: { label, price, sizes }[]` (`db/queries.ts:926-967`) — no new query helper needed.
 
 **Files:**
 - Modify: `apps/web/src/lib/order-totals.ts` — extend the helper to take a price-lookup map
@@ -741,56 +743,58 @@ Replace the `LineInput` type and add a new error class:
 ```ts
 export type LineInput = {
   itemId: string;
+  variantLabel: string;
   unitPrice: number; // AUD dollars as claimed by the client
   qty: number; // positive integer
 };
 
-export type ComputedLine = {
-  itemId: string;
-  unitPrice: number; // AUD dollars, server-authoritative
-  qty: number;
-};
-
 // ... ComputedTotals + DeliveryMode unchanged ...
+
+export type MismatchReason = "total_mismatch" | "price_mismatch" | "unknown_variant";
 
 export class TotalsMismatchError extends Error {
   constructor(
     readonly expected: ComputedTotals,
     readonly received: { subtotal: number; gst: number; total: number },
-    readonly reason: "total_mismatch" | "price_mismatch" | "unknown_item",
-    readonly offendingItemId?: string,
+    readonly reason: MismatchReason,
+    readonly offendingKey?: string, // "${itemId}::${variantLabel}" when reason references a line
   ) {
     super(reason);
   }
+}
+
+/** Build the lookup key for the priceLookup map. */
+export function priceLookupKey(itemId: string, variantLabel: string): string {
+  return `${itemId}::${variantLabel}`;
 }
 
 /**
  * Validate every line against the catalog price-lookup, then compute totals.
  *
  * Rejects on:
- * - Unknown itemId (not present in priceLookup)
- * - Client-claimed unitPrice differs from catalog by > 1¢
+ * - Unknown (itemId, variantLabel) combination (not present in priceLookup)
+ * - Client-claimed unitPrice differs from catalog variant price by > 1¢
  * - Resulting subtotal/gst/total differs from received by > 1¢
  */
 export function assertTotalsMatch(args: {
   lines: LineInput[];
   delivery: DeliveryMode;
   received: { subtotal: number; gst: number; total: number };
-  priceLookup: Map<string, number>; // itemId → catalog unitPrice
+  priceLookup: Map<string, number>; // "${itemId}::${variantLabel}" → catalog price
 }): ComputedTotals {
-  const PRICE_TOLERANCE = 0.01; // 1 cent
+  const PRICE_TOLERANCE = 0.01;
   const TOTAL_TOLERANCE = 0.01;
 
-  // 1. Catalog price check, per line
   const serverLines: { unitPrice: number; qty: number }[] = [];
   for (const l of args.lines) {
-    const catalogPrice = args.priceLookup.get(l.itemId);
+    const key = priceLookupKey(l.itemId, l.variantLabel);
+    const catalogPrice = args.priceLookup.get(key);
     if (catalogPrice === undefined) {
       throw new TotalsMismatchError(
         { subtotal: 0, gst: 0, total: 0 },
         args.received,
-        "unknown_item",
-        l.itemId,
+        "unknown_variant",
+        key,
       );
     }
     if (Math.abs(catalogPrice - l.unitPrice) > PRICE_TOLERANCE) {
@@ -798,13 +802,12 @@ export function assertTotalsMatch(args: {
         { subtotal: 0, gst: 0, total: 0 },
         args.received,
         "price_mismatch",
-        l.itemId,
+        key,
       );
     }
     serverLines.push({ unitPrice: catalogPrice, qty: l.qty });
   }
 
-  // 2. Recompute from server-authoritative prices
   const expected = computeTotals({ lines: serverLines, delivery: args.delivery });
   const ok =
     Math.abs(expected.subtotal - args.received.subtotal) <= TOTAL_TOLERANCE &&
@@ -823,26 +826,39 @@ export function assertTotalsMatch(args: {
 Open `apps/web/src/app/api/orders/route.ts`. Locate the validation block at line ~141. After that 400 and before the `existingOrder` idempotency check at line ~157, fetch the catalog and build the price lookup, then assert:
 
 ```ts
-import { assertTotalsMatch, TotalsMismatchError } from "@/lib/order-totals";
+import {
+  assertTotalsMatch,
+  TotalsMismatchError,
+  priceLookupKey,
+  round2,
+} from "@/lib/order-totals";
 import { getActiveCatalog } from "@/db/queries";
 // ↑ at top alongside existing imports
 
 // ... after the type-validation 400 ...
 
-// Build authoritative price lookup from the catalog for this tenant
+// Build authoritative (itemId, variantLabel) → price lookup.
+// getActiveCatalog returns CatalogItem[] with nested variants:{label,price,sizes}
+// — see db/queries.ts:926-967. Prices are already numbers in dollars.
 const catalog = await getActiveCatalog(tenantId);
-const priceLookup = new Map<string, number>(
-  catalog.map((item) => [item.id, Number(item.priceCents ?? item.price)]), // verify field name when reading
-);
-// NOTE: read catalog item shape in db/queries.ts before finalising the field name.
-// If the catalog stores prices in dollars as `price` (numeric/decimal), use that directly.
-// If as cents, divide by 100 here so the lookup is in dollars.
+const priceLookup = new Map<string, number>();
+for (const item of catalog) {
+  for (const v of item.variants) {
+    priceLookup.set(priceLookupKey(item.id, v.label), v.price);
+  }
+}
 
 let verifiedTotals;
 try {
   verifiedTotals = assertTotalsMatch({
-    lines: lines.map((l: { itemId: string; unitPrice: number; qty: number }) => ({
+    lines: lines.map((l: {
+      itemId: string;
+      variantLabel: string;
+      unitPrice: number;
+      qty: number;
+    }) => ({
       itemId: l.itemId,
+      variantLabel: l.variantLabel,
       unitPrice: l.unitPrice,
       qty: l.qty,
     })),
@@ -856,7 +872,7 @@ try {
       {
         error: "totals_mismatch",
         reason: err.reason,
-        offendingItemId: err.offendingItemId,
+        offendingKey: err.offendingKey,
         expected: err.expected,
         received: err.received,
       },
@@ -875,12 +891,14 @@ gst: String(verifiedTotals.gst),
 total: String(verifiedTotals.total),
 ```
 
-**`unitPrice` per line:** also override the client's claimed `line.unitPrice` with the catalog price when writing to `orderLines` — match the spirit of "server-authoritative":
+**`unitPrice` per line:** also override the client's claimed `line.unitPrice` with the catalog price when writing to `orderLines`:
 
 ```ts
 const linesInsert = db.insert(orderLines).values(
   lines.map((line) => {
-    const authoritativeUnitPrice = priceLookup.get(line.itemId)!; // guaranteed by assert
+    const authoritativeUnitPrice = priceLookup.get(
+      priceLookupKey(line.itemId, line.variantLabel),
+    )!; // guaranteed non-undefined by the assertion above
     return {
       orderId,
       itemId: line.itemId,
@@ -895,22 +913,18 @@ const linesInsert = db.insert(orderLines).values(
 );
 ```
 
-Import `round2` from `lib/order-totals.ts` — export it from there if it isn't already:
-
-```ts
-export function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-```
-
-(Make `round2` an exported function in Task 4 retroactively — easier than duplicating.)
+`round2` is exported from `lib/order-totals.ts` per Task 4 Step 2.
 
 - [ ] **Step 3: Add assertion in `/api/stripe/payment-intent` POST handler**
 
 Open `apps/web/src/app/api/stripe/payment-intent/route.ts`. Extend the request body to accept `lines` (with `itemId`), `delivery`, `subtotal`, `gst`. Then run the same `getActiveCatalog`-backed assertion before `paymentIntents.create`:
 
 ```ts
-import { assertTotalsMatch, TotalsMismatchError } from "@/lib/order-totals";
+import {
+  assertTotalsMatch,
+  TotalsMismatchError,
+  priceLookupKey,
+} from "@/lib/order-totals";
 import { getActiveCatalog } from "@/db/queries";
 // ↑ at top
 
@@ -920,16 +934,26 @@ if (!Array.isArray(lines) || typeof subtotal !== "number" || typeof gst !== "num
   return NextResponse.json({ error: "Missing totals payload" }, { status: 400 });
 }
 
+// Same lookup construction as /api/orders Step 2.
 const catalog = await getActiveCatalog(tenantId);
-const priceLookup = new Map<string, number>(
-  catalog.map((item) => [item.id, Number(item.price ?? 0)]), // match the field used in Step 2
-);
+const priceLookup = new Map<string, number>();
+for (const item of catalog) {
+  for (const v of item.variants) {
+    priceLookup.set(priceLookupKey(item.id, v.label), v.price);
+  }
+}
 
 let verified;
 try {
   verified = assertTotalsMatch({
-    lines: lines.map((l: { itemId: string; unitPrice: number; qty: number }) => ({
+    lines: lines.map((l: {
+      itemId: string;
+      variantLabel: string;
+      unitPrice: number;
+      qty: number;
+    }) => ({
       itemId: l.itemId,
+      variantLabel: l.variantLabel,
       unitPrice: l.unitPrice,
       qty: l.qty,
     })),
@@ -943,7 +967,7 @@ try {
       {
         error: "totals_mismatch",
         reason: err.reason,
-        offendingItemId: err.offendingItemId,
+        offendingKey: err.offendingKey,
         expected: err.expected,
         received: err.received,
       },
@@ -958,6 +982,15 @@ const stripeAmount = Math.round(verified.total * 100);
 // ... paymentIntents.create({ amount: stripeAmount, currency: 'aud', ... })
 ```
 
+**Also extend the PI metadata** with `tenantId` so the `payment_intent.payment_failed` webhook in Task 6 can attribute declined-card events to a tenant even when no order row exists. The existing `metadata` parameter at `payment-intent/route.ts:71` already includes some fields; add one more:
+
+```ts
+metadata: {
+  ...existingMetadataFields,
+  tenantId, // NEW: needed by Task 6 Step 2 for tenant-scoped audit attribution
+},
+```
+
 - [ ] **Step 4: Update the client to send `itemId` per line in the PI request**
 
 Open `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`. Find the `fetch("/api/stripe/payment-intent", {...})` call (around line 187). Extend the JSON body to include `lines` with `itemId`, `delivery`, `subtotal`, `gst`:
@@ -969,6 +1002,7 @@ body: JSON.stringify({
   currency: "aud",
   lines: lines.map((l) => ({
     itemId: l.itemId,
+    variantLabel: l.variantLabel,
     unitPrice: l.unitPrice,
     qty: l.qty,
   })),
@@ -984,7 +1018,7 @@ body: JSON.stringify({
 }),
 ```
 
-The `/api/orders` POST body already includes `lines` with `itemId` (verify by reading current callsite). No client change needed there beyond the existing payload.
+The `/api/orders` POST body already includes `lines` with `itemId` + `variantLabel` (the existing insert at `route.ts:231` reads `line.unitPrice`, `line.variantLabel`, `line.size`, `line.qty`). No further client change needed.
 
 - [ ] **Step 5: Type-check**
 
@@ -999,9 +1033,9 @@ Start dev server. Place a test order with `4242 4242 4242 4242` — order comple
 
 **Tamper test A — total only:** in devtools, intercept POST to `/api/orders`, modify `total` to `1`. Expect `400 { error: 'totals_mismatch', reason: 'total_mismatch' }`.
 
-**Tamper test B — unitPrice:** modify a line's `unitPrice` from (say) `40` to `0.01`. Expect `400 { error: 'totals_mismatch', reason: 'price_mismatch', offendingItemId: '<id>' }`.
+**Tamper test B — unitPrice:** modify a line's `unitPrice` from (say) `40` to `0.01`. Expect `400 { error: 'totals_mismatch', reason: 'price_mismatch', offendingKey: '<itemId>::<variantLabel>' }`.
 
-**Tamper test C — unknown item:** modify a line's `itemId` to `'fake'`. Expect `400 { error: 'totals_mismatch', reason: 'unknown_item', offendingItemId: 'fake' }`.
+**Tamper test C — unknown variant:** modify a line's `variantLabel` from a real value (e.g. `"Size 12"`) to `"Size 999"`. Expect `400 { error: 'totals_mismatch', reason: 'unknown_variant', offendingKey: '<itemId>::Size 999' }`. (Same response shape if `itemId` is bogus.)
 
 - [ ] **Step 7: Commit**
 
@@ -1011,11 +1045,15 @@ git commit -m "feat: server-side total assertion with catalog-price validation
 
 Both POST /api/orders and POST /api/stripe/payment-intent now:
 1. Fetch the tenant catalog via getActiveCatalog(tenantId).
-2. Reject lines whose itemId is missing from the catalog
-   (reason: unknown_item).
-3. Reject lines where client-claimed unitPrice differs from the
-   catalog price by > 1c (reason: price_mismatch).
-4. Recompute subtotal/gst/total from server-authoritative prices
+2. Build a Map<\${itemId}::\${variantLabel}, price> from each item's
+   variants. Prices live on catalog_variants.price (per-variant), not
+   catalog_items — so a Boys 10/64cm and Mens 8/102cm trouser of
+   the same item validate against their distinct catalog prices.
+3. Reject lines whose (itemId, variantLabel) pair is missing from
+   the catalog (reason: unknown_variant).
+4. Reject lines where client-claimed unitPrice differs from the
+   catalog variant price by > 1c (reason: price_mismatch).
+5. Recompute subtotal/gst/total from server-authoritative prices
    and reject mismatches with the client (reason: total_mismatch).
 
 Server-computed totals and per-line unitPrice are persisted; client
@@ -1025,122 +1063,97 @@ values are validated but never written directly. Closes the
 
 ---
 
-## Task 6: `payment_intent.payment_failed` webhook + dashboard-refund audit + retry transition
+## Task 6: `payment_intent.payment_failed` audit log + dashboard-refund audit log
 
-**Spec:** §2.5
+**Spec:** §2.5 (revised after plan review)
+
+**Architecture pivot (Option B — audit-log-only):**
+
+The original spec called for transitioning an `orders` row to a new `'payment_failed'` status on declined cards. But the codebase creates `orders` rows **after** `confirmPayment` succeeds — declined cards never produce a row. Adding the enum value, the row-update logic, and the parent /orders filter would all be dead code.
+
+**Revised approach:** `payment_intent.payment_failed` writes an audit-log entry only. The entry targets the **PaymentIntent itself** (`targetType: 'payment_intent'`), captures decline metadata, and surfaces in the per-tenant audit log. This preserves the audit-trail intent without any `orders` row management.
+
+What stays from the original Task 6:
+- Extend `AuditActorRole` to include `"system"` for webhook-originated events.
+- Extend `AuditTargetType` to include `"payment_intent"` for events that occur before an order row exists.
+- Add `payment_intent.payment_failed` branch to the webhook (audit-log only, no DB row update).
+- Add audit-log entry inside the existing `charge.refunded` branch (closes the TODO at `refund/route.ts:176-178`).
+
+What drops:
+- ~~`orderStatusEnum` migration adding `'payment_failed'`~~ — not needed.
+- ~~Neon MCP migration + `__drizzle_migrations` insert~~ — not needed.
+- ~~`listOrdersForParent` filter on `status != 'payment_failed'`~~ — no failed rows to hide.
+- ~~Widening `payment_intent.succeeded` WHERE clause~~ — only `pending_payment` is reachable.
 
 **Files:**
-- Modify: `apps/web/src/lib/audit/types.ts` (extend `AuditActorRole`)
-- Modify: `apps/web/src/db/schema.ts` (add `'payment_failed'` to `orderStatusEnum`)
-- Create: `apps/web/drizzle/<next-number>_payment_failed_enum.sql`
-- Modify: `apps/web/src/app/api/stripe/webhook/route.ts` (new branch + audit-log call)
-- Modify: `apps/web/src/app/api/stripe/payment-intent/route.ts` (retry transition)
-- Modify: `apps/web/src/db/queries.ts` (`listOrdersForParent` filter)
-- Apply migration via Neon MCP
+- Modify: `apps/web/src/lib/audit/types.ts` (extend `AuditActorRole` + `AuditTargetType`)
+- Modify: `apps/web/src/app/api/stripe/webhook/route.ts` (new branch + audit-log call in `charge.refunded`)
 
-- [ ] **Step 1: Extend `AuditActorRole` to include `"system"`**
+- [ ] **Step 1: Extend `AuditActorRole` + `AuditTargetType`**
 
-Open `apps/web/src/lib/audit/types.ts:10`. Change:
+Open `apps/web/src/lib/audit/types.ts`.
 
+Change (line 10):
 ```ts
 export type AuditActorRole = "operator" | "platform_admin";
 ```
-
 to:
-
 ```ts
 export type AuditActorRole = "operator" | "platform_admin" | "system";
 ```
 
-This unblocks the webhook calls in Step 4 and Step 5 below.
-
-- [ ] **Step 2: Add `'payment_failed'` to `orderStatusEnum` in `db/schema.ts`**
-
-Open `apps/web/src/db/schema.ts:18-19`. The current enum starts with `'pending_payment'`. Add `'payment_failed'` to the literal array:
-
+Change (lines 4-8):
 ```ts
-export const orderStatusEnum = pgEnum("order_status", [
-  "pending_payment",
-  "payment_failed",
-  "new",
-  // ... whatever else is already there ...
-]);
+export type AuditTargetType =
+  | "order"
+  | "tenant"
+  | "catalog_item"
+  | "tenant_legal_version";
+```
+to:
+```ts
+export type AuditTargetType =
+  | "order"
+  | "tenant"
+  | "catalog_item"
+  | "tenant_legal_version"
+  | "payment_intent";
 ```
 
-Read the full current list before editing — do not drop existing values.
+`"system"` covers webhook-originated events. `"payment_intent"` covers audit events that fire **before** an order row exists (e.g. declined cards). Both are used in Steps 2 and 3 below.
 
-- [ ] **Step 3: Generate the migration SQL file and apply it via Neon MCP**
-
-Per the documented workaround (`/Volumes/T7/georgeqiao/.claude/projects/-Volumes-T7-georgeqiao-dev-uniform-order/memory/project_drizzle_kit_websocket_blocker.md`), `drizzle-kit migrate` hangs in this environment. Instead:
-
-1. Run `pnpm --filter web drizzle-kit generate` to emit the new migration SQL file under `apps/web/drizzle/`. The generated file should contain `ALTER TYPE "order_status" ADD VALUE 'payment_failed';` (or similar). Commit the file as-is.
-
-2. Apply the SQL manually against the dev Neon branch using the Neon MCP `run_sql_transaction` tool. The SQL is:
-
-   ```sql
-   ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'payment_failed';
-   ```
-
-3. Insert the corresponding row into `__drizzle_migrations` so future migrations don't try to re-apply. **First read one existing row** via Neon MCP `run_sql` to confirm the actual column types:
-
-   ```sql
-   SELECT * FROM __drizzle_migrations ORDER BY id DESC LIMIT 1;
-   ```
-
-   Match the existing row's `created_at` type exactly (bigint epoch-ms vs. timestamp) and any other column conventions. Then insert:
-
-   ```sql
-   -- Example (verify against the SELECT above before running):
-   INSERT INTO __drizzle_migrations (hash, created_at)
-   VALUES ('<generated-hash-from-new-migration-file>', <matching-type-value>);
-   ```
-
-   The hash usually matches the filename prefix in `apps/web/drizzle/` (e.g. `0017_payment_failed_enum.sql` → hash from drizzle-kit's `meta/_journal.json`).
-
-4. Verify:
-
-   ```sql
-   SELECT enum_range(NULL::order_status);
-   ```
-   The result should include `payment_failed`.
-
-- [ ] **Step 4: Add `payment_intent.payment_failed` branch to `webhook/route.ts`**
+- [ ] **Step 2: Add `payment_intent.payment_failed` branch (audit log only) to `webhook/route.ts`**
 
 Open `apps/web/src/app/api/stripe/webhook/route.ts`. After the `payment_intent.succeeded` branch (ends around line 88), add:
 
 ```ts
 // ─── payment_intent.payment_failed ────────────────────────────────────────
+// No order row exists at this point — /api/orders inserts only after
+// confirmPayment succeeds. We log the failure to audit_events targeted at
+// the PaymentIntent itself, so per-tenant audit views can surface declined
+// attempts alongside successful events.
 if (event.type === "payment_intent.payment_failed") {
   const pi = event.data.object as Stripe.PaymentIntent;
-  const flipped = await db
-    .update(orders)
-    .set({ status: "payment_failed" })
-    .where(
-      and(
-        eq(orders.stripePaymentIntentId, pi.id),
-        eq(orders.status, "pending_payment"),
-      ),
-    )
-    .returning({ id: orders.id, tenantId: orders.tenantId });
-
-  if (flipped.length === 1) {
-    await logAuditEvent({
-      tenantId: flipped[0].tenantId,
-      actorEmail: "stripe-webhook",
-      actorRole: "system",
-      action: "order.payment_failed",
-      targetType: "order",
-      targetId: flipped[0].id,
-      payload: {
-        paymentIntentId: pi.id,
-        lastPaymentError: pi.last_payment_error?.message ?? null,
-        declineCode: pi.last_payment_error?.decline_code ?? null,
-      },
-    });
-  } else {
-    console.info("stripe webhook: no pending_payment order matched payment_failed", pi.id);
-  }
-
+  // PI metadata is populated by /api/stripe/payment-intent at creation time;
+  // pull tenantId from there (and parentEmail, for the actor field).
+  const piTenantId = typeof pi.metadata?.tenantId === "string" ? pi.metadata.tenantId : null;
+  const piParentEmail = typeof pi.metadata?.parentEmail === "string"
+    ? pi.metadata.parentEmail
+    : "stripe-webhook";
+  await logAuditEvent({
+    tenantId: piTenantId,
+    actorEmail: piParentEmail,
+    actorRole: "system",
+    action: "payment_intent.payment_failed",
+    targetType: "payment_intent",
+    targetId: pi.id,
+    payload: {
+      amount: pi.amount ? pi.amount / 100 : null,
+      currency: pi.currency,
+      lastPaymentError: pi.last_payment_error?.message ?? null,
+      declineCode: pi.last_payment_error?.decline_code ?? null,
+    },
+  });
   return NextResponse.json({ received: true });
 }
 ```
@@ -1151,7 +1164,9 @@ Add the import at the top:
 import { logAuditEvent } from "@/lib/audit/log";
 ```
 
-- [ ] **Step 5: Add audit log to `charge.refunded` branch (with tenantId)**
+**PI metadata note:** the existing `/api/stripe/payment-intent` route already populates `metadata.parentEmail` and is the right place to also include `metadata.tenantId`. Confirm by reading the existing `paymentIntents.create({...metadata})` call (around `payment-intent/route.ts:71`); if `tenantId` is not yet in the metadata object, add it as part of Task 5's changes to that file (it's a one-line addition to the existing `metadata` object).
+
+- [ ] **Step 3: Add audit log to `charge.refunded` branch (with tenantId)**
 
 Inside the existing `charge.refunded` branch at `webhook/route.ts:137-184`:
 
@@ -1193,86 +1208,48 @@ Inside the existing `charge.refunded` branch at `webhook/route.ts:137-184`:
 
    `audit_events.tenantId` is nullable, but populating it keeps the `idx_audit_events_tenant_time` index useful for per-tenant audit views.
 
-- [ ] **Step 6: Widen `payment_intent.succeeded` WHERE clause in `webhook/route.ts`**
-
-**Flow reminder (verified by reading `/api/orders/route.ts:155-167` and `checkout-screen.tsx:187`):**
-
-1. Parent clicks Pay → checkout fetches a **fresh PI** from `/api/stripe/payment-intent`.
-2. `confirmPayment` succeeds → checkout POSTs `/api/orders` with the PI id.
-3. `/api/orders` checks for an existing order by `stripePaymentIntentId`. If none, inserts a new row with `status: 'pending_payment'`. If found and owned by the same user, returns the existing orderId (idempotent).
-4. Webhook `payment_intent.succeeded` fires → transitions `pending_payment → new`.
-
-A declined card never reaches step 3 (the client aborts inside `onPay`), so no `pending_payment` row exists for the failed PI. **But** if the webhook `payment_intent.payment_failed` for a successful payment somehow fires late (network reorder), or if Stripe sends `payment_failed` for a PI that already has an order row (e.g. user retried with a different PI but the old PI eventually got a failed event), we want the system to be resilient.
-
-**Concretely:** widen the `payment_intent.succeeded` WHERE clause so it accepts both `pending_payment` AND `payment_failed`. This is defensive — it covers the rare retry-against-same-PI case if the client flow ever changes to one-PI-per-checkout.
-
-Open `apps/web/src/app/api/stripe/webhook/route.ts:62-66`. Change:
-
-```ts
-.where(and(eq(orders.stripePaymentIntentId, pi.id), eq(orders.status, "pending_payment")))
-```
-
-to:
-
-```ts
-.where(
-  and(
-    eq(orders.stripePaymentIntentId, pi.id),
-    inArray(orders.status, ["pending_payment", "payment_failed"]),
-  ),
-)
-```
-
-Add `inArray` to the `drizzle-orm` import at the top of the file:
-
-```ts
-import { and, eq, inArray, sql } from "drizzle-orm";
-```
-
-- [ ] **Step 7: Filter `payment_failed` out of `listOrdersForParent`**
-
-Open `apps/web/src/db/queries.ts` and find `listOrdersForParent`. Inside its WHERE clause, add a predicate excluding `payment_failed`:
-
-```ts
-import { ne } from "drizzle-orm"; // if not already imported
-
-// inside listOrdersForParent's .where(...) — combine with existing predicates via and(...)
-ne(orders.status, "payment_failed"),
-```
-
-- [ ] **Step 8: Type-check**
+- [ ] **Step 4: Type-check**
 
 ```bash
 pnpm check-types:web
 ```
 Expected: PASS.
 
-- [ ] **Step 9: Smoke (manual)**
+- [ ] **Step 5: Smoke (manual)**
 
-With dev server running and Stripe test webhooks forwarded (`stripe listen --forward-to localhost:3000/api/stripe/webhook` or the equivalent):
+With dev server running and Stripe test webhooks forwarded (`stripe listen --forward-to localhost:3000/api/stripe/webhook` or equivalent):
 
-1. Place a normal order with `4242 4242 4242 4242` → confirm webhook flips `pending_payment → new`.
-2. Place an order with `4000 0000 0000 0002` (declines) → confirm webhook flips `pending_payment → payment_failed`; verify the audit_events table has an `order.payment_failed` row; verify `/orders` does NOT list the failed row.
-3. Retry: from checkout, submit again with a good card → new PI, new order row, succeeds → webhook flips new row to `new`. Old failed row remains in `payment_failed` and stays hidden from /orders.
-4. Trigger a Stripe Dashboard refund on a paid order → webhook flips status to `refunded`/`partially_refunded` AND inserts an audit row with `action: 'order.refunded.via_dashboard'`.
+1. **Success path:** place a normal order with `4242 4242 4242 4242` → webhook flips `pending_payment → new` (unchanged from today; verify still working).
+2. **Declined path:** attempt payment with `4000 0000 0000 0002`. `confirmPayment` returns an error → client surfaces "Card declined" → **no order row is created**. Webhook receives `payment_intent.payment_failed` → an audit row appears with `action: 'payment_intent.payment_failed'`, `target_type: 'payment_intent'`, `target_id: pi_xxx`, payload includes `declineCode` and `lastPaymentError`. Query: `SELECT action, target_type, payload FROM audit_events WHERE target_type='payment_intent' ORDER BY created_at DESC LIMIT 1;`
+3. **Retry after decline:** with the same checkout open, submit with a good card. New PI created; succeeds normally. Original PI remains failed in Stripe Dashboard. Audit log shows both events.
+4. **Dashboard refund:** issue a refund on a paid order from Stripe Dashboard. Webhook flips status to `refunded`/`partially_refunded` AND inserts an audit row with `action: 'order.refunded.via_dashboard'`, `tenantId` populated from the order.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/web/src/lib/audit/types.ts apps/web/src/db/schema.ts apps/web/drizzle apps/web/src/app/api/stripe/webhook/route.ts apps/web/src/app/api/stripe/payment-intent/route.ts apps/web/src/db/queries.ts
-git commit -m "feat: payment_failed webhook + dashboard-refund audit + retry transition
+git add apps/web/src/lib/audit/types.ts apps/web/src/app/api/stripe/webhook/route.ts apps/web/src/app/api/stripe/payment-intent/route.ts
+git commit -m "feat: audit-log payment_intent.payment_failed + dashboard refunds
 
-- Extend orderStatusEnum with 'payment_failed' (migration via Neon MCP).
-- Extend AuditActorRole to include 'system' for webhook-originated events.
-- New payment_intent.payment_failed branch transitions pending_payment ->
-  payment_failed and audit-logs the decline_code + error message.
-- charge.refunded now audit-logs the dashboard-initiated refund
-  (closes the TODO at refund/route.ts:176-178).
-- payment_intent.succeeded WHERE clause broadened to accept
-  pending_payment OR payment_failed, so retries-after-failure
-  transition cleanly to 'new'.
-- listOrdersForParent hides payment_failed rows from the parent
-  /orders view; admin Kanban and audit surfaces are unaffected."
+Adds audit-log entries for two webhook events that were previously
+unobserved:
+
+1. payment_intent.payment_failed — declined cards never produce an
+   order row (orders are created post-confirmPayment), so the audit
+   entry targets the PaymentIntent itself (targetType:'payment_intent')
+   and pulls tenantId from PI metadata. Captures decline_code and
+   lastPaymentError for support visibility.
+
+2. charge.refunded — closes the TODO at refund/route.ts:176-178.
+   Inside the existing branch, after the status update, logAuditEvent
+   with actorRole:'system' and tenantId populated from the order row
+   (orders.tenantId added to the existing select shape).
+
+Extends AuditActorRole with 'system' and AuditTargetType with
+'payment_intent' to support these event shapes.
+
+Also: /api/stripe/payment-intent now writes tenantId into PI metadata
+so the payment_failed webhook can attribute the event to a tenant
+even when no order row exists."
 ```
 
 ---
@@ -1364,7 +1341,9 @@ useEffect(() => {
 }, [total]);
 ```
 
-`elements.update` does not unmount the PaymentElement; it patches the underlying Intent params so the next `confirmPayment` reflects the new amount, and it re-renders wallet button amounts (Apple Pay/Google Pay labels) inline.
+`elements.update({ amount })` is the documented Stripe.js pattern for amount changes in `mode: 'payment'` deferred-intent (Stripe.js v3 reference: "Updates the options the Elements group was created with"). It does not unmount the PaymentElement; it patches the underlying Intent params so the next `confirmPayment` reflects the new amount and wallet button labels (Apple Pay/Google Pay) re-render inline.
+
+**Empty cart edge case:** the checkout page redirects to `/cart` when `lines.length === 0` (via existing client guard at `checkout-screen.tsx` `onPay`). The PaymentElement mount is also gated by `paymentReady`, so the `amount: 0` corner case cannot reach a render. No additional guard needed.
 
 Rename `cardMountRef` → `paymentMountRef` and `cardRef` → `paymentElementRef` throughout. Update the corresponding `useRef<...>` types — `paymentElementRef` is `StripePaymentElement` (import from `@stripe/stripe-js`).
 
@@ -1448,8 +1427,8 @@ With dev server running and Stripe test mode + webhook forwarding active:
 
 1. **Card path:** checkout → pay with `4242 4242 4242 4242`. PaymentElement renders the tabbed layout (at minimum the "Card" tab; Google Pay tab appears in Chrome with a saved card). Payment completes inline; order transitions to `new` after webhook.
 2. **3DS path:** retry with `4000 0027 6000 3184`. Browser redirects through 3DS challenge → returns to `/[tenant]/order/placed`. Order resolves successfully.
-3. **Decline path:** retry with `4000 0000 0000 0002`. Order transitions to `payment_failed`; parent /orders does not list it.
-4. **Retry after failure:** with the same checkout open, submit again with the good card. New PI created, succeeds, order transitions to `new`.
+3. **Decline path:** retry with `4000 0000 0000 0002`. `confirmPayment` returns an error; client surfaces "Card declined"; **no order row is created**. Webhook fires `payment_intent.payment_failed` → an `audit_events` row appears with `target_type='payment_intent'`, `target_id=pi_xxx`, payload includes `declineCode`.
+4. **Retry after failure:** with the same checkout open, submit again with the good card. A fresh PI is created and succeeds; webhook flips the new order row `pending_payment → new`. The original failed PI remains in Stripe Dashboard with its audit entry.
 5. **Awkward totals:** order with prices like `19.95 × 3`. Server assertion passes (within 1¢ tolerance).
 6. **Totals tamper:** modify POST body's `total` in devtools to `1.00` and resubmit. Both `/api/orders` and `/api/stripe/payment-intent` return 400 `totals_mismatch`.
 
@@ -1509,7 +1488,7 @@ Run through every smoke test from Tasks 1–7 in one sitting:
 
 In §2.13 and §2.14, mark each shipped item with a `✅ shipped <PR#>` annotation once the PR number is known (after `gh pr create`). Items shipped:
 - §2.13: tenant footer, contact page, SEO basics, Apple/Google Pay
-- §2.14: payment_failed webhook + dashboard refund audit + server-side total assertion + `getPreviousSizeHint` removal
+- §2.14: payment_failed audit-log entry + dashboard refund audit + server-side total assertion with variant-keyed catalog validation + `getPreviousSizeHint` removal
 
 Add one new ops follow-up under §2.13:
 > **Apple Pay domain verification** — replace `apps/web/public/.well-known/apple-developer-merchantid-domain-association` with the real file from Stripe Dashboard → Settings → Payment methods → Apple Pay → Add new domain (`uniformorder.online`), then redeploy. Until verified, Apple Pay does not surface in the PaymentElement wallet tab. Google Pay is unaffected.
@@ -1533,17 +1512,17 @@ Bundled pre-launch hardening per `docs/superpowers/specs/2026-05-12-prelaunch-ha
 - **Tenant footer + Contact page** — surface policy + contact info on every parent route
 - **SEO basics** — `sitemap.ts`, `robots.ts`, per-tenant + per-PDP `generateMetadata`, canonical URLs on PDPs
 - **Apple Pay + Google Pay** — Stripe `PaymentElement` in deferred-intent mode (replaces card-only element)
-- **`payment_intent.payment_failed` webhook** — soft-cancel with audit-log entry; hidden from parent /orders
+- **`payment_intent.payment_failed` audit log** — declined cards write to `audit_events` targeting the PaymentIntent (no order row exists at decline time)
 - **Dashboard-refund audit log** — closes acknowledged TODO at `refund/route.ts:176-178`
-- **Server-side total assertion** — shared helper at `lib/order-totals.ts` (1/11 GST on inclusive total, 1¢ tolerance)
+- **Server-side total assertion + catalog price validation** — shared helper at `lib/order-totals.ts` (1/11 GST on inclusive total, 1¢ tolerance, variant-keyed price lookup against `catalog_variants.price`)
 - **Removed `getPreviousSizeHint`** — wrong-child bug for multi-child parents; not worth fixing (see `remaining_work.md` §2.14)
 
 ## Test plan
 
 - [x] `pnpm check-types:web` passes
 - [ ] Smoke: card payment success
-- [ ] Smoke: declined card → `payment_failed` row hidden from /orders; audit log entry created
-- [ ] Smoke: retry after decline → new PI, new order row, transitions to `new`
+- [ ] Smoke: declined card → no order row created; `audit_events` row with `target_type='payment_intent'` and `declineCode`
+- [ ] Smoke: retry after decline → fresh PI, new order row, transitions `pending_payment → new`
 - [ ] Smoke: 3DS path → redirect to `/order/placed` resolves correctly
 - [ ] Smoke: `/api/orders` and `/api/stripe/payment-intent` reject tampered `total` with 400 totals_mismatch
 - [ ] Smoke: `/sitemap.xml` lists publicly-approved tenants only; `/robots.txt` disallows /admin /platform /auth /api
@@ -1566,30 +1545,31 @@ EOF
 - §2.2 Contact page → Task 2 ✅
 - §2.3 SEO (sitemap, robots, generateMetadata × 2) → Task 3 ✅
 - §2.4 PaymentElement deferred-intent → Task 7 ✅
-- §2.5 payment_failed + dashboard-refund audit + retry transition → Task 6 ✅
-- §2.6 totals helper + enforcement (both endpoints, server-computed values + catalog price validation authoritative) → Task 4 + Task 5 ✅
+- §2.5 payment_failed audit + dashboard-refund audit → Task 6 ✅ (revised to Option B: audit-only, no order-row state machinery)
+- §2.6 totals helper + variant-keyed catalog price validation → Task 4 + Task 5 ✅
 - §2.7 getPreviousSizeHint removal (function + type + API route + client fetch + state + JSX) → Task 1 ✅
 
-**Sequencing:** matches §5 of the spec (1: size-hint, 2: footer+contact, 3: SEO, 4: helpers, 5: enforcement with catalog validation, 6: webhook, 7: PaymentElement). Squash-merge to `main`; intra-PR commits are for review readability only.
+**Sequencing:** 1: size-hint, 2: footer+contact, 3: SEO, 4: helpers, 5: enforcement with catalog validation, 6: webhook audit, 7: PaymentElement. Squash-merge to `main`; intra-PR commits are for review readability only.
 
-**Pre-flight open questions:**
-- `getPubliclyListedTenants()` — resolved (exists).
-- `actorRole: 'system'` — Task 6 Step 1 widens the union.
+**Pre-flight resolutions:**
+- `getPubliclyListedTenants()` exists at `queries.ts:859`.
+- `BottomNav` rendered only by `app/[tenant]/page.tsx:83`; footer placement per-page.
+- `audit_events.tenantId` nullable; populated when available.
+- `/privacy` and `/terms` routes exist.
+- `catalogVariants.price` is the authoritative price field (`numeric(10,2)`, dollars). Prices are per-variant; lookup keyed on `${itemId}::${variantLabel}`.
+- `getActiveCatalog` returns nested `variants: { label, price, sizes }[]` (already grouped) — no new query helper needed.
+- `orderStatusEnum` values: `pending_payment, new, packing, ready, collected, partially_refunded, refunded`. **No additions in this PR** (Task 6 pivoted to audit-only).
+- `AuditActorRole`/`AuditTargetType` widened in Task 6 Step 1 (`"system"`, `"payment_intent"`).
 - Apple domain file — placeholder + post-merge ops step documented.
-- `BottomNav` only on catalog page — verified; footer placement adjusted accordingly.
-- `audit_events.tenantId` nullable — verified; Task 6 Step 5 still populates it from the order row.
-- `/privacy` and `/terms` routes exist — verified; footer links are safe.
 
-**Code-review fixes incorporated (2026-05-12):**
-1. Server-side catalog price validation in Task 5 (rejects client unitPrice tampering).
-2. Dropped `paymentMethodCreation: 'manual'` from Task 7 (Stripe API mismatch with `confirmPayment`).
-3. Restructured Task 6 Step 6 to name the actual file modified (`webhook/route.ts`) and resolve the retry-flow hedge.
-4. Task 2 footer placement: pages render `<TenantFooter>` directly inside `MobileShell` (not auto-appended by the shell) so it lands above `BottomNav` on the catalog page.
-5. Task 4 helper exports `round2` and documents the GST-on-shipping assumption.
-6. Task 6 Step 3 reads an existing `__drizzle_migrations` row before constructing the INSERT.
-7. Task 6 Step 5 extends the order `select` to include `tenantId` and populates it in the audit-log entry.
-8. Task 7 splits the Stripe mount into a one-shot init effect + a separate `elements.update({ amount })` effect so delivery toggles don't destroy in-progress card data.
+**Round-2 code-review fixes incorporated (2026-05-13):**
+1. **Task 6 pivoted to Option B** — declined cards never produce an `orders` row in this codebase (rows are created post-`confirmPayment`), so the original `pending_payment → payment_failed` transition was dead code. Task 6 now logs audit events targeting the PaymentIntent (`targetType: "payment_intent"`) instead. Dropped: enum migration, `__drizzle_migrations` insert, `listOrdersForParent` filter, `payment_intent.succeeded` WHERE-clause widening.
+2. **Task 5 catalog lookup keyed on `(itemId, variantLabel)`** — prices live on `catalog_variants.price` (per-variant), not `catalog_items`. The earlier `Map<itemId, number>` was the wrong shape. New `priceLookupKey()` helper builds `${itemId}::${variantLabel}`. Lookup constructed from `getActiveCatalog(tenantId)`'s nested `item.variants[]`. Mismatch reason renamed `unknown_item → unknown_variant`, error surfaces `offendingKey` instead of `offendingItemId`.
+3. **Task 4 JSDoc softened** — Reports-page consolidation is now noted as a follow-up, not a same-PR claim. Drift between the two callsites is left for accountant sign-off (§3.6).
+4. **Task 5 PI metadata** — `tenantId` added to `paymentIntents.create({...metadata})` so the `payment_intent.payment_failed` audit entry in Task 6 can attribute the event to a tenant even with no order row.
+5. **Task 7** — added explicit Stripe.js reference for `elements.update({ amount })` in deferred-intent mode + a note on the empty-cart guard.
+6. (Round-1 fixes from 6a20d6e remain in place: footer placement, `paymentMethodCreation` drop, mount-once + elements.update split, audit `tenantId` populated from the order row in `charge.refunded`, etc.)
 
 **Placeholder scan:** none. Every step has either a command, a code block, a file path with content, or a concrete verification.
 
-**Type consistency:** `paymentMountRef` / `paymentElementRef` used consistently in Task 7. `TenantRow` used as the footer prop type consistently. `assertTotalsMatch` signature consistent across Tasks 4 and 5 (with `priceLookup` added). `round2` exported in Task 4 and consumed in Task 5.
+**Type consistency:** `LineInput` includes `variantLabel` everywhere. `priceLookupKey(itemId, variantLabel)` used consistently in Task 5 Steps 2 and 3 + Task 4 helper. `priceLookup: Map<string, number>` shape consistent. `MismatchReason` union and `offendingKey` consistent across Task 4 + Task 5 + smoke-test expectations.
