@@ -21,7 +21,10 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
     setQ("");
     inputRef.current?.focus();
   };
-  const visible = items.filter((i) => i.cat === activeCat);
+  const query = q.trim().toLowerCase();
+  const visible = query
+    ? items.filter((it) => (it.name + " " + it.cat).toLowerCase().includes(query))
+    : items.filter((i) => i.cat === activeCat);
 
   return (
     <>
@@ -86,38 +89,59 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
 
       {/* Result-count line */}
       <div className="px-4 pt-3 pb-2 flex-shrink-0 flex items-baseline gap-2">
-        <h3 className="font-serif text-[18px] font-medium m-0">{activeCat} Uniform</h3>
-        <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>· {visible.length} items</span>
+        <h3 className="font-serif text-[18px] font-medium m-0">
+          {query ? `Results for "${q.trim()}"` : `${activeCat} Uniform`}
+        </h3>
+        <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+          · {visible.length} {visible.length === 1 ? "item" : "items"}
+          {query ? " in all categories" : ""}
+        </span>
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 px-4 pb-3 grid grid-cols-2 gap-3 content-start">
-        {visible.map((it) => {
-          const minP = Math.min(...it.variants.map((v) => v.price));
-          const maxP = Math.max(...it.variants.map((v) => v.price));
-          return (
-            <Link
-              key={it.id}
-              href={`/${tenantId}/item/${it.id}`}
-              className="bg-white rounded-[10px] border overflow-hidden block"
-              style={{ borderColor: "var(--color-rule)" }}
-            >
-              <GarmentVector itemId={it.id} accent={accent} size={120} className="w-full h-auto block" />
-              <div className="px-2.5 pt-2 pb-2.5">
-                <div className="font-serif text-[13px] font-medium leading-[1.2] line-clamp-2 min-h-8" style={{ color: "var(--color-ink)" }}>
-                  {it.name}
+      {/* Grid or empty state */}
+      {visible.length === 0 && query ? (
+        <div className="flex-1 px-4 pb-3 flex flex-col items-start gap-3 pt-2">
+          <p className="text-[13px] m-0" style={{ color: "var(--color-ink)" }}>
+            No items match &ldquo;{q.trim()}&rdquo;.
+          </p>
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="text-[13px] underline font-semibold"
+            style={{ color: "var(--color-ink)" }}
+          >
+            Clear search
+          </button>
+        </div>
+      ) : (
+        <div className="flex-1 px-4 pb-3 grid grid-cols-2 gap-3 content-start">
+          {visible.map((it) => {
+            const minP = Math.min(...it.variants.map((v) => v.price));
+            const maxP = Math.max(...it.variants.map((v) => v.price));
+            return (
+              <Link
+                key={it.id}
+                href={`/${tenantId}/item/${it.id}`}
+                className="bg-white rounded-[10px] border overflow-hidden block"
+                style={{ borderColor: "var(--color-rule)" }}
+              >
+                <GarmentVector itemId={it.id} accent={accent} size={120} className="w-full h-auto block" />
+                <div className="px-2.5 pt-2 pb-2.5">
+                  <div className="font-serif text-[13px] font-medium leading-[1.2] line-clamp-2 min-h-8" style={{ color: "var(--color-ink)" }}>
+                    {it.name}
+                  </div>
+                  <div className="mt-1.5 text-[12px] font-semibold tnum" style={{ color: "var(--color-ink)" }}>
+                    ${minP}
+                    {minP !== maxP && (
+                      <span className="font-normal" style={{ color: "var(--color-ink-dim)" }}> – ${maxP}</span>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-1.5 text-[12px] font-semibold tnum" style={{ color: "var(--color-ink)" }}>
-                  ${minP}
-                  {minP !== maxP && (
-                    <span className="font-normal" style={{ color: "var(--color-ink-dim)" }}> – ${maxP}</span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
