@@ -1,5 +1,21 @@
 import { permanentRedirect, notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { getTenant, getCatalogItem, toTenantBrand } from "@/db/queries";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ tenant: string; itemId: string }>;
+}): Promise<Metadata> {
+  const { tenant: slug, itemId } = await params;
+  const [tenant, item] = await Promise.all([getTenant(slug), getCatalogItem(slug, itemId)]);
+  if (!tenant || !item) return { title: "Item" };
+  return {
+    title: `${item.name} — ${tenant.name}`,
+    description: item.description ?? `${item.name} available from ${tenant.name}`,
+    alternates: { canonical: `/${tenant.id}/item/${itemId}` },
+  };
+}
 import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { GarmentVector } from "@/components/garment";
 import { Chip } from "@/components/chip";
