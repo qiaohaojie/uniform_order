@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { CatalogItem } from "@/lib/data";
 import { CATEGORIES } from "@/lib/data";
@@ -25,6 +25,14 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
   const visible = query
     ? items.filter((it) => (it.name + " " + it.cat).toLowerCase().includes(query))
     : items.filter((i) => i.cat === activeCat);
+
+  const [announced, setAnnounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setAnnounced(query === "" ? "" : `${visible.length} results for ${q.trim()}`);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, query, visible.length]);
 
   return (
     <>
@@ -63,6 +71,9 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
             </button>
           )}
         </div>
+        <span role="status" aria-live="polite" className="sr-only">
+          {announced}
+        </span>
       </div>
 
       {/* Category chips */}
