@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getTenant, toTenantBrand } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
+import { TenantFooter } from "@/components/tenant-footer";
 import { CheckoutScreen } from "./checkout-screen";
 import { getSessionUser } from "@/lib/auth/authorization";
 import { getActiveChild } from "@/lib/active-child.server";
@@ -29,6 +30,7 @@ export default async function CheckoutPage({ params }: PageProps<"/[tenant]/chec
   return (
     <MobileShell bg="var(--color-paper)">
       <CheckoutScreen tenant={tenant} prefill={prefill} />
+      <TenantFooter tenant={tenantRecord} />
     </MobileShell>
   );
 }

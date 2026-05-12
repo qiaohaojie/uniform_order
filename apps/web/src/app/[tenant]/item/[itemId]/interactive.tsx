@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { CatalogItem, Tenant } from "@/lib/data";
-import type { SizeHint } from "@/db/queries";
 import { useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
-import { BackIcon, CartIcon, CheckIcon } from "@/components/icons";
+import { BackIcon, CartIcon } from "@/components/icons";
 import { posthog } from "@/lib/analytics/client";
 
 export function ItemDetailInteractive({
@@ -27,22 +26,6 @@ export function ItemDetailInteractive({
   const [size, setSize] = useState(item.variants[0]?.sizes[Math.min(2, item.variants[0].sizes.length - 1)] ?? "");
   const [qty, setQty] = useState(1);
   const [showGuide, setShowGuide] = useState(false);
-
-  const [hint, setHint] = useState<SizeHint | null>(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams({ tenantId: tenant.id, itemId: item.id });
-    let cancelled = false;
-    fetch(`/api/orders/size-hint?${params.toString()}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled) setHint(data?.hint ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [tenant.id, item.id]);
 
   const variant = item.variants[variantIdx]!;
   const cartCount = lines.reduce((s, l) => s + l.qty, 0);
@@ -170,12 +153,6 @@ export function ItemDetailInteractive({
               );
             })}
           </div>
-          {hint && (
-            <div className="mt-2 text-[11px] flex items-center gap-1.5" style={{ color: "var(--color-ink-dim)" }}>
-              <span style={{ color: "var(--color-success)" }}><CheckIcon size={12} /></span>
-              <span>{hint.studentName} wore size {hint.size} last year</span>
-            </div>
-          )}
         </div>
       </div>
 

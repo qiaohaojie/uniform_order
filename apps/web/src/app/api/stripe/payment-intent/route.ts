@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
-import { getTenant } from "@/db/queries";
+import { getActiveCatalog, getTenant } from "@/db/queries";
+import {
+  assertTotalsMatch,
+  TotalsMismatchError,
+  priceLookupKey,
+} from "@/lib/order-totals";
 
 // TODO(refunds): When a refund route is added (e.g. POST /api/stripe/refund),
 // it MUST pass `reverse_transfer: true` (and usually `refund_application_fee: true`)
@@ -17,7 +22,8 @@ import { getTenant } from "@/db/queries";
 export async function POST(req: NextRequest) {
   try {
     const stripe = getStripe();
-    const { tenantId, amount, currency = "aud", metadata } = await req.json();
+    const body = await req.json();
+    const { tenantId, amount, currency = "aud", metadata, lines, delivery, subtotal, gst } = body;
 
     if (!tenantId || amount === undefined || amount === null) {
       return NextResponse.json(
@@ -29,6 +35,10 @@ export async function POST(req: NextRequest) {
     const amountNumber = Number(amount);
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+    }
+
+    if (!Array.isArray(lines) || typeof subtotal !== "number" || typeof gst !== "number") {
+      return NextResponse.json({ error: "Missing totals payload" }, { status: 400 });
     }
 
     const tenant = await getTenant(tenantId);
@@ -54,7 +64,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const amountInCents = Math.round(amountNumber * 100);
+    // Build catalog price lookup and assert server-authoritative totals.
+    const catalog = await getActiveCatalog(tenantId);
+    const priceLookup = new Map<string, number>();
+    for (const item of catalog) {
+      for (const v of item.variants) {
+        priceLookup.set(priceLookupKey(item.id, v.label), v.price);
+      }
+    }
+
+    let verified;
+    try {
+      verified = assertTotalsMatch({
+        lines: lines as Array<{
+          itemId: string;
+          variantLabel: string;
+          unitPrice: number;
+          qty: number;
+        }>,
+        delivery: delivery === "ship" ? "ship" : "pickup",
+        received: { subtotal, gst, total: amountNumber },
+        priceLookup,
+      });
+    } catch (err) {
+      if (err instanceof TotalsMismatchError) {
+        return NextResponse.json(
+          {
+            error: "totals_mismatch",
+            reason: err.reason,
+            offendingKey: err.offendingKey,
+            expected: err.expected,
+            received: err.received,
+          },
+          { status: 400 },
+        );
+      }
+      throw err;
+    }
+
+    const amountInCents = Math.round(verified.total * 100);
     const feeBps = Number(process.env.STRIPE_APPLICATION_FEE_BPS ?? 0);
     let applicationFeeAmount: number | undefined;
     if (Number.isFinite(feeBps) && feeBps > 0) {

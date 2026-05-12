@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { loadStripe, type Stripe, type StripeCardElement, type StripeElements } from "@stripe/stripe-js";
+import { loadStripe, type Stripe, type StripePaymentElement, type StripeElements } from "@stripe/stripe-js";
 import type { Tenant } from "@/lib/data";
 import { cartTotal } from "@/lib/data";
 import { useCart } from "@/lib/cart-store";
@@ -12,6 +12,7 @@ import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/component
 import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 import { posthog } from "@/lib/analytics/client";
+import { SHIP_FEE_AUD } from "@/lib/shipping";
 
 type Prefill = { studentName: string; year: string; rollClass: string } | null;
 
@@ -52,11 +53,16 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
   });
   const [parentNote, setParentNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof StudentDetails, string>>>({});
-  const cardMountRef = useRef<HTMLDivElement | null>(null);
+  const paymentMountRef = useRef<HTMLDivElement | null>(null);
   const stripeRef = useRef<Stripe | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
-  const cardRef = useRef<StripeCardElement | null>(null);
+  const paymentElementRef = useRef<StripePaymentElement | null>(null);
   const paymentLockedRef = useRef(false);
+
+  const subtotal = cartTotal(lines);
+  const ship = delivery === "ship" ? SHIP_FEE_AUD : 0;
+  const total = subtotal + ship;
+  const gst = total / 11;
 
   // When active-child prefill is in effect, write the merged values to localStorage
   // on first render so a parent who switches active child and bounces away mid-checkout
@@ -74,67 +80,71 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
   }, [paymentLocked]);
 
   useEffect(() => {
-    if (!stripePromise || !cardMountRef.current || cardRef.current) return;
-
     let cancelled = false;
+    if (!stripePromise) return;
 
     stripePromise.then((stripe) => {
       if (cancelled) return;
       if (!stripe) {
         setPaymentReady(false);
-        setPaymentError("Payment form could not load. Please refresh the page or contact the shop.");
+        setPaymentError(
+          "Payment form could not load. Please refresh the page or contact the shop.",
+        );
         return;
       }
-      if (!cardMountRef.current) return;
+      if (!paymentMountRef.current) return;
 
-      const elements = stripe.elements();
-      const card = elements.create("card", {
-        hidePostalCode: true,
-        style: {
-          base: {
-            color: "#1B1B1B",
+      const elements = stripe.elements({
+        mode: "payment",
+        amount: Math.round(total * 100),
+        currency: "aud",
+        appearance: {
+          theme: "stripe",
+          variables: {
+            colorPrimary: tenant.accent,
             fontFamily: "Inter, system-ui, sans-serif",
-            fontSize: "13px",
-            "::placeholder": { color: "#8A8274" },
           },
-          invalid: { color: "#B23A2A" },
         },
       });
+      const paymentElement = elements.create("payment", { layout: "tabs" });
 
-      card.on("ready", () => {
+      paymentElement.on("ready", () => {
         if (paymentLockedRef.current) return;
         setPaymentReady(true);
         setPaymentError("");
       });
-      card.on("change", (event) => {
+      paymentElement.on("change", (_e) => {
         if (paymentLockedRef.current) return;
-        setPaymentError(event.error?.message ?? "");
+        setPaymentError("");
       });
-      card.mount(cardMountRef.current);
+      paymentElement.mount(paymentMountRef.current);
 
       stripeRef.current = stripe;
       elementsRef.current = elements;
-      cardRef.current = card;
+      paymentElementRef.current = paymentElement;
     }).catch(() => {
       if (cancelled) return;
       setPaymentReady(false);
-      setPaymentError("Payment form could not load. Please refresh the page or contact the shop.");
+      setPaymentError(
+        "Payment form could not load. Please refresh the page or contact the shop.",
+      );
     });
 
     return () => {
       cancelled = true;
-      cardRef.current?.destroy();
-      cardRef.current = null;
+      paymentElementRef.current?.destroy();
+      paymentElementRef.current = null;
       elementsRef.current = null;
       stripeRef.current = null;
       setPaymentReady(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once on initial stripe load
   }, []);
 
-  const subtotal = cartTotal(lines);
-  const ship = delivery === "ship" ? 9.5 : 0;
-  const total = subtotal + ship;
-  const gst = total / 11;
+  useEffect(() => {
+    if (!elementsRef.current) return;
+    elementsRef.current.update({ amount: Math.round(total * 100) });
+  }, [total]);
 
   const setField = (field: keyof StudentDetails, value: string) => {
     setStudent((prev) => ({ ...prev, [field]: value }));
@@ -165,7 +175,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
       setPaymentError("Payment is unavailable because Stripe is not configured.");
       return;
     }
-    if (!stripeRef.current || !cardRef.current || !paymentReady) {
+    if (!stripeRef.current || !elementsRef.current || !paymentReady) {
       setPaymentError("Payment form is still loading. Please try again in a moment.");
       return;
     }
@@ -191,6 +201,15 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
           tenantId: tenant.id,
           amount: total,
           currency: "aud",
+          lines: lines.map((l) => ({
+            itemId: l.itemId,
+            variantLabel: l.variantLabel,
+            unitPrice: l.price,
+            qty: l.qty,
+          })),
+          delivery,
+          subtotal,
+          gst,
           metadata: {
             parentEmail: student.email,
             studentName: student.studentName,
@@ -213,15 +232,28 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
         return;
       }
 
-      const { error, paymentIntent } = await stripeRef.current.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardRef.current,
-          billing_details: {
-            name: student.parentName,
-            email: student.email,
-            phone: student.mobile,
+      // Deferred-intent flow: submit first, then confirm with the PI's clientSecret.
+      const { error: submitError } = await elementsRef.current!.submit();
+      if (submitError) {
+        setPaymentError(submitError.message ?? "Payment validation failed");
+        setPaying(false);
+        return;
+      }
+
+      const { error, paymentIntent } = await stripeRef.current!.confirmPayment({
+        elements: elementsRef.current!,
+        clientSecret,
+        confirmParams: {
+          return_url: `${window.location.origin}/${tenant.id}/order/placed`,
+          payment_method_data: {
+            billing_details: {
+              name: student.parentName,
+              email: student.email,
+              phone: student.mobile,
+            },
           },
         },
+        redirect: "if_required",
       });
 
       if (error) {
@@ -260,7 +292,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
         studentYear: student.year,
         studentRoll: student.rollClass,
         delivery,
-        deliveryFee: delivery === "ship" ? 9.5 : 0,
+        deliveryFee: delivery === "ship" ? SHIP_FEE_AUD : 0,
         subtotal,
         gst,
         total,
@@ -449,7 +481,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
               className="min-h-11 rounded-md border px-3 py-3 text-[13px]"
               style={{ borderColor: paymentError ? "#B23A2A" : "var(--color-rule)" }}
             >
-              <div ref={cardMountRef} />
+              <div id="payment-element" ref={paymentMountRef} />
             </div>
           )}
           {paymentError && (
