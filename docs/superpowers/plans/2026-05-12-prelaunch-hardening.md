@@ -4,7 +4,7 @@
 
 **Goal:** Ship 7 pre-launch hardening items in one squash-merged PR: tenant footer, per-tenant Contact page, SEO basics, Stripe PaymentElement (Apple/Google Pay) via deferred-intent, `payment_intent.payment_failed` handling + dashboard-refund audit log + retry transition, server-side total assertion, and removal of the `getPreviousSizeHint` feature.
 
-**Architecture:** Each task = one bisect-safe commit. The codebase works in **dollars (AUD)** end-to-end — only the Stripe API boundary converts to integer cents via `Math.round(total * 100)`. Stripe Elements moves to **deferred-intent mode** (`stripe.elements({ mode: 'payment', amount, currency })`) so the PaymentElement can mount before the PaymentIntent is created. New helpers live in `apps/web/src/lib/shipping.ts` and `apps/web/src/lib/order-totals.ts` for single-source-of-truth totals shared by client display, server assertion, and the Reports page.
+**Architecture:** 7 tasks → 7 commits on a feature branch → squash-merged to `main`. Intra-PR commits exist for review readability, not `git bisect` (squash collapses them). The codebase works in **dollars (AUD)** end-to-end — only the Stripe API boundary converts to integer cents via `Math.round(total * 100)`. Stripe Elements moves to **deferred-intent mode** (`stripe.elements({ mode: 'payment', amount, currency })`) so the PaymentElement can mount before the PaymentIntent is created. New helpers live in `apps/web/src/lib/shipping.ts` and `apps/web/src/lib/order-totals.ts` for single-source-of-truth totals shared by client display, server assertion, and the Reports page. **Server-side line validation:** the totals helper does not trust client-supplied `unitPrice` — Task 5 looks up authoritative prices from `getActiveCatalog(tenantId)` and rejects mismatches.
 
 **Tech Stack:** Next.js 16 (App Router, RSC), Drizzle + neon-http (Postgres on Neon), Stripe Connect (destination charges) + Stripe.js, Tailwind v4 + HeroUI v3, PostHog, Hostinger Node.js deploy.
 
@@ -21,6 +21,14 @@ Resolved during plan authoring (do not re-investigate):
 - `app/[tenant]/cart/page.tsx`, `app/[tenant]/checkout/page.tsx`, `app/[tenant]/order/placed/page.tsx` all already call `getTenant(slug)` — no new fetches required for the footer.
 - `payment_intent.succeeded` transitions `pending_payment → 'new'` at `apps/web/src/app/api/stripe/webhook/route.ts:62-66`. The `'new'` status is the success state — there is no `'paid'`.
 - `charge.refunded` branch is at `webhook/route.ts:137-184`. It updates `orderRefunds` + transitions order status; it does **not** call `logAuditEvent`. Task 6 adds that call.
+
+**Resolved during code-review pass (do not re-investigate):**
+
+- `BottomNav` is rendered **only** by `app/[tenant]/page.tsx:83` (the catalog home). `cart/checkout/order/placed/refund-policy/contact` pages do **not** render `BottomNav`. This shapes Task 2: the footer is rendered by each page directly (not auto-appended by `MobileShell`) so it lands above `BottomNav` on the catalog home and at end-of-content elsewhere.
+- `MobileShell` (`apps/web/src/components/mobile-shell.tsx`) is a simple `flex flex-col` column with no `BottomNav` slot — its `children` is rendered as-is. Auto-appending the footer from inside `MobileShell` would put it **after** `BottomNav` in the DOM on the catalog page. Task 2 therefore renders `<TenantFooter>` from each page, not from the shell.
+- `getActiveCatalog` is wrapped in React `cache()` for request-scoped dedup (`db/queries.ts:926`). Sitemap calls it once per tenant per request — cold per crawl but deduped within the response.
+- `audit_events.tenantId` is **nullable** in the schema (`db/schema.ts:245` — no `.notNull()` chain). Populating it when available is preferred for the index, but `null` is a legal insert value.
+- `app/privacy/page.tsx` and `app/terms/page.tsx` both exist; footer links will not 404.
 
 **One outstanding pre-flight that the plan handles inline (Task 6 Step 1):**
 
@@ -48,13 +56,12 @@ Resolved during plan authoring (do not re-investigate):
 
 | Path | Reason |
 |---|---|
-| `apps/web/src/components/mobile-shell.tsx` | Accept optional `tenant` prop; render `<TenantFooter>` above `BottomNav` slot |
-| `apps/web/src/app/[tenant]/page.tsx` | Pass `tenantRecord` to `MobileShell` |
-| `apps/web/src/app/[tenant]/cart/page.tsx` | Same |
+| `apps/web/src/app/[tenant]/page.tsx` | Render `<TenantFooter>` before `<BottomNav>` (catalog has BottomNav) |
+| `apps/web/src/app/[tenant]/cart/page.tsx` | Render `<TenantFooter>` at end of MobileShell children |
 | `apps/web/src/app/[tenant]/checkout/page.tsx` | Same |
 | `apps/web/src/app/[tenant]/order/placed/page.tsx` | Same |
 | `apps/web/src/app/[tenant]/refund-policy/page.tsx` | Same |
-| `apps/web/src/app/[tenant]/item/[itemId]/page.tsx` | Same + add `generateMetadata` |
+| `apps/web/src/app/[tenant]/item/[itemId]/page.tsx` | Render `<TenantFooter>` + add `generateMetadata` |
 | `apps/web/src/app/[tenant]/layout.tsx` | Add `generateMetadata` for per-tenant title/description/OG |
 | `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx` | Remove size-hint fetch + state + JSX (Task 1) |
 | `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` | PaymentElement swap (Task 7); import `SHIP_FEE_AUD` (Task 4) |
@@ -115,17 +122,25 @@ All tasks below commit to this branch. Final squash-merge to `main` at the end.
 rm -rf apps/web/src/app/api/orders/size-hint
 ```
 
-- [ ] **Step 2: Delete `getPreviousSizeHint` from `db/queries.ts`**
+- [ ] **Step 2: Delete `getPreviousSizeHint` + `SizeHint` type from `db/queries.ts`**
 
-Open `apps/web/src/db/queries.ts`, find the `export async function getPreviousSizeHint(...)` block (around line 427-467) and remove it entirely along with any orphaned imports it pulled in. TypeScript will flag downstream issues in Step 4.
+Open `apps/web/src/db/queries.ts`. Remove:
+- The `export async function getPreviousSizeHint(...)` block (lines ~427-467).
+- The `SizeHint` type export (also exported from this file; verify via `grep "export type SizeHint\|export interface SizeHint" apps/web/src/db/queries.ts`).
+- Any imports the function pulled in that are now unreferenced.
 
-- [ ] **Step 3: Remove client fetch + state + JSX from `interactive.tsx`**
+TypeScript will flag remaining downstream issues in Step 4.
 
-Open `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`. Remove:
-- The `fetch('/api/orders/size-hint?...')` call at line ~36 and its surrounding `useEffect`.
-- Any `useState` holding the hint result (typically named `previousSize` or similar).
-- The hint render block (was around line 173-178; usually a small `<p>` reading "...wore size X last year" or similar).
-- The hint-related imports if no longer referenced.
+- [ ] **Step 3: Remove size-hint usage from `interactive.tsx`**
+
+Open `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx`. Remove the following named symbols (verified by reading the file):
+
+- Import: `import type { SizeHint } from "@/db/queries";` (line 7).
+- State: `const [hint, setHint] = useState<SizeHint | null>(null);` (line 31).
+- Effect: the `useEffect` at line 33 that calls `fetch('/api/orders/size-hint?...')` (whole block, including the cancellation flag).
+- JSX: the `{hint && (...)}` render block at lines 173-178 (renders `<span>{hint.studentName} wore size {hint.size} last year</span>`).
+
+If `useState` or `useEffect` are no longer used after the removal, drop them from the React import on line 5 (currently `import { useEffect, useState, type ReactNode } from "react";`). Confirm via type-check.
 
 - [ ] **Step 4: Type-check**
 
@@ -174,8 +189,8 @@ Removes:
 **Files:**
 - Create: `apps/web/src/components/tenant-footer.tsx`
 - Create: `apps/web/src/app/[tenant]/contact/page.tsx`
-- Modify: `apps/web/src/components/mobile-shell.tsx`
-- Modify: each tenant page that uses `MobileShell` — pass `tenant` prop
+- Modify: each tenant page below — render `<TenantFooter>` directly inside `MobileShell` as the last child (above `BottomNav` on the catalog page; at end-of-content elsewhere)
+- **Not modified:** `apps/web/src/components/mobile-shell.tsx` — the shell stays a generic flex-column wrapper. Pages render their own footer to control placement relative to `BottomNav`.
 
 - [ ] **Step 1: Create `tenant-footer.tsx`**
 
@@ -232,47 +247,48 @@ export function TenantFooter({ tenant }: { tenant: TenantRow }) {
 
 If `TenantRow` is not yet exported from `db/schema.ts`, add it. Check first with `grep "export type TenantRow" apps/web/src/db/schema.ts`. It exists per pre-flight; line ~261.
 
-- [ ] **Step 2: Modify `mobile-shell.tsx` to accept and render the footer**
+- [ ] **Step 2: Render `<TenantFooter>` in each tenant page**
 
-Open `apps/web/src/components/mobile-shell.tsx`. Add an optional `tenant?: TenantRow` prop (import the type from `@/db/schema`). Inside the layout, render `<TenantFooter tenant={tenant} />` at the end of the scrolled content area, before the slot that holds `BottomNav`. The footer must sit in the normal scroll flow (not fixed) so it appears at the end of content.
+`MobileShell` is **not** modified. Each page renders `<TenantFooter tenant={tenantRecord} />` as a child of `MobileShell`, placed:
 
-Example structure (preserve existing wrapper classes):
+- **Catalog home** (`app/[tenant]/page.tsx`) — immediately **before** `<BottomNav ... />` (line 83). Order in DOM: catalog grid → `<TenantFooter>` → `<BottomNav>`. Since `BottomNav` is `fixed` (verify by reading `apps/web/src/components/bottom-nav.tsx`), the footer scrolls naturally into view at the end of the catalog. If `BottomNav` is fixed and overlays content, add `pb-16` (or matching height) to the scrollable container so the footer isn't permanently obscured.
+- **Cart, checkout, order/placed, refund-policy, contact** — at end of content, inside `MobileShell` as the last child. These pages don't render `BottomNav`, so no overlap concern.
+
+Each page already calls `getTenant(slug)` and binds it to `tenantRecord` (or equivalent — most files use `tenantRecord`; checkout/cart files may name it differently). Pass the **raw row** to `<TenantFooter>` so the footer has `shopEmail`, `shopHours`, `currentLegalVersionId`. Do **not** pass `toTenantBrand(...)` — that subset drops the footer's required fields.
+
+Pages to modify:
+
+- `apps/web/src/app/[tenant]/page.tsx` (place before `<BottomNav>`)
+- `apps/web/src/app/[tenant]/cart/page.tsx` (end of `MobileShell` children)
+- `apps/web/src/app/[tenant]/checkout/page.tsx` (end of `MobileShell` children)
+- `apps/web/src/app/[tenant]/order/placed/page.tsx` (end of `MobileShell` children)
+- `apps/web/src/app/[tenant]/refund-policy/page.tsx` (end of `MobileShell` children)
+- `apps/web/src/app/[tenant]/item/[itemId]/page.tsx` (end of `MobileShell` children — verify path; PDP may use its own shell)
+
+Import at the top of each:
+
 ```tsx
 import { TenantFooter } from "@/components/tenant-footer";
-import type { TenantRow } from "@/db/schema";
-
-export function MobileShell({
-  children,
-  bg,
-  tenant,
-}: {
-  children: React.ReactNode;
-  bg?: string;
-  tenant?: TenantRow;
-}) {
-  return (
-    <div /* existing classes */ style={bg ? { background: bg } : undefined}>
-      {children}
-      {tenant && <TenantFooter tenant={tenant} />}
-      {/* BottomNav slot (existing) */}
-    </div>
-  );
-}
 ```
 
-Match the actual file's structure — do not blindly overwrite layout classes.
+JSX example (cart page):
 
-- [ ] **Step 3: Thread `tenant` into every tenant page's `MobileShell`**
+```tsx
+<MobileShell bg="var(--color-paper)">
+  {/* existing cart content */}
+  <TenantFooter tenant={tenantRecord} />
+</MobileShell>
+```
 
-For each of the following pages, find the `<MobileShell ...>` JSX and add `tenant={tenantRecord}` (using whichever variable name the file uses for the raw `getTenant` result — typically `tenantRecord` or `tenantRow`):
+JSX example (catalog page — note placement above BottomNav):
 
-- `apps/web/src/app/[tenant]/page.tsx`
-- `apps/web/src/app/[tenant]/cart/page.tsx`
-- `apps/web/src/app/[tenant]/checkout/page.tsx`
-- `apps/web/src/app/[tenant]/order/placed/page.tsx`
-- `apps/web/src/app/[tenant]/refund-policy/page.tsx`
-
-Per pre-flight, all of these already fetch the tenant via `getTenant(slug)`. Pass the **raw row** (not the `toTenantBrand`-converted shape) so the footer has access to `shopEmail`, `shopHours`, `currentLegalVersionId`.
+```tsx
+<MobileShell bg="var(--color-paper)">
+  {/* existing header + CatalogGrid */}
+  <TenantFooter tenant={tenantRecord} />
+  <BottomNav active="shop" shopHref={`/${tenant.id}`} accent={tenant.accent} />
+</MobileShell>
+```
 
 - [ ] **Step 4: Create `app/[tenant]/contact/page.tsx`**
 
@@ -314,7 +330,7 @@ export default async function ContactPage({
   }
 
   return (
-    <MobileShell bg="var(--color-paper)" tenant={tenant}>
+    <MobileShell bg="var(--color-paper)">
       <div className="px-5 py-6">
         <h1
           className="font-serif text-2xl font-semibold pb-2 mb-4 border-b-2"
@@ -355,10 +371,17 @@ export default async function ContactPage({
             </section>
           )}
         </div>
+        <TenantFooter tenant={tenant} />
       </div>
     </MobileShell>
   );
 }
+```
+
+Add the `TenantFooter` import alongside the other imports:
+
+```tsx
+import { TenantFooter } from "@/components/tenant-footer";
 ```
 
 - [ ] **Step 5: Type-check**
@@ -378,11 +401,13 @@ Start dev server (`pnpm dev:web`), visit:
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/components/tenant-footer.tsx apps/web/src/components/mobile-shell.tsx apps/web/src/app/\[tenant\]
+git add apps/web/src/components/tenant-footer.tsx apps/web/src/app/\[tenant\]
 git commit -m "feat: tenant footer with policy links + contact page
 
 Surface refund-policy, contact, privacy, terms across all tenant
-routes via a new <TenantFooter> rendered inside MobileShell.
+routes via a new <TenantFooter>. Pages render the footer directly
+inside MobileShell (above BottomNav on the catalog page; at
+end-of-content elsewhere). MobileShell itself is unchanged.
 Refund policy link omits when tenant has no policy version set
 (currentLegalVersionId is null).
 
@@ -584,10 +609,25 @@ export type DeliveryMode = "pickup" | "ship";
 
 // Round to 2dp using half-away-from-zero (Math.round behaviour).
 // Matches the toFixed(2) display rounding used elsewhere.
-function round2(n: number): number {
+// Exported so /api/orders can use the same rounding for lineTotal in Task 5.
+export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Compute order totals in AUD dollars.
+ *
+ * GST model: 1/11 of the **GST-inclusive total** (subtotal + shipping).
+ * This treats shipping as GST-applicable, which is the AU norm for domestic
+ * deliveries by a GST-registered business. Must stay consistent with the
+ * Reports page calculation in `app/platform/billing/` and
+ * `app/admin/[tenant]/reports/` — those locations should switch to importing
+ * this helper as part of this PR's consolidation.
+ *
+ * If shipping is ever moved to GST-free, the formula needs to change to
+ * `(subtotal / 11)` and a regression test against historical Reports rows
+ * should be run before deploying.
+ */
 export function computeTotals(args: {
   lines: LineInput[];
   delivery: DeliveryMode;
@@ -597,7 +637,6 @@ export function computeTotals(args: {
   );
   const ship = args.delivery === "ship" ? SHIP_FEE_AUD : 0;
   const total = round2(subtotal + ship);
-  // GST is 1/11 of GST-inclusive total — AU standard for GST-inclusive pricing.
   const gst = round2(total / 11);
   return { subtotal, gst, total };
 }
@@ -681,37 +720,146 @@ Server-side enforcement lands in the next commit."
 
 ---
 
-## Task 5: Server-side total assertion in `/api/orders` + `/api/stripe/payment-intent`
+## Task 5: Server-side total assertion with catalog-price validation
 
 **Spec:** §2.6 enforcement
 
+**Critical:** Earlier plan revisions accepted client-supplied `unitPrice` and only validated sums. That's theatre — a tampering client sends `unitPrice: 0.01, qty: 1` and passes a self-consistent assertion. This task looks up authoritative prices from `getActiveCatalog(tenantId)` per line, rejects unknown items, and recomputes totals from server-side prices.
+
 **Files:**
+- Modify: `apps/web/src/lib/order-totals.ts` — extend the helper to take a price-lookup map
 - Modify: `apps/web/src/app/api/orders/route.ts`
 - Modify: `apps/web/src/app/api/stripe/payment-intent/route.ts`
+- Modify: `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx` — send `lines` payload with `itemId` to PI endpoint
 
-- [ ] **Step 1: Add assertion in `/api/orders` POST handler**
+- [ ] **Step 1: Extend `lib/order-totals.ts` with catalog-price validation**
 
-Open `apps/web/src/app/api/orders/route.ts`. Locate the validation block that checks `typeof subtotal !== "number" || ...` (around line 141). **After** that block (and before the `existingOrder` idempotency check at line ~157), add:
+Update `apps/web/src/lib/order-totals.ts`. The line input now requires an `itemId`; the helper accepts a `priceLookup` map from `itemId → unitPrice` resolved from the catalog. On price mismatch (>1¢) or unknown `itemId`, throw `TotalsMismatchError`.
+
+Replace the `LineInput` type and add a new error class:
+
+```ts
+export type LineInput = {
+  itemId: string;
+  unitPrice: number; // AUD dollars as claimed by the client
+  qty: number; // positive integer
+};
+
+export type ComputedLine = {
+  itemId: string;
+  unitPrice: number; // AUD dollars, server-authoritative
+  qty: number;
+};
+
+// ... ComputedTotals + DeliveryMode unchanged ...
+
+export class TotalsMismatchError extends Error {
+  constructor(
+    readonly expected: ComputedTotals,
+    readonly received: { subtotal: number; gst: number; total: number },
+    readonly reason: "total_mismatch" | "price_mismatch" | "unknown_item",
+    readonly offendingItemId?: string,
+  ) {
+    super(reason);
+  }
+}
+
+/**
+ * Validate every line against the catalog price-lookup, then compute totals.
+ *
+ * Rejects on:
+ * - Unknown itemId (not present in priceLookup)
+ * - Client-claimed unitPrice differs from catalog by > 1¢
+ * - Resulting subtotal/gst/total differs from received by > 1¢
+ */
+export function assertTotalsMatch(args: {
+  lines: LineInput[];
+  delivery: DeliveryMode;
+  received: { subtotal: number; gst: number; total: number };
+  priceLookup: Map<string, number>; // itemId → catalog unitPrice
+}): ComputedTotals {
+  const PRICE_TOLERANCE = 0.01; // 1 cent
+  const TOTAL_TOLERANCE = 0.01;
+
+  // 1. Catalog price check, per line
+  const serverLines: { unitPrice: number; qty: number }[] = [];
+  for (const l of args.lines) {
+    const catalogPrice = args.priceLookup.get(l.itemId);
+    if (catalogPrice === undefined) {
+      throw new TotalsMismatchError(
+        { subtotal: 0, gst: 0, total: 0 },
+        args.received,
+        "unknown_item",
+        l.itemId,
+      );
+    }
+    if (Math.abs(catalogPrice - l.unitPrice) > PRICE_TOLERANCE) {
+      throw new TotalsMismatchError(
+        { subtotal: 0, gst: 0, total: 0 },
+        args.received,
+        "price_mismatch",
+        l.itemId,
+      );
+    }
+    serverLines.push({ unitPrice: catalogPrice, qty: l.qty });
+  }
+
+  // 2. Recompute from server-authoritative prices
+  const expected = computeTotals({ lines: serverLines, delivery: args.delivery });
+  const ok =
+    Math.abs(expected.subtotal - args.received.subtotal) <= TOTAL_TOLERANCE &&
+    Math.abs(expected.gst - args.received.gst) <= TOTAL_TOLERANCE &&
+    Math.abs(expected.total - args.received.total) <= TOTAL_TOLERANCE;
+  if (!ok) throw new TotalsMismatchError(expected, args.received, "total_mismatch");
+
+  return expected;
+}
+```
+
+(Note: `computeTotals` itself stays the same — it now operates on the **server-checked** lines fed in by `assertTotalsMatch`.)
+
+- [ ] **Step 2: Add assertion in `/api/orders` POST handler**
+
+Open `apps/web/src/app/api/orders/route.ts`. Locate the validation block at line ~141. After that 400 and before the `existingOrder` idempotency check at line ~157, fetch the catalog and build the price lookup, then assert:
 
 ```ts
 import { assertTotalsMatch, TotalsMismatchError } from "@/lib/order-totals";
-// ↑ at top of file alongside other imports
+import { getActiveCatalog } from "@/db/queries";
+// ↑ at top alongside existing imports
 
-// ... inside POST handler, after the type-validation 400 ...
+// ... after the type-validation 400 ...
+
+// Build authoritative price lookup from the catalog for this tenant
+const catalog = await getActiveCatalog(tenantId);
+const priceLookup = new Map<string, number>(
+  catalog.map((item) => [item.id, Number(item.priceCents ?? item.price)]), // verify field name when reading
+);
+// NOTE: read catalog item shape in db/queries.ts before finalising the field name.
+// If the catalog stores prices in dollars as `price` (numeric/decimal), use that directly.
+// If as cents, divide by 100 here so the lookup is in dollars.
+
 let verifiedTotals;
 try {
   verifiedTotals = assertTotalsMatch({
-    lines: lines.map((l: { unitPrice: number; qty: number }) => ({
+    lines: lines.map((l: { itemId: string; unitPrice: number; qty: number }) => ({
+      itemId: l.itemId,
       unitPrice: l.unitPrice,
       qty: l.qty,
     })),
     delivery: delivery === "ship" ? "ship" : "pickup",
     received: { subtotal, gst, total },
+    priceLookup,
   });
 } catch (err) {
   if (err instanceof TotalsMismatchError) {
     return NextResponse.json(
-      { error: "totals_mismatch", expected: err.expected, received: err.received },
+      {
+        error: "totals_mismatch",
+        reason: err.reason,
+        offendingItemId: err.offendingItemId,
+        expected: err.expected,
+        received: err.received,
+      },
       { status: 400 },
     );
   }
@@ -719,7 +867,7 @@ try {
 }
 ```
 
-Then **use `verifiedTotals.subtotal/gst/total` instead of the client-supplied `subtotal/gst/total`** in the `db.insert(orders).values({...})` call inside `insertOrder`. Concretely:
+Then **use `verifiedTotals.subtotal/gst/total` in the `db.insert(orders).values({...})` call** (not the client values):
 
 ```ts
 subtotal: String(verifiedTotals.subtotal),
@@ -727,20 +875,43 @@ gst: String(verifiedTotals.gst),
 total: String(verifiedTotals.total),
 ```
 
-- [ ] **Step 2: Add assertion in `/api/stripe/payment-intent` POST handler**
+**`unitPrice` per line:** also override the client's claimed `line.unitPrice` with the catalog price when writing to `orderLines` — match the spirit of "server-authoritative":
 
-Open `apps/web/src/app/api/stripe/payment-intent/route.ts`. The current handler accepts `{ tenantId, amount, currency, metadata }` from the request. We extend it to accept `lines`, `delivery`, `subtotal`, `gst` so the server can verify totals before issuing the PaymentIntent.
+```ts
+const linesInsert = db.insert(orderLines).values(
+  lines.map((line) => {
+    const authoritativeUnitPrice = priceLookup.get(line.itemId)!; // guaranteed by assert
+    return {
+      orderId,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      variantLabel: line.variantLabel,
+      size: line.size?.trim() || null,
+      qty: line.qty,
+      unitPrice: String(authoritativeUnitPrice),
+      lineTotal: String(round2(authoritativeUnitPrice * line.qty)),
+    };
+  })
+);
+```
 
-Read the file first to confirm exact line numbers, then:
+Import `round2` from `lib/order-totals.ts` — export it from there if it isn't already:
 
-1. Extract `lines`, `delivery`, `subtotal`, `gst`, `total` from `body` (where `total === amount`).
-2. Run `assertTotalsMatch` with the same shape as Task 5 Step 1.
-3. On `TotalsMismatchError`, return 400 with `{ error: 'totals_mismatch', expected, received }`.
-4. Use `Math.round(verifiedTotals.total * 100)` as the PI `amount` parameter (Stripe cents conversion at the boundary).
+```ts
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+```
 
-Concrete change:
+(Make `round2` an exported function in Task 4 retroactively — easier than duplicating.)
+
+- [ ] **Step 3: Add assertion in `/api/stripe/payment-intent` POST handler**
+
+Open `apps/web/src/app/api/stripe/payment-intent/route.ts`. Extend the request body to accept `lines` (with `itemId`), `delivery`, `subtotal`, `gst`. Then run the same `getActiveCatalog`-backed assertion before `paymentIntents.create`:
+
 ```ts
 import { assertTotalsMatch, TotalsMismatchError } from "@/lib/order-totals";
+import { getActiveCatalog } from "@/db/queries";
 // ↑ at top
 
 // inside POST handler, after auth + tenant lookup, before paymentIntents.create:
@@ -748,41 +919,59 @@ const { lines, delivery, subtotal, gst } = body;
 if (!Array.isArray(lines) || typeof subtotal !== "number" || typeof gst !== "number") {
   return NextResponse.json({ error: "Missing totals payload" }, { status: 400 });
 }
+
+const catalog = await getActiveCatalog(tenantId);
+const priceLookup = new Map<string, number>(
+  catalog.map((item) => [item.id, Number(item.price ?? 0)]), // match the field used in Step 2
+);
+
 let verified;
 try {
   verified = assertTotalsMatch({
-    lines: lines.map((l: { unitPrice: number; qty: number }) => ({
+    lines: lines.map((l: { itemId: string; unitPrice: number; qty: number }) => ({
+      itemId: l.itemId,
       unitPrice: l.unitPrice,
       qty: l.qty,
     })),
     delivery: delivery === "ship" ? "ship" : "pickup",
     received: { subtotal, gst, total: amount },
+    priceLookup,
   });
 } catch (err) {
   if (err instanceof TotalsMismatchError) {
     return NextResponse.json(
-      { error: "totals_mismatch", expected: err.expected, received: err.received },
+      {
+        error: "totals_mismatch",
+        reason: err.reason,
+        offendingItemId: err.offendingItemId,
+        expected: err.expected,
+        received: err.received,
+      },
       { status: 400 },
     );
   }
   throw err;
 }
 
-// Then pass verified.total (in cents) to Stripe:
+// Stripe boundary: dollars → integer cents
 const stripeAmount = Math.round(verified.total * 100);
 // ... paymentIntents.create({ amount: stripeAmount, currency: 'aud', ... })
 ```
 
-- [ ] **Step 3: Update the client to send `lines`, `delivery`, `subtotal`, `gst` in the PI request**
+- [ ] **Step 4: Update the client to send `itemId` per line in the PI request**
 
-Open `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`. Find the `fetch("/api/stripe/payment-intent", {...})` call (around line 187). Extend the JSON body:
+Open `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`. Find the `fetch("/api/stripe/payment-intent", {...})` call (around line 187). Extend the JSON body to include `lines` with `itemId`, `delivery`, `subtotal`, `gst`:
 
 ```ts
 body: JSON.stringify({
   tenantId: tenant.id,
   amount: total,
   currency: "aud",
-  lines: lines.map((l) => ({ unitPrice: l.unitPrice, qty: l.qty })),
+  lines: lines.map((l) => ({
+    itemId: l.itemId,
+    unitPrice: l.unitPrice,
+    qty: l.qty,
+  })),
   delivery,
   subtotal,
   gst,
@@ -795,35 +984,43 @@ body: JSON.stringify({
 }),
 ```
 
-- [ ] **Step 4: Type-check**
+The `/api/orders` POST body already includes `lines` with `itemId` (verify by reading current callsite). No client change needed there beyond the existing payload.
+
+- [ ] **Step 5: Type-check**
 
 ```bash
 pnpm check-types:web
 ```
 Expected: PASS.
 
-- [ ] **Step 5: Smoke (manual)**
+- [ ] **Step 6: Smoke (manual)**
 
-Start dev server. Place a test order with the card test number `4242 4242 4242 4242`. Verify the order completes normally (no 400 totals_mismatch).
+Start dev server. Place a test order with `4242 4242 4242 4242` — order completes normally (no 400).
 
-Tamper test: open browser devtools → Network → catch the POST to `/api/orders`, modify the `total` value to `1`, and resubmit (right-click → "Resend"). Verify the response is `400 { error: 'totals_mismatch', ... }`.
+**Tamper test A — total only:** in devtools, intercept POST to `/api/orders`, modify `total` to `1`. Expect `400 { error: 'totals_mismatch', reason: 'total_mismatch' }`.
 
-- [ ] **Step 6: Commit**
+**Tamper test B — unitPrice:** modify a line's `unitPrice` from (say) `40` to `0.01`. Expect `400 { error: 'totals_mismatch', reason: 'price_mismatch', offendingItemId: '<id>' }`.
+
+**Tamper test C — unknown item:** modify a line's `itemId` to `'fake'`. Expect `400 { error: 'totals_mismatch', reason: 'unknown_item', offendingItemId: 'fake' }`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/app/api/orders/route.ts apps/web/src/app/api/stripe/payment-intent/route.ts apps/web/src/app/\[tenant\]/checkout/checkout-screen.tsx
-git commit -m "feat: server-side total assertion in order + PI endpoints
+git add apps/web/src/lib/order-totals.ts apps/web/src/app/api/orders/route.ts apps/web/src/app/api/stripe/payment-intent/route.ts apps/web/src/app/\[tenant\]/checkout/checkout-screen.tsx
+git commit -m "feat: server-side total assertion with catalog-price validation
 
-Both POST /api/orders and POST /api/stripe/payment-intent now
-recompute subtotal/gst/total server-side via assertTotalsMatch
-and reject mismatches with HTTP 400 totals_mismatch.
+Both POST /api/orders and POST /api/stripe/payment-intent now:
+1. Fetch the tenant catalog via getActiveCatalog(tenantId).
+2. Reject lines whose itemId is missing from the catalog
+   (reason: unknown_item).
+3. Reject lines where client-claimed unitPrice differs from the
+   catalog price by > 1c (reason: price_mismatch).
+4. Recompute subtotal/gst/total from server-authoritative prices
+   and reject mismatches with the client (reason: total_mismatch).
 
-Server-computed totals are authoritative — stored in the orders
-row and passed to Stripe (as Math.round(total * 100) cents).
-Client values are validated but never persisted directly.
-
-Client checkout-screen extended to send lines + delivery + subtotal
-+ gst to /api/stripe/payment-intent so the assertion can run."
+Server-computed totals and per-line unitPrice are persisted; client
+values are validated but never written directly. Closes the
+'client trusts unitPrice' gap surfaced in the plan code review."
 ```
 
 ---
@@ -884,14 +1081,21 @@ Per the documented workaround (`/Volumes/T7/georgeqiao/.claude/projects/-Volumes
    ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'payment_failed';
    ```
 
-3. Insert the corresponding row into `__drizzle_migrations` so future migrations don't try to re-apply (use the hash from the generated migration file's name or metadata):
+3. Insert the corresponding row into `__drizzle_migrations` so future migrations don't try to re-apply. **First read one existing row** via Neon MCP `run_sql` to confirm the actual column types:
 
    ```sql
-   INSERT INTO __drizzle_migrations (hash, created_at)
-   VALUES ('<generated-hash>', extract(epoch from now()) * 1000);
+   SELECT * FROM __drizzle_migrations ORDER BY id DESC LIMIT 1;
    ```
 
-   (Verify the `__drizzle_migrations` columns exist in that schema before running — adjust types if `created_at` is a timestamp not a bigint.)
+   Match the existing row's `created_at` type exactly (bigint epoch-ms vs. timestamp) and any other column conventions. Then insert:
+
+   ```sql
+   -- Example (verify against the SELECT above before running):
+   INSERT INTO __drizzle_migrations (hash, created_at)
+   VALUES ('<generated-hash-from-new-migration-file>', <matching-type-value>);
+   ```
+
+   The hash usually matches the filename prefix in `apps/web/drizzle/` (e.g. `0017_payment_failed_enum.sql` → hash from drizzle-kit's `meta/_journal.json`).
 
 4. Verify:
 
@@ -947,39 +1151,60 @@ Add the import at the top:
 import { logAuditEvent } from "@/lib/audit/log";
 ```
 
-- [ ] **Step 5: Add audit log to `charge.refunded` branch**
+- [ ] **Step 5: Add audit log to `charge.refunded` branch (with tenantId)**
 
-Inside the existing `charge.refunded` branch (`webhook/route.ts:137-184`), after the order status update (line ~177-183), before the closing `}` of the `if (orderRow)` block, add:
+Inside the existing `charge.refunded` branch at `webhook/route.ts:137-184`:
 
-```ts
-const totalRefundedCents = refunds.reduce(
-  (sum, r) => sum + (r.amount ?? 0),
-  0,
-);
-await logAuditEvent({
-  tenantId: null, // we don't have it in this scope; webhook doesn't need it for filtering
-  actorEmail: "stripe-webhook",
-  actorRole: "system",
-  action: "order.refunded.via_dashboard",
-  targetType: "order",
-  targetId: orderRow.id,
-  payload: {
-    chargeId: charge.id,
-    amountRefundedCents: totalRefundedCents,
-    fullyRefunded: charge.refunded ?? false,
-  },
-});
-```
+1. **Extend the order select** at line ~145 to include `tenantId`:
+   ```ts
+   const [orderRow] = await db
+     .select({
+       id: orders.id,
+       total: orders.total,
+       status: orders.status,
+       tenantId: orders.tenantId,
+     })
+     .from(orders)
+     .where(eq(orders.stripePaymentIntentId, piId))
+     .limit(1);
+   ```
 
-If `tenantId` is needed for the audit-log filter index, fetch it alongside the existing order query (extend the `select({ id, total, status, tenantId: orders.tenantId })` shape).
+2. **After the order status update** (line ~177-183), before the closing `}` of the `if (orderRow)` block, add:
 
-- [ ] **Step 6: Add retry transition in `/api/stripe/payment-intent`**
+   ```ts
+   const totalRefundedCents = refunds.reduce(
+     (sum, r) => sum + (r.amount ?? 0),
+     0,
+   );
+   await logAuditEvent({
+     tenantId: orderRow.tenantId,
+     actorEmail: "stripe-webhook",
+     actorRole: "system",
+     action: "order.refunded.via_dashboard",
+     targetType: "order",
+     targetId: orderRow.id,
+     payload: {
+       chargeId: charge.id,
+       amountRefundedCents: totalRefundedCents,
+       fullyRefunded: charge.refunded ?? false,
+     },
+   });
+   ```
 
-Open `apps/web/src/app/api/stripe/payment-intent/route.ts`. The endpoint already takes `tenantId` and `amount` from the body. To support retry-after-failure, the parent's client may have an existing `orderId` from a prior failed attempt — but in this codebase the order is created in `/api/orders` *after* successful payment, not before. So the retry-transition logic operates on **orders that were created by `/api/orders` and have a `stripePaymentIntentId` already set**.
+   `audit_events.tenantId` is nullable, but populating it keeps the `idx_audit_events_tenant_time` index useful for per-tenant audit views.
 
-Inspect the current endpoint to confirm what state it operates on. If the PI is always created fresh per click (no `orderId` in the body), the retry transition still has a role: if a previous PI was created for the same parent+cart, the resulting `orders` row (if it exists) is in `payment_failed`. The flip-back happens **inside the webhook handler for the new PI's success**, not in `/api/stripe/payment-intent`.
+- [ ] **Step 6: Widen `payment_intent.succeeded` WHERE clause in `webhook/route.ts`**
 
-**Concretely:** the spec's retry-transition rule is implemented by **widening the `payment_intent.succeeded` WHERE clause** to also accept `payment_failed`:
+**Flow reminder (verified by reading `/api/orders/route.ts:155-167` and `checkout-screen.tsx:187`):**
+
+1. Parent clicks Pay → checkout fetches a **fresh PI** from `/api/stripe/payment-intent`.
+2. `confirmPayment` succeeds → checkout POSTs `/api/orders` with the PI id.
+3. `/api/orders` checks for an existing order by `stripePaymentIntentId`. If none, inserts a new row with `status: 'pending_payment'`. If found and owned by the same user, returns the existing orderId (idempotent).
+4. Webhook `payment_intent.succeeded` fires → transitions `pending_payment → new`.
+
+A declined card never reaches step 3 (the client aborts inside `onPay`), so no `pending_payment` row exists for the failed PI. **But** if the webhook `payment_intent.payment_failed` for a successful payment somehow fires late (network reorder), or if Stripe sends `payment_failed` for a PI that already has an order row (e.g. user retried with a different PI but the old PI eventually got a failed event), we want the system to be resilient.
+
+**Concretely:** widen the `payment_intent.succeeded` WHERE clause so it accepts both `pending_payment` AND `payment_failed`. This is defensive — it covers the rare retry-against-same-PI case if the client flow ever changes to one-PI-per-checkout.
 
 Open `apps/web/src/app/api/stripe/webhook/route.ts:62-66`. Change:
 
@@ -998,11 +1223,11 @@ to:
 )
 ```
 
-Add `inArray` to the `drizzle-orm` import at the top of the file.
+Add `inArray` to the `drizzle-orm` import at the top of the file:
 
-This correctly handles the case where: parent's first PI failed → webhook set status to `payment_failed` → parent retried → /api/orders is called again (idempotency check finds no matching `stripePaymentIntentId` because a fresh PI was issued → new orders row created with new PI id) → succeeded webhook flips the (new) row. The **old** failed row stays in `payment_failed`, hidden from /orders by Step 7's filter.
-
-(If on inspection `/api/orders` reuses the same row by PI id, the retry path is different; but the current code at orders/route.ts:155-167 issues 409 if a different user grabs an existing PI's order, otherwise 200-idempotent. Fresh PI per click means fresh order row per attempt, which is the assumed flow.)
+```ts
+import { and, eq, inArray, sql } from "drizzle-orm";
+```
 
 - [ ] **Step 7: Filter `payment_failed` out of `listOrdersForParent`**
 
@@ -1060,13 +1285,11 @@ git commit -m "feat: payment_failed webhook + dashboard-refund audit + retry tra
 - Modify: `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`
 - Create: `apps/web/public/.well-known/apple-developer-merchantid-domain-association`
 
-- [ ] **Step 1: Replace eager `stripe.elements()` with deferred-intent initialisation**
+- [ ] **Step 1: Replace eager `stripe.elements()` with deferred-intent initialisation (mount once)**
 
-Open `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`. The current code (lines ~80-130) calls `stripe.elements()` with no args and mounts a Card element. Replace the entire Stripe mount `useEffect` body with deferred-intent + PaymentElement.
+Open `apps/web/src/app/[tenant]/checkout/checkout-screen.tsx`. The current code (lines ~80-130) calls `stripe.elements()` with no args and mounts a Card element. Replace the mount `useEffect` with deferred-intent + PaymentElement, **mounted once** on initial stripe load. Don't include `total` in the dep array — re-mounting would destroy in-progress card data when the user toggles delivery (pickup ↔ ship changes `total`). Use `elements.update({ amount })` in a separate effect to push amount changes into the existing element.
 
-The key constraint: `stripe.elements({ mode: 'payment', amount, currency, paymentMethodCreation: 'manual' })` requires `amount` at element-creation time. We compute `total` before the effect runs (it's derived from `lines` and `delivery`), so the mount effect depends on `total`.
-
-Replace the `useEffect` body (preserving the cancellation pattern):
+Two `useEffect` hooks. First — initial mount (`[]` dep array):
 
 ```tsx
 useEffect(() => {
@@ -1088,7 +1311,6 @@ useEffect(() => {
       mode: "payment",
       amount: Math.round(total * 100), // cents at Stripe boundary
       currency: "aud",
-      paymentMethodCreation: "manual",
       appearance: {
         theme: "stripe",
         variables: {
@@ -1106,8 +1328,6 @@ useEffect(() => {
     });
     paymentElement.on("change", (e) => {
       if (paymentLockedRef.current) return;
-      // PaymentElement change event has no top-level error; surface validation
-      // failures from elements.submit() at click time instead.
       if (!e.complete) setPaymentError("");
     });
     paymentElement.mount(paymentMountRef.current);
@@ -1131,10 +1351,24 @@ useEffect(() => {
     stripeRef.current = null;
     setPaymentReady(false);
   };
-}, [total, tenant.accent]); // re-mount when amount changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once on initial stripe load
+}, []);
 ```
 
-Rename `cardMountRef` → `paymentMountRef` and `cardRef` → `paymentElementRef` throughout. Update the corresponding `useRef<…>` types: `paymentElementRef` is `StripePaymentElement` (import from `@stripe/stripe-js`).
+Second — amount sync (`[total]` dep array):
+
+```tsx
+useEffect(() => {
+  if (!elementsRef.current) return;
+  elementsRef.current.update({ amount: Math.round(total * 100) });
+}, [total]);
+```
+
+`elements.update` does not unmount the PaymentElement; it patches the underlying Intent params so the next `confirmPayment` reflects the new amount, and it re-renders wallet button amounts (Apple Pay/Google Pay labels) inline.
+
+Rename `cardMountRef` → `paymentMountRef` and `cardRef` → `paymentElementRef` throughout. Update the corresponding `useRef<...>` types — `paymentElementRef` is `StripePaymentElement` (import from `@stripe/stripe-js`).
+
+Note: **dropped `paymentMethodCreation: 'manual'`.** That mode pairs with `stripe.createPaymentMethod` + server-side `paymentIntents.confirm`. The `confirmPayment` flow used in Step 2 is the default deferred-intent variant and does not accept `paymentMethodCreation`.
 
 Update JSX mount point:
 
@@ -1230,7 +1464,9 @@ mode so the element can mount before the PaymentIntent is created.
 
 Flow:
 - stripe.elements({ mode: 'payment', amount: Math.round(total*100),
-  currency: 'aud', paymentMethodCreation: 'manual' })
+  currency: 'aud' }) — mounted once on initial Stripe load.
+- elements.update({ amount }) in a separate effect when total changes
+  (delivery toggle); avoids destroying in-progress card data.
 - elements.create('payment', { layout: 'tabs' })
 - onPay: elements.submit() (deferred-intent gate), then
   stripe.confirmPayment({ elements, clientSecret, confirmParams,
@@ -1331,16 +1567,29 @@ EOF
 - §2.3 SEO (sitemap, robots, generateMetadata × 2) → Task 3 ✅
 - §2.4 PaymentElement deferred-intent → Task 7 ✅
 - §2.5 payment_failed + dashboard-refund audit + retry transition → Task 6 ✅
-- §2.6 totals helper + enforcement (both endpoints, server-computed values authoritative) → Task 4 + Task 5 ✅
-- §2.7 getPreviousSizeHint removal (function + API route + client fetch) → Task 1 ✅
+- §2.6 totals helper + enforcement (both endpoints, server-computed values + catalog price validation authoritative) → Task 4 + Task 5 ✅
+- §2.7 getPreviousSizeHint removal (function + type + API route + client fetch + state + JSX) → Task 1 ✅
 
-**Sequencing:** matches §5 of the spec (1: size-hint, 2: footer+contact, 3: SEO, 4: helpers, 5: enforcement, 6: webhook, 7: PaymentElement).
+**Sequencing:** matches §5 of the spec (1: size-hint, 2: footer+contact, 3: SEO, 4: helpers, 5: enforcement with catalog validation, 6: webhook, 7: PaymentElement). Squash-merge to `main`; intra-PR commits are for review readability only.
 
 **Pre-flight open questions:**
 - `getPubliclyListedTenants()` — resolved (exists).
 - `actorRole: 'system'` — Task 6 Step 1 widens the union.
 - Apple domain file — placeholder + post-merge ops step documented.
+- `BottomNav` only on catalog page — verified; footer placement adjusted accordingly.
+- `audit_events.tenantId` nullable — verified; Task 6 Step 5 still populates it from the order row.
+- `/privacy` and `/terms` routes exist — verified; footer links are safe.
+
+**Code-review fixes incorporated (2026-05-12):**
+1. Server-side catalog price validation in Task 5 (rejects client unitPrice tampering).
+2. Dropped `paymentMethodCreation: 'manual'` from Task 7 (Stripe API mismatch with `confirmPayment`).
+3. Restructured Task 6 Step 6 to name the actual file modified (`webhook/route.ts`) and resolve the retry-flow hedge.
+4. Task 2 footer placement: pages render `<TenantFooter>` directly inside `MobileShell` (not auto-appended by the shell) so it lands above `BottomNav` on the catalog page.
+5. Task 4 helper exports `round2` and documents the GST-on-shipping assumption.
+6. Task 6 Step 3 reads an existing `__drizzle_migrations` row before constructing the INSERT.
+7. Task 6 Step 5 extends the order `select` to include `tenantId` and populates it in the audit-log entry.
+8. Task 7 splits the Stripe mount into a one-shot init effect + a separate `elements.update({ amount })` effect so delivery toggles don't destroy in-progress card data.
 
 **Placeholder scan:** none. Every step has either a command, a code block, a file path with content, or a concrete verification.
 
-**Type consistency:** `paymentMountRef` / `paymentElementRef` used consistently in Task 7. `TenantRow` used as the footer prop type consistently. `assertTotalsMatch` signature consistent across Tasks 4 and 5.
+**Type consistency:** `paymentMountRef` / `paymentElementRef` used consistently in Task 7. `TenantRow` used as the footer prop type consistently. `assertTotalsMatch` signature consistent across Tasks 4 and 5 (with `priceLookup` added). `round2` exported in Task 4 and consumed in Task 5.
