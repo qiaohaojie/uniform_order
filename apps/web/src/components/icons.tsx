@@ -124,3 +124,11 @@ export function SearchIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+export function ClearIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <path d="M6 6 L18 18 M18 6 L6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
