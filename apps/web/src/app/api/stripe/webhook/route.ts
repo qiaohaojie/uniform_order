@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { orders, tenants, orderRefunds } from "@/db/schema";
+import { orders, tenants, orderRefunds, auditEvents } from "@/db/schema";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { getStripe } from "@/lib/stripe";
@@ -98,20 +98,36 @@ export async function POST(req: NextRequest) {
     const piParentEmail = typeof pi.metadata?.parentEmail === "string"
       ? pi.metadata.parentEmail
       : "stripe-webhook";
-    await logAuditEvent({
-      tenantId: piTenantId,
-      actorEmail: piParentEmail,
-      actorRole: "system",
-      action: "payment_intent.payment_failed",
-      targetType: "payment_intent",
-      targetId: pi.id,
-      payload: {
-        amount: pi.amount ? pi.amount / 100 : null,
-        currency: pi.currency,
-        lastPaymentError: pi.last_payment_error?.message ?? null,
-        declineCode: pi.last_payment_error?.decline_code ?? null,
-      },
-    });
+    // Idempotency: Stripe redelivers on non-2xx and occasional 2xx network glitches.
+    // Stamp event.id into the payload and short-circuit if we've already logged it.
+    const existing = await db
+      .select({ id: auditEvents.id })
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.action, "payment_intent.payment_failed"),
+          eq(auditEvents.targetId, pi.id),
+          sql`${auditEvents.payload}->>'eventId' = ${event.id}`,
+        ),
+      )
+      .limit(1);
+    if (existing.length === 0) {
+      await logAuditEvent({
+        tenantId: piTenantId,
+        actorEmail: piParentEmail,
+        actorRole: "system",
+        action: "payment_intent.payment_failed",
+        targetType: "payment_intent",
+        targetId: pi.id,
+        payload: {
+          eventId: event.id,
+          amount: pi.amount ? pi.amount / 100 : null,
+          currency: pi.currency,
+          lastPaymentError: pi.last_payment_error?.message ?? null,
+          declineCode: pi.last_payment_error?.decline_code ?? null,
+        },
+      });
+    }
     return NextResponse.json({ received: true });
   }
 
@@ -212,19 +228,34 @@ export async function POST(req: NextRequest) {
           (sum, r) => sum + (r.amount ?? 0),
           0,
         );
-        await logAuditEvent({
-          tenantId: orderRow.tenantId,
-          actorEmail: "stripe-webhook",
-          actorRole: "system",
-          action: "order.refunded.via_dashboard",
-          targetType: "order",
-          targetId: orderRow.id,
-          payload: {
-            chargeId: charge.id,
-            amountRefundedCents: totalRefundedCents,
-            fullyRefunded: charge.refunded ?? false,
-          },
-        });
+        // Idempotency: skip if we've already logged this Stripe event.
+        const existingRefundAudit = await db
+          .select({ id: auditEvents.id })
+          .from(auditEvents)
+          .where(
+            and(
+              eq(auditEvents.action, "order.refunded.via_dashboard"),
+              eq(auditEvents.targetId, orderRow.id),
+              sql`${auditEvents.payload}->>'eventId' = ${event.id}`,
+            ),
+          )
+          .limit(1);
+        if (existingRefundAudit.length === 0) {
+          await logAuditEvent({
+            tenantId: orderRow.tenantId,
+            actorEmail: "stripe-webhook",
+            actorRole: "system",
+            action: "order.refunded.via_dashboard",
+            targetType: "order",
+            targetId: orderRow.id,
+            payload: {
+              eventId: event.id,
+              chargeId: charge.id,
+              amountRefundedCents: totalRefundedCents,
+              fullyRefunded: charge.refunded ?? false,
+            },
+          });
+        }
       }
     }
     return NextResponse.json({ received: true });

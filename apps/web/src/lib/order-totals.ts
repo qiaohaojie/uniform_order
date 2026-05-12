@@ -106,6 +106,18 @@ export function assertTotalsMatch(args: {
         key,
       );
     }
+    // Reject non-finite unitPrice (string, undefined, NaN) loudly. Without this,
+    // `Math.abs(catalogPrice - NaN) > 0.01` evaluates false and silently masks
+    // tampering attempts — even though the server still overrides the price
+    // downstream, failing loud is better than failing silent.
+    if (typeof l.unitPrice !== "number" || !Number.isFinite(l.unitPrice)) {
+      throw new TotalsMismatchError(
+        { subtotal: 0, shipping: 0, gst: 0, total: 0 },
+        args.received,
+        "price_mismatch",
+        key,
+      );
+    }
     const catalogPrice = args.priceLookup.get(key);
     if (catalogPrice === undefined) {
       throw new TotalsMismatchError(
