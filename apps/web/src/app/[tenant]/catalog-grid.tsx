@@ -98,16 +98,18 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
         })}
       </div>
 
-      {/* Result-count line */}
-      <div className="px-4 pt-3 pb-2 flex-shrink-0 flex items-baseline gap-2">
-        <h3 className="font-serif text-[18px] font-medium m-0">
-          {query ? `Results for "${q.trim()}"` : `${activeCat} Uniform`}
-        </h3>
-        <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-          · {visible.length} {visible.length === 1 ? "item" : "items"}
-          {query ? " in all categories" : ""}
-        </span>
-      </div>
+      {/* Result-count line (suppressed on empty-match — the empty state below carries the message) */}
+      {!(query && visible.length === 0) && (
+        <div className="px-4 pt-3 pb-2 flex-shrink-0 flex items-baseline gap-2">
+          <h3 className="font-serif text-[18px] font-medium m-0">
+            {query ? `Results for "${q.trim()}"` : `${activeCat} Uniform`}
+          </h3>
+          <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+            · {visible.length} {visible.length === 1 ? "item" : "items"}
+            {query ? " in all categories" : ""}
+          </span>
+        </div>
+      )}
 
       {/* Grid or empty state */}
       {visible.length === 0 && query ? (
