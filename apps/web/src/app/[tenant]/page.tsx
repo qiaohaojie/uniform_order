@@ -5,10 +5,10 @@ import { getTenant, getActiveCatalog, toTenantBrand } from "@/db/queries";
 import { getActiveChild } from "@/lib/active-child.server";
 import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { Crest } from "@/components/crest";
-import { GarmentVector } from "@/components/garment";
-import { CartIcon, SearchIcon } from "@/components/icons";
+import { CartIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
+import { CatalogGrid } from "./catalog-grid";
 
 const DEFAULT_CATEGORY = "Winter";
 
@@ -42,7 +42,6 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
     active && active.tenantId === tenant.id
       ? { name: active.name, year: `Year ${active.year}` }
       : null;
-  const items = catalog.filter((i) => i.cat === activeCat);
 
   return (
     <MobileShell bg="var(--color-paper)">
@@ -74,72 +73,12 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-4 pt-3.5 pb-1.5 flex-shrink-0">
-        <div
-          className="h-10 rounded-lg bg-white flex items-center px-3 gap-2 border"
-          style={{ borderColor: "var(--color-rule)" }}
-        >
-          <span style={{ color: "var(--color-ink-dim)" }}><SearchIcon size={16} /></span>
-          <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>Search uniforms</span>
-        </div>
-      </div>
-
-      {/* Category chips */}
-      <div className="px-4 pt-2.5 pb-1 flex gap-2 overflow-x-auto flex-shrink-0 [&::-webkit-scrollbar]:hidden">
-        {CATEGORIES.map((c) => {
-          const on = c === activeCat;
-          return (
-            <Link
-              key={c}
-              href={`/${tenant.id}?cat=${c}`}
-              scroll={false}
-              className="h-[30px] px-3 rounded-full inline-flex items-center text-[12px] font-semibold flex-shrink-0 border"
-              style={{
-                borderColor: on ? tenant.accent : "var(--color-rule)",
-                background: on ? tenant.accent : "#fff",
-                color: on ? "#fff" : "var(--color-ink)",
-              }}
-            >
-              {c}
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="px-4 pt-3 pb-2 flex-shrink-0 flex items-baseline gap-2">
-        <h3 className="font-serif text-[18px] font-medium m-0">{activeCat} Uniform</h3>
-        <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>· {items.length} items</span>
-      </div>
-
-      {/* Grid */}
-      <div className="flex-1 px-4 pb-3 grid grid-cols-2 gap-3 content-start">
-        {items.map((it) => {
-          const minP = Math.min(...it.variants.map((v) => v.price));
-          const maxP = Math.max(...it.variants.map((v) => v.price));
-          return (
-            <Link
-              key={it.id}
-              href={`/${tenant.id}/item/${it.id}`}
-              className="bg-white rounded-[10px] border overflow-hidden block"
-              style={{ borderColor: "var(--color-rule)" }}
-            >
-              <GarmentVector itemId={it.id} accent={tenant.accent} size={120} className="w-full h-auto block" />
-              <div className="px-2.5 pt-2 pb-2.5">
-                <div className="font-serif text-[13px] font-medium leading-[1.2] line-clamp-2 min-h-8" style={{ color: "var(--color-ink)" }}>
-                  {it.name}
-                </div>
-                <div className="mt-1.5 text-[12px] font-semibold tnum" style={{ color: "var(--color-ink)" }}>
-                  ${minP}
-                  {minP !== maxP && (
-                    <span className="font-normal" style={{ color: "var(--color-ink-dim)" }}> – ${maxP}</span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      <CatalogGrid
+        items={catalog}
+        activeCat={activeCat}
+        tenantId={tenant.id}
+        accent={tenant.accent}
+      />
 
       <BottomNav active="shop" shopHref={`/${tenant.id}`} accent={tenant.accent} />
     </MobileShell>
