@@ -92,10 +92,15 @@ These were classified as "Should" in the gap analysis but are genuine bugs / har
   - Acknowledged TODO at `api/orders/[orderId]/refund/route.ts:176-178`: the `charge.refunded` webhook branch currently skips `logAuditEvent`. Add a call with `actorRole: "system"`, `actorEmail: "stripe-webhook"`, `action: "order.refunded.via_dashboard"` so dashboard-initiated refunds appear in the per-order audit log alongside in-app refunds.
   - ~3h.
 
-- [ ] **Active-child-scoped `getPreviousSizeHint` (gap-analysis chunk-C §4 follow-up).**
-  - `db/queries.ts:427-467` currently keys the "Riley wore size 14 last year" hint on `parentEmail + itemId`. A parent with two kids at the same school sees whichever kid bought this last — wrong child's history, parent-visible defect.
-  - Read active child via `getActiveChild()` (already used at `app/[tenant]/page.tsx`) and add `childId` (nullable) to the join. When `activeChild` is set, scope the hint to that child's previous orders; when not set (no active child), fall back to current behaviour.
-  - May need a `childId` column on `orders` if not already present — check `db/schema.ts` `orders` table before designing the query. ~1h if column exists; ~½d if a migration is needed.
+- [ ] **Remove `getPreviousSizeHint` feature entirely (decision 2026-05-12).**
+  - **Decision:** drop the "Riley wore size 14 last year" hint rather than fix it. The original gap-analysis chunk-C follow-up flagged it as a wrong-child defect for multi-child parents (`db/queries.ts:427-467` keys on `parentEmail + itemId`, ignoring active child). Fixing properly would need `orders.childId` migration + write-path change + read-path change. Mitigations (child-count guard, migration) considered and rejected: the feature is not worth the complexity to get right, and parents who want past-size info can check their order history at `/orders/[orderId]` which already lists garment + size purchased.
+  - **Removal scope:**
+    - Delete `getPreviousSizeHint` from `apps/web/src/db/queries.ts:427-467`.
+    - Remove the hint render block from `apps/web/src/app/[tenant]/item/[itemId]/interactive.tsx:173-178` (and the prop wiring from the parent `page.tsx` if it threads through).
+    - Remove any tests / fixture references.
+    - Update `docs/completed.md` §4.8 entry to note the feature was removed on 2026-05-12 — preserves the cross-reference in §6 of this file.
+  - **Effort:** ~30min. Pure deletion, no migration, no schema change.
+  - **Reversibility:** trivial — feature can be re-added later if multi-child UX work surfaces it as a real need.
 
 - [ ] **Server-side total assertion (gap-analysis §5.10).**
   - Client supplies `subtotal`, `gst`, `total` to `POST /api/orders` and the values are stored as-sent. Stripe ultimately governs cash flow, but the BAS export (`app/platform/billing/`) reads these DB columns — tampering risk is low but reconciliation risk is real.
@@ -229,7 +234,7 @@ The former `docs/FEATURE_AUDIT.md` has been retired. Its outstanding items are t
 | Audit item | Tracked in |
 |---|---|
 | "Add another child" button on school picker | ✅ Done — `completed.md` §4.12; ops verifications → §2.11 |
-| "Riley wore size X last year" hint (hardcoded) | ✅ Done — `completed.md` §4.8 |
+| "Riley wore size X last year" hint (hardcoded) | ⛔ Dropped 2026-05-12 — wrong-child bug not worth fixing; removal tracked in §2.14. Parents can use order history (`/orders/[orderId]`) for past-size info. |
 | Dashboard "New product" button not wired | ✅ Resolved 2026-05-11 — links to `/admin/[tenant]/catalog` |
 | Dashboard "Export" button not wired | ✅ Resolved 2026-05-11 — deleted as redundant with Reports CSV export |
 | Refund / exchange action on order detail | ✅ Done (see `completed.md` §4.1); E2E test pending → §5 checklist item 3 |
