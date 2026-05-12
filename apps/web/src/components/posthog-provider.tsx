@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { initPosthog, capturePageview, identifyUser, resetUser } from "@/lib/analytics/client";
 import { useSession } from "@/lib/auth/client";
 
-export default function PostHogProvider({ children }: { children: React.ReactNode }) {
+function PageviewTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    capturePageview();
+  }, [pathname, searchParams]);
+
+  return null;
+}
+
+export default function PostHogProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const identifiedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     initPosthog();
   }, []);
-
-  useEffect(() => {
-    capturePageview();
-  }, [pathname, searchParams]);
 
   useEffect(() => {
     const userId = session?.user?.id ?? null;
@@ -34,5 +39,12 @@ export default function PostHogProvider({ children }: { children: React.ReactNod
     }
   }, [session]);
 
-  return <>{children}</>;
+  return (
+    <>
+      <Suspense fallback={null}>
+        <PageviewTracker />
+      </Suspense>
+      {children}
+    </>
+  );
 }
