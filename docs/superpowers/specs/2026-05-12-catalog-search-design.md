@@ -18,7 +18,7 @@ The parent-shop catalog page renders a search-shaped UI element at `app/[tenant]
 
 It is a static `<div>`. No `<input>`, no handler, no state. Parents see a search affordance, tap it, and nothing happens. This is a credibility bug — the kind that signals "incomplete software" on first impression.
 
-The competitor's Shopify site has a real search, though its relevance is broken (`q=blazer` returns 0 hits for a "Navy Jacket"). We can ship better behavior in ~30 lines.
+The competitor's Shopify site has a real search, though its relevance is broken (`q=blazer` returns 0 hits for a "Navy Jacket"). We can ship better behavior in a single client component (~80 lines including a11y plumbing — see §Files touched).
 
 ## Goals
 
@@ -54,40 +54,37 @@ The page is already an RSC that passes the full filtered `items` array to the re
 
 ### File split
 
-- **`page.tsx` (RSC, mostly unchanged):** keeps the header strip, chips, and bottom-nav. Stops rendering the search `<div>` and the grid `<div>` directly; renders a new `<CatalogGrid>` client component in their place.
-- **`catalog-grid.tsx` (new, `"use client"`):** owns the search input, filter state, result-count line, the grid itself, and the empty state.
+- **`page.tsx` (RSC, mostly unchanged):** keeps the header strip, chips (still server-rendered `<Link>` elements driven by `?cat=`), and bottom-nav. Stops rendering the search `<div>`, the result-count `<h3>`, and the grid directly; renders a new `<CatalogGrid>` client component in their place.
+- **`catalog-grid.tsx` (new, `"use client"`):** owns the search input, filter state, result-count line, the grid itself, and the empty state. **Returns a React Fragment, not a wrapping `<div>`** — MobileShell is a flex-column and each region (search wrapper, h3 wrapper, grid) needs to remain a sibling flex child to preserve its own `flex-shrink-0` / `flex-1` behavior.
 
 ### Component contract
 
 ```ts
 // app/[tenant]/catalog-grid.tsx
 type CatalogGridProps = {
-  items: CatalogItem[];     // chip-filtered (server-resolved by activeCat)
-  allItems: CatalogItem[];  // full tenant catalog, for cross-category search
-  activeCat: string;        // for "{activeCat} Uniform · N items"
+  items: CatalogItem[];   // full tenant catalog (NOT chip-filtered)
+  activeCat: string;      // for chip-scoped no-search view + count label
   tenantId: string;
   accent: string;
 };
 ```
 
-Server passes both `items` and `allItems`. At 9-50 items per tenant the duplicate payload is <5KB JSON — trivial.
+The client component does both filters: chip-scope when query is empty, cross-category when query is non-empty. Chip navigation stays server-driven (the `<Link href="?cat=...">` chips in `page.tsx` are untouched), so the URL remains the source of truth for `activeCat`.
 
 ### Data flow
 
 ```
 page.tsx (RSC)
-  ├─ fetches tenant + catalog
+  ├─ fetches tenant + catalog (full)
   ├─ resolves activeCat from ?cat=
-  ├─ items     = catalog.filter(i => i.cat === activeCat)
-  ├─ allItems  = catalog
-  └─ <CatalogGrid items={items} allItems={allItems} activeCat={activeCat} ... />
+  └─ <CatalogGrid items={catalog} activeCat={activeCat} ... />
 
 CatalogGrid (client)
   ├─ const [q, setQ] = useState("")
   ├─ const visible = q.trim()
-  │     ? allItems.filter(matchFn(q))
-  │     : items
-  └─ renders <input>, count line, grid, empty state
+  │     ? items.filter(matchFn(q))                  // search → all categories
+  │     : items.filter(i => i.cat === activeCat)    // no search → chip-scoped
+  └─ renders <> input · count line · grid · empty state </>
 ```
 
 ## Behavior
@@ -127,26 +124,23 @@ When `q !== ""` and `visible.length === 0`, render in place of the grid:
 
 ```
 No items match "{q}".
-[Clear search] · [Browse all]
+[Clear search]
 ```
 
-- `Clear search` → resets `q` to `""`, keeps the active chip.
-- `Browse all` → resets `q` to `""` AND navigates to `/[tenant]` (drops `?cat=` so the default chip "Winter" takes over).
-
-Plain text + two text buttons. No illustration. Matches the rest of the bespoke Tailwind tone.
+`Clear search` resets `q` to `""`, returning the user to the chip-scoped view (whichever chip is currently active). One button only — a second "Browse all" CTA would be misleading because `DEFAULT_CATEGORY = "Winter"` means there's no "no chip active" state to land on. Plain text + one text button. No illustration. Matches the rest of the bespoke Tailwind tone.
 
 ## Input markup & mobile hygiene
 
 ```tsx
 <div
-  className="h-10 rounded-lg bg-white flex items-center px-3 gap-2 border"
+  className="h-10 rounded-lg bg-white flex items-center px-3 gap-2 border focus-within:ring-2 focus-within:ring-offset-1 focus-within:ring-[var(--color-ink)]"
   style={{ borderColor: "var(--color-rule)" }}
 >
   <span style={{ color: "var(--color-ink-dim)" }} aria-hidden="true">
     <SearchIcon size={16} />
   </span>
   <input
-    type="search"
+    type="text"
     inputMode="search"
     enterKeyHint="search"
     autoCorrect="off"
@@ -156,7 +150,7 @@ Plain text + two text buttons. No illustration. Matches the rest of the bespoke 
     value={q}
     onChange={(e) => setQ(e.target.value)}
     aria-label="Search uniforms"
-    className="flex-1 bg-transparent outline-none text-[13px]"
+    className="flex-1 bg-transparent outline-none text-[13px] focus-visible:outline-none"
   />
   {q.length > 0 && (
     <button
@@ -172,9 +166,10 @@ Plain text + two text buttons. No illustration. Matches the rest of the bespoke 
 ```
 
 - Visual shell is identical to today's `<div>` (preserves §3.9 viewport-audit baseline).
-- `type="search"` + `inputMode="search"` + `enterKeyHint="search"` triggers the right mobile keyboard with a "Search" return key.
+- `type="text"` + `inputMode="search"` + `enterKeyHint="search"` triggers the right mobile keyboard with a "Search" return key. **We deliberately use `type="text"`, not `type="search"`**, because WebKit/Chromium add a browser-native × clear button on `type="search"` that would collide with our custom × button. `inputMode="search"` alone gives the correct mobile keyboard without the native UI.
 - `autoCorrect`/`autoCapitalize`/`spellCheck` off — proper-noun item names ("Stewart House Polo") shouldn't get autocorrected.
-- `ClearIcon` is a new 14px × icon in `components/icons.tsx` (or reuse if it exists — check during implementation).
+- Focus ring: the input's own `:focus-visible` is suppressed (`focus-visible:outline-none` on the input); the **wrapper** `<div>` gets a `focus-within:` ring instead, so the visible 40px pill lights up when the input is focused. Use a fixed neutral colour (`focus-within:ring-2 focus-within:ring-offset-1 focus-within:ring-[var(--color-ink)]`) — not the tenant accent. Inline `style={}` cannot target pseudo-classes like `:focus-visible`, and the existing chips don't use accent-coloured focus rings either, so consistency holds.
+- `ClearIcon` is a new 14px × icon added to `components/icons.tsx` (confirmed absent — see §Files touched).
 - Clear button is a real `<button type="button">` — 24×24 visual hit, padded to 44×44 effective via parent's vertical padding. Matches §3.9 P1 floor.
 
 ## Accessibility
@@ -182,16 +177,23 @@ Plain text + two text buttons. No illustration. Matches the rest of the bespoke 
 - `aria-label="Search uniforms"` on the input (placeholder is decorative; aria-label is canonical).
 - `aria-hidden="true"` on the leading `SearchIcon` (decorative, label is on the input).
 - `aria-label="Clear search"` on the × button.
-- Live region announces result count when `q` changes:
+- Live region announces result count when typing settles. The filter itself runs synchronously on every keystroke (no debounce — §Why-not), but the announcement is debounced ~300ms via a separate `useEffect` so screen readers don't get a stream of mid-word counts ("1 result for b… 1 result for bl… 0 results for blu…"). Implementation sketch:
 
 ```tsx
-<span role="status" aria-live="polite" className="sr-only">
-  {q.trim() === "" ? "" : `${visible.length} results for ${q}`}
-</span>
+const [announced, setAnnounced] = useState("");
+useEffect(() => {
+  const t = setTimeout(() => {
+    setAnnounced(q.trim() === "" ? "" : `${visible.length} results for ${q}`);
+  }, 300);
+  return () => clearTimeout(t);
+}, [q, visible.length]);
+
+// ...
+<span role="status" aria-live="polite" className="sr-only">{announced}</span>
 ```
 
-- Focus ring on the input uses `:focus-visible` with `outlineColor: accent` (tenant-themed, matches existing pattern).
-- Empty state is inline text + buttons inside the grid container — keyboard and screen readers see it without needing toast announcement.
+- Focus ring: see §Input markup — the wrapper pill gets a `focus-within:` ring on a neutral colour. Tenant accent is not used for focus rings (consistency with chips).
+- Empty state is inline text + button inside the grid container — keyboard and screen readers see it without needing toast announcement.
 
 ## Why not...
 
@@ -204,7 +206,7 @@ Plain text + two text buttons. No illustration. Matches the rest of the bespoke 
 
 | File | Change |
 |---|---|
-| `apps/web/src/app/[tenant]/page.tsx` | Stop rendering the static search `<div>` (lines 78-86), the result-count `<h3>` (lines 110-113), and the grid (lines 116-142). Render `<CatalogGrid items={items} allItems={catalog} activeCat={activeCat} tenantId={tenant.id} accent={tenant.accent} />` in their place. Header strip, chips, and bottom-nav stay on the server. |
+| `apps/web/src/app/[tenant]/page.tsx` | Stop rendering the static search `<div>` (lines 78-86), the result-count `<h3>` (lines 110-113), and the grid (lines 116-142). Stop computing the chip-filtered `items` variable (line 45); pass the full `catalog` array instead. Render `<CatalogGrid items={catalog} activeCat={activeCat} tenantId={tenant.id} accent={tenant.accent} />` in their place. Header strip, chips, and bottom-nav stay on the server. |
 | `apps/web/src/app/[tenant]/catalog-grid.tsx` | **New.** `"use client"`. Owns input state, filter, result-count line, grid, empty state, live-region announcement. |
 | `apps/web/src/components/icons.tsx` | Add `ClearIcon` (×). Confirmed absent from current exports (Shop/Orders/Kids/Profile/Cart/Back/Check/Plus/Pickup/Ship/ChevronRight/Lock/Search). |
 
@@ -219,16 +221,17 @@ Estimated diff: ~80 lines added, ~30 lines moved out of `page.tsx`.
   - Type "xyz" → empty state with both action buttons.
   - Keyboard-only: Tab to input, type, Tab to clear, Tab to first card.
   - Mobile keyboard: confirm "Search" return key on iOS Safari and Android Chrome.
+  - WebKit native × suppression: confirm only one × shows (our custom button), not a native browser one.
 - **Type check:** `pnpm check-types:web` passes.
 - **Print stylesheet (§3.7):** unaffected — input is not in the pick-slip DOM.
-- **§3.9 viewport audit:** re-run on catalog page, confirm zero new tap-target P1s.
-- **Screen reader smoke:** VoiceOver on iOS announces input, result-count live region updates on debounced typing.
+- **§3.9 viewport audit:** re-run on catalog page, confirm zero new tap-target P1s and that the focus-within ring on the search pill meets the visible-focus criterion.
+- **Screen reader smoke:** VoiceOver on iOS announces the input on focus; live region announces the result count ~300ms after typing settles (not on every keystroke).
 
 ## Risks
 
 - **Empty-state copy is a marketing surface.** "No items match 'xyz'" is fine in v1 but worth A/B-testing later — Shopify's Horizon empty state is silent, ours can win here.
-- **Cross-category-when-searching behavior may surprise** a parent who expects chip + search to compose. Mitigated by the explicit `"in all categories"` suffix on the result-count line. If user testing shows confusion, swap to chip-scoped search — it's a one-line change.
-- **`allItems` doubles the page payload.** At 50 items × ~200 bytes JSON = 10KB total. Acceptable; would revisit if a tenant's catalog grew past ~200 SKUs (well beyond realistic uniform shop scale).
+- **Cross-category-when-searching behavior may surprise** a parent who expects chip + search to compose. Mitigated by the explicit `"in all categories"` suffix on the result-count line. If user testing shows confusion, swap to chip-scoped search — it's a one-line change (drop the ternary branch in `visible`).
+- **Page payload grows from chip-slice to full catalog.** At ~9-50 items per tenant, the additional JSON is ~5-10KB total. Acceptable; would revisit if a tenant's catalog grew past ~200 SKUs (well beyond realistic uniform shop scale).
 
 ## Open questions
 
