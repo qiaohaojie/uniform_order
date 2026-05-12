@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines, tenants } from "@/db";
 import {
+  getActiveCatalog,
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
   getTenant,
@@ -16,6 +17,12 @@ import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
+import {
+  assertTotalsMatch,
+  TotalsMismatchError,
+  priceLookupKey,
+  round2,
+} from "@/lib/order-totals";
 
 const ORDER_ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const generateOrderSuffix = customAlphabet(ORDER_ID_ALPHABET, 10);
@@ -154,6 +161,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Build catalog price lookup and assert server-authoritative totals.
+    const catalog = await getActiveCatalog(tenantId);
+    const priceLookup = new Map<string, number>();
+    for (const item of catalog) {
+      for (const v of item.variants) {
+        priceLookup.set(priceLookupKey(item.id, v.label), v.price);
+      }
+    }
+
+    let verifiedTotals;
+    try {
+      verifiedTotals = assertTotalsMatch({
+        lines: lines as Array<{
+          itemId: string;
+          variantLabel: string;
+          unitPrice: number;
+          qty: number;
+        }>,
+        delivery: delivery === "ship" ? "ship" : "pickup",
+        received: { subtotal, gst, total },
+        priceLookup,
+      });
+    } catch (err) {
+      if (err instanceof TotalsMismatchError) {
+        return NextResponse.json(
+          {
+            error: "totals_mismatch",
+            reason: err.reason,
+            offendingKey: err.offendingKey,
+            expected: err.expected,
+            received: err.received,
+          },
+          { status: 400 },
+        );
+      }
+      throw err;
+    }
+
     const [existingOrder] = await db
       .select({ id: orders.id, userId: orders.userId })
       .from(orders)
@@ -210,9 +255,9 @@ export async function POST(req: NextRequest) {
         studentRoll,
         delivery: delivery ?? "pickup",
         deliveryFee: String(deliveryFee ?? 0),
-        subtotal: String(subtotal),
-        gst: String(gst),
-        total: String(total),
+        subtotal: String(verifiedTotals.subtotal),
+        gst: String(verifiedTotals.gst),
+        total: String(verifiedTotals.total),
         stripePaymentIntentId: normalizedStripePaymentIntentId,
         stripeRef: normalizedStripePaymentIntentId,
         refundPolicyAcceptedAt: new Date(),
@@ -221,16 +266,29 @@ export async function POST(req: NextRequest) {
         legalVersionId,
       });
       const linesInsert = db.insert(orderLines).values(
-        lines.map((line) => ({
-          orderId,
-          itemId: line.itemId,
-          itemName: line.itemName,
-          variantLabel: line.variantLabel,
-          size: line.size?.trim() || null,
-          qty: line.qty,
-          unitPrice: String(line.unitPrice),
-          lineTotal: String(line.lineTotal),
-        }))
+        lines.map((line) => {
+          // Guaranteed non-undefined: assertTotalsMatch above already threw on any
+          // (itemId, variantLabel) pair missing from priceLookup. Defensive check
+          // guards against future refactors that might break the invariant.
+          const authoritativeUnitPrice = priceLookup.get(
+            priceLookupKey(line.itemId, line.variantLabel),
+          );
+          if (authoritativeUnitPrice === undefined) {
+            throw new Error(
+              `variant missing from priceLookup after assertion: ${line.itemId}::${line.variantLabel}`,
+            );
+          }
+          return {
+            orderId,
+            itemId: line.itemId,
+            itemName: line.itemName,
+            variantLabel: line.variantLabel,
+            size: line.size?.trim() || null,
+            qty: line.qty,
+            unitPrice: String(authoritativeUnitPrice),
+            lineTotal: String(round2(authoritativeUnitPrice * line.qty)),
+          };
+        })
       );
       await db.batch([orderInsert, linesInsert]);
     };

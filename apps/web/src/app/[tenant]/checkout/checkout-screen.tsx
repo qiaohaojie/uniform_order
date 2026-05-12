@@ -192,6 +192,15 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
           tenantId: tenant.id,
           amount: total,
           currency: "aud",
+          lines: lines.map((l) => ({
+            itemId: l.itemId,
+            variantLabel: l.variantLabel,
+            unitPrice: l.price,
+            qty: l.qty,
+          })),
+          delivery,
+          subtotal,
+          gst,
           metadata: {
             parentEmail: student.email,
             studentName: student.studentName,
