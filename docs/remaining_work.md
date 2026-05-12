@@ -61,6 +61,56 @@ The parent-account / "add another child" feature shipped via PR #6 (squash-merge
 - [ ] Run the same E2E with Google sign-in.
 - [ ] After deploy, verify `tenants.is_publicly_listed = true` for `nsbh` and `rgsh` (the migration's seed UPDATE should have applied; if not, run `UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh');`).
 
+### 2.13 NSBH gap-analysis musts (next sprint)
+
+Sourced from `my_doc/NSBH/gap-analysis.md` §5 (2026-05-12). Email/DNS ops items intentionally excluded — already covered by §2.8 and parked until post-development. Guest checkout (§5.2) excluded — replaced by magic-link + Google sign-in direction (see §2.14).
+
+- [ ] **Tenant footer with policy links (gap-analysis §5.5).** Add `<TenantFooter>` to `apps/web/src/components/mobile-shell.tsx` (rendered above `BottomNav` so it doesn't collide). Links: `/<tenant>/refund-policy`, `/<tenant>/contact` (§2.13 item below), `/privacy`, `/terms`. Display `tenant.shopEmail` + `tenant.shopHours` as text. **Refund-policy fallback already works at the data layer** — `tenant_legal_versions` has `policyMode` discriminator + `policyText`/`policyUrl` columns (`db/schema.ts:48-49`), and `app/[tenant]/refund-policy/page.tsx` redirects to `policyUrl` when `policyMode === "url"`, else renders `policyText`. Footer just needs to surface the existing route. ~3h.
+
+- [ ] **Per-tenant Contact page (gap-analysis §5.6).** New route `apps/web/src/app/[tenant]/contact/page.tsx` rendering `tenant.shopEmail`, `shopHours`, `address`, `collectionInstructions`. **Data is already captured during onboarding** at `app/platform/tenants/new/steps/step-3-operator.tsx` (shopEmail/shopHours/collectionInstructions) and step-1 (address). RSC, use `getTenant(slug)`. Link from `<TenantFooter>`. ~2h.
+
+- [ ] **SEO basics — sitemap, robots, `generateMetadata` (gap-analysis §5.4).** Today `generateMetadata` is used in exactly one file (`app/[tenant]/refund-policy/page.tsx`, only to set noindex). Platform-wide `<title>="UniformOrder"` is set at `app/layout.tsx:28-31`.
+  - Add `generateMetadata` to `app/[tenant]/layout.tsx` returning `{ title: '${tenant.name} Uniform Shop', description: tenant.motto ?? '${tenant.name} parent shop', openGraph: { images: [{ url: tenant.logoUrl }] } }` — data exists on `tenants.motto` (`db/schema.ts:73`) and `tenants.logoUrl` (`schema.ts:74`).
+  - Add `generateMetadata` to `app/[tenant]/item/[itemId]/page.tsx`: `'${item.name} — ${tenant.name}'`.
+  - New `app/sitemap.ts` — enumerate `getPubliclyListedTenants()` × public catalog items per tenant.
+  - New `app/robots.ts` — `disallow: ['/admin', '/platform', '/auth', '/api']` (also closes admin/platform noindex leak).
+  - ~4h. No DB change.
+
+- [ ] **Apple Pay + Google Pay via Stripe `PaymentElement` (gap-analysis §5.1).** `automatic_payment_methods: { enabled: true }` is already on the PaymentIntent route (`api/stripe/payment-intent/route.ts:75`); wallets just don't render because we mount a card-only element.
+  - In `app/[tenant]/checkout/checkout-screen.tsx:90-102`, swap `elements.create("card", { hidePostalCode: true })` → `elements.create("payment", { layout: "tabs" })`.
+  - Replace `stripe.confirmCardPayment(...)` → `stripe.confirmPayment({ clientSecret, elements, confirmParams: { return_url } })`.
+  - Add `public/.well-known/apple-developer-merchantid-domain-association` (asset from Stripe Dashboard → Settings → Payment methods → Apple Pay → Add new domain).
+  - Verify `uniformorder.online` in Stripe Dashboard via Connect platform account.
+  - No DB change; destination-charge config unchanged. ~1d.
+
+### 2.14 Bug-class items lifted from NSBH gap-analysis (real defects, not nice-to-haves)
+
+These were classified as "Should" in the gap analysis but are genuine bugs / hardening, not feature work. Treat with the same urgency as anything else in §2.
+
+- [ ] **`payment_intent.payment_failed` webhook + audit log on dashboard refunds (gap-analysis §5.11).**
+  - Today `orders.status = 'pending_payment'` rows orphan in DB after card declines because nothing cleans them up. Add a `payment_intent.payment_failed` branch to `api/stripe/webhook/route.ts` that deletes or cancels the matched pending order (lookup by `stripePaymentIntentId`).
+  - Acknowledged TODO at `api/orders/[orderId]/refund/route.ts:176-178`: the `charge.refunded` webhook branch currently skips `logAuditEvent`. Add a call with `actorRole: "system"`, `actorEmail: "stripe-webhook"`, `action: "order.refunded.via_dashboard"` so dashboard-initiated refunds appear in the per-order audit log alongside in-app refunds.
+  - ~3h.
+
+- [ ] **Active-child-scoped `getPreviousSizeHint` (gap-analysis chunk-C §4 follow-up).**
+  - `db/queries.ts:427-467` currently keys the "Riley wore size 14 last year" hint on `parentEmail + itemId`. A parent with two kids at the same school sees whichever kid bought this last — wrong child's history, parent-visible defect.
+  - Read active child via `getActiveChild()` (already used at `app/[tenant]/page.tsx`) and add `childId` (nullable) to the join. When `activeChild` is set, scope the hint to that child's previous orders; when not set (no active child), fall back to current behaviour.
+  - May need a `childId` column on `orders` if not already present — check `db/schema.ts` `orders` table before designing the query. ~1h if column exists; ~½d if a migration is needed.
+
+- [ ] **Server-side total assertion (gap-analysis §5.10).**
+  - Client supplies `subtotal`, `gst`, `total` to `POST /api/orders` and the values are stored as-sent. Stripe ultimately governs cash flow, but the BAS export (`app/platform/billing/`) reads these DB columns — tampering risk is low but reconciliation risk is real.
+  - New helper `apps/web/src/lib/order-totals.ts` exporting `assertTotalsMatch({ lines, deliveryFee, subtotal, gst, total })` that recomputes server-side from line items + `tenant.deliveryFeeCents`, rejects on >1¢ delta. GST is 10% inclusive (1/11 of GST-inclusive total — confirm with §3.6 accountant sign-off rule).
+  - Call from `POST /api/orders` (`api/orders/route.ts` before insert) and `POST /api/stripe/payment-intent` (before `paymentIntents.create`). Return 400 with `{ code: 'totals_mismatch', expected, received }` on delta.
+  - Do **before** marketing the BAS export as audit-grade. ~2h.
+
+- [ ] **`sizes jsonb` column on `catalog_variants` (gap-analysis §5.15).**
+  - Today the per-variant `sizes[]` array lives in static `lib/data.ts` (acknowledged TODO at `db/queries.ts:904`). Schools beyond NSBH/RGSH cannot define their own size grids without a code change — blocks self-service onboarding past tenant #2.
+  - Migration: add `sizes jsonb not null default '[]'::jsonb` to `catalog_variants` (use Neon MCP `run_sql_transaction` per the drizzle-kit websocket blocker memory). Migrate existing rows from `lib/data.ts` shape: `{ variantId → string[] }` map.
+  - Update `db/queries.ts:904` read path to read from the column instead of the static map.
+  - Surface in `app/admin/[tenant]/catalog/item-drawer.tsx` as a comma-separated input next to `label` (parse on save to `string[]`).
+  - PDP read path in `app/[tenant]/item/[itemId]/interactive.tsx` already consumes the same shape — no client change.
+  - **Bump before school #3 onboards.** ~½d.
+
 ---
 
 ## 3. 🟡 Medium — required by PDP/prototype, tolerable for soft launch
@@ -109,6 +159,34 @@ The two §3.10 follow-ups (school-authored refund-policy capture, per-tenant pol
 Platform-level `/terms` page is **deferred indefinitely** — not needed until we have multiple tenants whose policies diverge or a parent dispute escalates beyond a school's ability to resolve directly. Re-evaluate at tenant #3 or first major dispute.
 
 **Reference:** `my_doc/Legal/Refund_Policy/2026-05-07-refund-policy-ownership.md` for the full reasoning across Stripe Connect, marketplace practice, business, operational, and AU legal lenses, plus the v1 vs. v2 split.
+
+### 3.12 NSBH gap-analysis should-haves (medium urgency)
+
+Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those live in §2.14) but worth doing in the next quarter. Ordered roughly by leverage.
+
+- [ ] **Stock disabled-not-hidden on PDP (gap-analysis §5.8).** `getActiveCatalog` (`db/queries.ts:926-947`) hides `active: false` variants entirely; a parent looking for a known size gets no signal it exists. Expose inactive variants in the PDP read path with a `disabled` flag; render the pill with strike-through + tooltip "Currently unavailable" — never clickable. Don't count toward catalog grid totals. **No quantity tracking** — per the "no inventory management" memory, per-variant `active` is the only lever. ~1d.
+
+- [ ] **Shop hours on pickup option pre-purchase (gap-analysis §5.9).** Read `tenant.shopHours` in `app/[tenant]/checkout/page.tsx`, thread to `CheckoutScreen`. In `checkout-screen.tsx:415` replace the literal `"Free · Ready in 1–2 school days"` copy on the pickup `DeliveryOption` card with `tenant.shopHours` when set, fall back to existing copy otherwise. ~1h.
+
+- [ ] **Admin drag-to-reorder + size-guide editor (gap-analysis §5.12).** `catalog_items.sortOrder` exists (`db/schema.ts:107`) and `getActiveCatalog` already sorts by it (`db/queries.ts:947`), but no DnD UI on `app/admin/[tenant]/catalog/catalog-table.tsx`. Add `@dnd-kit/sortable` + drag handle column; persist via PATCH `/api/catalog/[itemId]`. Same drawer should gain a size-guide editor: `catalog_items.sizeGuide jsonb` is rendered on PDP but only seeded via `lib/data.ts`. Column headers as comma-list, rows as a tabular grid with add/remove. ~1.5d for both. (Note: also covered loosely by §4.7 "Catalog sortable / drag-to-reorder" — supersede that line when done.)
+
+- [ ] **PDP photo support — read `item.imageUrl` + UploadThing in admin drawer (gap-analysis §5.13).** `catalog_items.imageUrl text` exists (`db/schema.ts:104`, gated to UploadThing-hosted URLs via `lib/schemas/catalog.ts:18-23`) but PDP renders only `GarmentVector`. Read `item.imageUrl` in `app/[tenant]/item/[itemId]/interactive.tsx` and the catalog grid in `app/[tenant]/page.tsx`; render via `next/image` when present, fall back to `GarmentVector`. Add an UploadThing field to `app/admin/[tenant]/catalog/item-drawer.tsx` (route is already gated on `platformApprovalStatus === 'approved'`). Schools start photoless and upload incrementally. ~1d.
+
+- [ ] **`catalog_collections` table + Year-7 starter curation (gap-analysis §5.14).** Both UO and the competition use a single-axis taxonomy. The single largest order moment of the year (Year-7 enrolment) goes through 8 separate add-to-carts.
+  - Phase 1 (this item): add `catalog_collections` (`id, tenantId, slug, name, kind: 'featured'|'year'|'sport'|'custom', sortOrder, isVisible`) + `catalog_item_collections` join table.
+  - Keep the existing `category` enum (`Summer/Winter/Sports/Formal/Bags/Stationery`) as the default browse axis for back-compat — don't dilute it.
+  - Render an optional "Featured" row above the category chips on `app/[tenant]/page.tsx` when the tenant has visible collections.
+  - Seed NSBH + RGSH with a "Year 7 starter" curated collection.
+  - Phase 2 (real bundles with single Add-all-to-cart via `catalog_bundles` table) tracked separately — large, defer until phase-1 ships and a school asks.
+  - ~2–3d.
+
+- [ ] **Per-tenant homepage option (gap-analysis §5.17).** Today `/<tenant>` shows the catalog grid directly. Add an optional cookie-gated landing rendered on first visit (subsequent visits skip straight to catalog). Surfaces: crest, `tenant.motto`, pickup banner (`shopHours` + `collectionInstructions`), and a "Most ordered this term" row driven from order history. ~6h.
+
+- [ ] **Desktop frame for parent shop (gap-analysis §5.18).** Parent shop is hard-capped at 430px (`components/mobile-shell.tsx:17`); on a desktop browser the column floats mid-page and reads as broken on first sight (credibility issue for school decision-makers). Keep the 430px column but style the surrounding desktop canvas as a parchment-backed frame: subtle shadow, school crest faded into the corner, a "Tip: open on your phone for the full experience" line. **Do not widen the catalog grid** — mobile-first is core to the visual brand. ~4h.
+
+- [ ] **OTP / magic-link login option (gap-analysis §5.16).** Aligns with the stated auth direction (magic-link + Google sign-in, replacing the dropped "guest checkout" path). Check whether Neon Auth's `AuthView` (`app/auth/[[...path]]/page-client.tsx`) offers a magic-link or email-OTP path; if so flip the default and keep password as a fallback. Otherwise add "Email me a sign-in link" as a secondary action. Note §2.11 already verifies magic-link + Google are enabled in Neon Auth — this item is about surfacing them in the parent flow. Effort dependent on the Neon Auth SDK surface.
+
+- [ ] **Account deletion + data export — APP-12 compliance (gap-analysis §5.19).** Within 90 days of launch. Add `/account` page with a "Danger zone" card: confirm-typed-email modal calls a Neon Auth deletion endpoint, then anonymises `orders.parentEmail` / `parentName` to `redacted-{hash}@uniformorder.online` (orders must remain for tax + refund traceability). `parent_children` cascades via existing FK. Data export: email a JSON of the parent's `parent_children` + `orders` on request. ~1d.
 
 ---
 
