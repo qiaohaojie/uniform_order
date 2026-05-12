@@ -32,6 +32,7 @@ The code for §2.1, §2.3, §2.6, and §2.7 is done; the following ops/verificat
 - **Production env (from §2.6):** Switch from Stripe test keys to live keys; pin production `DATABASE_URL`; configure Hostinger Node.js app env groups (preview vs production); assign production domain + TLS.
 - **Observability (from §2.7):** Verify PostHog project key is set in production Hostinger env vars (and confirm events are arriving from production after first deploy).
 - **Stripe webhook events (from §3.5):** Verify the production Stripe webhook endpoint subscribes to `account.updated` in addition to `payment_intent.succeeded` and `charge.refunded`.
+- **`pnpm build:web` failure — `useSearchParams` Suspense (issue #26):** Pre-existing on `main` (not caused by §3.11). Surfaces during static page generation (`/_not-found`, `/admin`); `posthog-provider.tsx:4` calls `useSearchParams` from the root layout without a Suspense wrapper. `next start` and `pnpm dev:web` still work; deploy pipelines that require a clean build will fail. Track + fix before the next prod deploy.
 
 ### 2.9 Catalog management — production deployment follow-ups
 
@@ -90,6 +91,17 @@ Parent flow audited against WCAG 2.1 A+AA (PR #23 Phase A) and fixed (PR #24 Pha
 
 Done 2026-05-11. Three rule-#2 small-tap-target P1s identified by Phase A audit and fixed in Phase B (cart qty steppers → 28×28, catalog header cart link → 36×36, item header cart link → 36×36). Rule #1 (horizontal scrollbar) and rules #3-#4 had zero findings at any of the three viewports. See `completed.md` §4.24.
 
+### 3.11 Catalog search — ✅ shipped
+
+Parent shop's fake search bar (a static `<div>` at `app/[tenant]/page.tsx:78-86`) converted to a working client-side filter. Shipped via PR #25 (squash `409c1e3`, merged 2026-05-12). Identified by the NSBH gap analysis (`my_doc/NSBH/gap-analysis.md`) as the #1 credibility bug.
+
+New client component `apps/web/src/app/[tenant]/catalog-grid.tsx` owns the search input, chips, result-count line, grid, and empty state. Matches name + category (case-insensitive substring). Cross-category when a query is active; chip-scoped when empty. Empty state with focus-restoring Clear button. `aria-live="polite"` result count debounced 300ms so screen readers don't get mid-word announcements. Six commits squashed (icon, refactor, input, filter+empty-state, live-region, review-fixes for `Math.min/max` empty-array guard + redundant count-line suppression).
+
+**Deferred (filed, not closed):**
+- **#27 — chips inert during active search.** The active chip stays highlighted even though the grid shows cross-category results. Spec-acknowledged trade-off; revisit with PostHog data on type-then-click-chip frequency.
+- PostHog `catalog_search` event (query, resultCount, tenantId) — defer until we want intent data.
+- Synonym map for parent-terminology mismatches (jumper/sweater, trousers/pants) — defer until PostHog signals real misses.
+
 ### 3.10 Platform `/terms` page — deferred indefinitely
 
 The two §3.10 follow-ups (school-authored refund-policy capture, per-tenant policy link in email) shipped via PR #19; see `completed.md` §4.22.
@@ -107,6 +119,7 @@ Platform-level `/terms` page is **deferred indefinitely** — not needed until w
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
 | 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
+| 4.12 | Catalog search — chips remain highlighted during active query (visual disconnect) — issue #27 | §3.11 follow-up |
 
 > Closed §4 IDs (preserved for cross-reference, no renumbering):
 > - §4.1 / §4.9 / §4.10 / §4.11 — shipped, see `completed.md` §4.6–§4.10.
