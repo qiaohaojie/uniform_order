@@ -12,6 +12,9 @@
 
 **No test suite available** — this project has no Vitest/Jest/Playwright unit tests. Verification gates per task are (1) `pnpm check-types:web` passes and (2) explicit manual browser checks. Treat each manual check as a non-skippable verification step.
 
+**Out-of-scope quirks you'll see while working** (do not fix in this plan):
+- The cart-icon badge in the header renders a hardcoded `6` at `page.tsx:70`. It's stub UI awaiting cart-count wiring; not in scope for this work. Leave it alone.
+
 ---
 
 ## File Structure
@@ -62,21 +65,24 @@ git commit -m "feat(icons): add ClearIcon for catalog search clear button"
 
 ## Task 2: Scaffold `catalog-grid.tsx` as a pure refactor (no behavior change yet)
 
-This task moves the search div, the result-count h3, and the grid out of `page.tsx` and into a new client component **without** changing any rendered output. The static `<div>` search bar stays static in this task. Filter behavior is identical to today. We verify visually that nothing has changed before adding interactivity in Task 3.
+This task moves the search div, the result-count h3, **and the chips block** out of `page.tsx` and into a new client component **without** changing any rendered output. The static `<div>` search bar stays static in this task. Filter behavior is identical to today. We verify visually that nothing has changed before adding interactivity in Task 3.
+
+> **⚠️ Spec deviation — flagged for visibility:** The spec §Architecture says "page.tsx keeps the header strip, **chips**, and bottom-nav." This plan moves the chips into `CatalogGrid` instead. **Reason:** the chips render *between* the search wrapper and the result-count line in the existing layout. To keep `CatalogGrid` a single Fragment (per §Architecture's other requirement), all three regions must be sibling flex children inside the same component — splitting into two CatalogGrid pieces around the chips would create two client islands for no semantic gain. Chips remain navigation `<Link>` elements driven by `?cat=` — their URL-driven semantics are unchanged whether they render in an RSC or a client component. No behavioural loss; spec is only deviated on *which file* the chips live in.
 
 **Files:**
 - Create: `apps/web/src/app/[tenant]/catalog-grid.tsx`
-- Modify: `apps/web/src/app/[tenant]/page.tsx` (lines 45, 78-86, 110-113, 116-142)
+- Modify: `apps/web/src/app/[tenant]/page.tsx` (lines 45, 78-86, 88-108, 110-113, 115-142, and unused imports)
 
 - [ ] **Step 1: Create the new client component file**
 
-Create `apps/web/src/app/[tenant]/catalog-grid.tsx`:
+Create `apps/web/src/app/[tenant]/catalog-grid.tsx` with the final-correct code (no later patches required):
 
 ```tsx
 "use client";
 
 import Link from "next/link";
 import type { CatalogItem } from "@/lib/data";
+import { CATEGORIES } from "@/lib/data";
 import { GarmentVector } from "@/components/garment";
 import { SearchIcon } from "@/components/icons";
 
@@ -87,7 +93,7 @@ type CatalogGridProps = {
   accent: string;
 };
 
-export function CatalogGrid({ items, activeCat, tenantId }: CatalogGridProps) {
+export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridProps) {
   const visible = items.filter((i) => i.cat === activeCat);
 
   return (
@@ -101,6 +107,28 @@ export function CatalogGrid({ items, activeCat, tenantId }: CatalogGridProps) {
           <span style={{ color: "var(--color-ink-dim)" }}><SearchIcon size={16} /></span>
           <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>Search uniforms</span>
         </div>
+      </div>
+
+      {/* Category chips */}
+      <div className="px-4 pt-2.5 pb-1 flex gap-2 overflow-x-auto flex-shrink-0 [&::-webkit-scrollbar]:hidden">
+        {CATEGORIES.map((c) => {
+          const on = c === activeCat;
+          return (
+            <Link
+              key={c}
+              href={`/${tenantId}?cat=${c}`}
+              scroll={false}
+              className="h-[30px] px-3 rounded-full inline-flex items-center text-[12px] font-semibold flex-shrink-0 border"
+              style={{
+                borderColor: on ? accent : "var(--color-rule)",
+                background: on ? accent : "#fff",
+                color: on ? "#fff" : "var(--color-ink)",
+              }}
+            >
+              {c}
+            </Link>
+          );
+        })}
       </div>
 
       {/* Result-count line */}
@@ -121,7 +149,7 @@ export function CatalogGrid({ items, activeCat, tenantId }: CatalogGridProps) {
               className="bg-white rounded-[10px] border overflow-hidden block"
               style={{ borderColor: "var(--color-rule)" }}
             >
-              <GarmentVector itemId={it.id} accent="currentColor" size={120} className="w-full h-auto block" />
+              <GarmentVector itemId={it.id} accent={accent} size={120} className="w-full h-auto block" />
               <div className="px-2.5 pt-2 pb-2.5">
                 <div className="font-serif text-[13px] font-medium leading-[1.2] line-clamp-2 min-h-8" style={{ color: "var(--color-ink)" }}>
                   {it.name}
@@ -142,29 +170,9 @@ export function CatalogGrid({ items, activeCat, tenantId }: CatalogGridProps) {
 }
 ```
 
-Note: the existing grid in `page.tsx:127` passes `accent={tenant.accent}` to `GarmentVector`. We need to preserve that. The `accent` prop is in `CatalogGridProps`; restore the binding:
-
-Replace this line in the file you just created:
-
-```tsx
-              <GarmentVector itemId={it.id} accent="currentColor" size={120} className="w-full h-auto block" />
-```
-
-With:
-
-```tsx
-              <GarmentVector itemId={it.id} accent={accent} size={120} className="w-full h-auto block" />
-```
-
-And update the function signature to destructure `accent`:
-
-```tsx
-export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridProps) {
-```
-
 - [ ] **Step 2: Modify `page.tsx` to render `<CatalogGrid>` in place of the moved blocks**
 
-Open `apps/web/src/app/[tenant]/page.tsx`.
+Open `apps/web/src/app/[tenant]/page.tsx`. The chips block (lines 88-108) moves into `CatalogGrid` per the deviation note at the top of this task — `catalog-grid.tsx` already includes it in Step 1's code block.
 
 **Add import** at the top of the imports block (after the existing `BottomNav` import on line 11):
 
@@ -193,6 +201,8 @@ import { CatalogGrid } from "./catalog-grid";
       </div>
 ```
 
+**Delete lines 88-108** (the entire chips block, including its `{/* Category chips */}` comment).
+
 **Delete lines 110-113** (the result-count `<h3>` wrapper block):
 
 ```tsx
@@ -204,7 +214,7 @@ import { CatalogGrid } from "./catalog-grid";
 
 **Delete lines 115-142** (the grid block, including its `{/* Grid */}` comment).
 
-**Insert** `<CatalogGrid ... />` where the deleted search block used to be (immediately after the closing `</div>` of the tenant-themed header strip, before the `{/* Category chips */}` comment):
+**Insert** `<CatalogGrid ... />` where the deleted search block used to be (immediately after the closing `</div>` of the tenant-themed header strip):
 
 ```tsx
       <CatalogGrid
@@ -215,63 +225,9 @@ import { CatalogGrid } from "./catalog-grid";
       />
 ```
 
-Wait — the chips region currently sits between the search and the grid. After the move, the structure inside `<MobileShell>` should be:
-
-```
-<MobileShell>
-  <div /* tenant-themed header strip */>...</div>
-  <CatalogGrid /* renders: search wrapper, count line, grid, empty state */ />
-  <div /* Category chips */>...</div>
-  <BottomNav />
-</MobileShell>
-```
-
-But that places chips BELOW the grid, which is wrong. The original order is: header, search, chips, h3, grid. To preserve that order with CatalogGrid owning {search, h3, grid}, we have to either:
-- (a) Keep chips inside CatalogGrid (but the spec says chips stay server-rendered)
-- (b) Split CatalogGrid into two pieces (search wrapper above chips; count+grid below) — adds complexity
-- (c) Place CatalogGrid AFTER the chips, and have CatalogGrid render only the count line + grid + empty state; keep the search wrapper in `page.tsx` as a server-rendered fragment that uses a separate small client component just for the input
-
-The simplest is **(d) keep the original visual order by re-ordering CatalogGrid's responsibility**: chips render between the search and the h3, so split CatalogGrid into two adjacent fragments around the chips. That contradicts the "single Fragment" design.
-
-Resolution: **make the chips part of `CatalogGrid`'s render**, but keep them as plain server-style `<Link>` elements (Next's `Link` works inside client components — it just renders an `<a>` for `<Link>` with no special server requirement). The "chips remain server-rendered" line in the spec is about URL navigation semantics, not about which component renders them. Confirm by re-reading the spec — §Architecture says "chips (still server-rendered `<Link>` elements driven by `?cat=`)". A `<Link>` inside a client component still behaves identically: it's a client-routed navigation that updates `?cat=` in the URL, and the RSC re-renders on the next request. No semantic loss.
-
-**Updated plan for Task 2 Step 2:** also move the chips block (lines 89-108) into `catalog-grid.tsx`, and delete it from `page.tsx`. Update `catalog-grid.tsx` to render chips between the search wrapper and the result-count line.
-
-Add this `CATEGORIES` import to `catalog-grid.tsx`:
-
-```tsx
-import { CATEGORIES } from "@/lib/data";
-```
-
-And insert this block in `catalog-grid.tsx` between the search wrapper and the result-count line:
-
-```tsx
-      {/* Category chips */}
-      <div className="px-4 pt-2.5 pb-1 flex gap-2 overflow-x-auto flex-shrink-0 [&::-webkit-scrollbar]:hidden">
-        {CATEGORIES.map((c) => {
-          const on = c === activeCat;
-          return (
-            <Link
-              key={c}
-              href={`/${tenantId}?cat=${c}`}
-              scroll={false}
-              className="h-[30px] px-3 rounded-full inline-flex items-center text-[12px] font-semibold flex-shrink-0 border"
-              style={{
-                borderColor: on ? accent : "var(--color-rule)",
-                background: on ? accent : "#fff",
-                color: on ? "#fff" : "var(--color-ink)",
-              }}
-            >
-              {c}
-            </Link>
-          );
-        })}
-      </div>
-```
-
-In `page.tsx`, also delete the chips block (lines 88-108) and the unused `CATEGORIES` import on line 3 if no other usage remains in `page.tsx` (verify with a grep of the file before deleting the import).
-
-Also remove the now-unused `SearchIcon` import from `page.tsx`'s import on line 9.
+**Clean up unused imports** at the top of `page.tsx`:
+- Remove `SearchIcon` from the `@/components/icons` import line (still used? — verify with `grep -n "SearchIcon" apps/web/src/app/[tenant]/page.tsx`; if no remaining usage, drop it).
+- Remove `CATEGORIES` from the `@/lib/data` import on line 3 if no remaining usage (same `grep` check).
 
 After deletions, the body of `page.tsx`'s `return` should look like:
 
@@ -280,7 +236,7 @@ After deletions, the body of `page.tsx`'s `return` should look like:
     <MobileShell bg="var(--color-paper)">
       {/* Tenant-themed header strip */}
       <div className="text-white px-4 pt-1 pb-3.5 flex-shrink-0" style={{ background: tenant.accent }}>
-        {/* ... unchanged header content ... */}
+        {/* ... unchanged header content (Crest, school name, kid line, cart badge) ... */}
       </div>
 
       <CatalogGrid
@@ -337,29 +293,37 @@ Now we wire up the interactive search input and the clear button. The filter log
 **Files:**
 - Modify: `apps/web/src/app/[tenant]/catalog-grid.tsx`
 
-- [ ] **Step 1: Add React state and the `ClearIcon` import**
+- [ ] **Step 1: Add React state, the input ref, and the `ClearIcon` import**
 
-At the top of `catalog-grid.tsx`, after the existing imports, add:
-
-```tsx
-import { useState } from "react";
-import { SearchIcon, ClearIcon } from "@/components/icons";
-```
-
-Remove the duplicate `SearchIcon` import (replace the existing single-import line). After this step the icon import line should read:
+At the top of `catalog-grid.tsx`, replace the existing icon import line with:
 
 ```tsx
 import { SearchIcon, ClearIcon } from "@/components/icons";
 ```
+
+And add the React hooks import (place it as the first import in the file, above the others, conventional order):
+
+```tsx
+import { useRef, useState } from "react";
+```
+
+> **Note on hook imports across tasks:** Task 5 will add `useEffect` to this same import line. When Task 5 runs, the line should end up as `import { useEffect, useRef, useState } from "react";`. Doing it as a single combined import line each task avoids duplicate-import errors.
 
 Inside the function body, add at the top:
 
 ```tsx
 export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridProps) {
   const [q, setQ] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    setQ("");
+    inputRef.current?.focus();
+  };
   const visible = items.filter((i) => i.cat === activeCat);
   // ... rest unchanged for now
 ```
+
+The `clearSearch` helper centralises focus restoration so both the × button (this task) and the empty-state Clear button (Task 4) reuse it. After clearing, the × button unmounts; if it had focus, the focus would be orphaned to `<body>` and keyboard users would lose their place. `inputRef.current?.focus()` returns focus to the input, where the user can keep typing.
 
 - [ ] **Step 2: Replace the static search-pill block with an interactive one**
 
@@ -391,6 +355,7 @@ Replace with:
             <SearchIcon size={16} />
           </span>
           <input
+            ref={inputRef}
             type="text"
             inputMode="search"
             enterKeyHint="search"
@@ -406,7 +371,7 @@ Replace with:
           {q.length > 0 && (
             <button
               type="button"
-              onClick={() => setQ("")}
+              onClick={clearSearch}
               aria-label="Clear search"
               className="w-6 h-6 flex items-center justify-center rounded-full"
               style={{ color: "var(--color-ink-dim)" }}
@@ -437,6 +402,7 @@ Run `pnpm dev:web` (skip if already running) and visit `/nsbh`. Verify:
 - The search pill now accepts focus on click/tap. Focus ring appears around the pill.
 - Typing into the input updates the visible text (state is wired). The × button appears as soon as you type a character.
 - Clicking the × button clears the input and hides itself.
+- After clicking ×, focus returns to the input (caret visible, focus-within ring stays on). Verify with keyboard: Tab to ×, press Enter, then immediately type a character — it should land in the input without an extra Tab.
 - The filter behavior is **unchanged** — the grid still shows whatever the active chip dictates regardless of what you type (Task 4 fixes this).
 - On a mobile device (or DevTools mobile emulator with a touch keyboard), confirm the on-screen keyboard shows "Search" on its return key (this verifies `inputMode="search"` + `enterKeyHint="search"`).
 - No browser-native × clear icon appears inside the input (verifies `type="text"` choice).
@@ -538,7 +504,7 @@ Wrap the grid in an empty-state ternary. Replace the whole block above with:
           </p>
           <button
             type="button"
-            onClick={() => setQ("")}
+            onClick={clearSearch}
             className="text-[13px] underline font-semibold"
             style={{ color: "var(--color-ink)" }}
           >
@@ -594,8 +560,8 @@ Run `pnpm dev:web` and visit `/nsbh`. Verify:
 4. **Type partial name** (e.g. "shir"): live filter, multiple matches across categories.
 5. **Type a category name** (e.g. "winter"): matches all Winter items by category text.
 6. **Type "xyz" (no matches):** empty state renders with the "No items match 'xyz'." copy and a "Clear search" button.
-7. **Click "Clear search" in the empty state:** Query clears, grid returns to chip-scoped view.
-8. **Click × button while typing:** Same — clears query.
+7. **Click "Clear search" in the empty state:** Query clears, grid returns to chip-scoped view, **focus returns to the search input** (verify by immediately typing — should land in the input without an extra Tab).
+8. **Click × button while typing:** Same — clears query, focus returns to the input.
 9. **Singular pluralisation:** type something matching exactly 1 item; verify "· 1 item" (not "items").
 10. **Quotes in copy:** title shows curly quotes around the query (the `&ldquo;` / `&rdquo;` entities render as `"..."`).
 
@@ -621,12 +587,12 @@ The filter is sync; the announcement is debounced ~300ms so screen readers don't
 **Files:**
 - Modify: `apps/web/src/app/[tenant]/catalog-grid.tsx`
 
-- [ ] **Step 1: Add `useEffect` import and announcement state**
+- [ ] **Step 1: Add `useEffect` to the React import and announcement state**
 
-In `catalog-grid.tsx`, update the React import:
+In `catalog-grid.tsx`, update the React import — combine `useEffect` into the existing line (do **not** add a second import line). After this step the line should read exactly:
 
 ```tsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 ```
 
 Inside `CatalogGrid`, after the existing `useState` line, add:
@@ -668,7 +634,7 @@ So the search wrapper now looks like:
       </div>
 ```
 
-Note: `sr-only` is a Tailwind utility provided by the default v4 install. If `pnpm check-types:web` flags it as missing or the smoke test shows the text rendering visibly, verify the project's globals — search for `sr-only` in `apps/web/src/index.css` or its Tailwind config. (If absent, add the standard equivalent: `className="absolute w-px h-px p-0 m-[-1px] overflow-hidden whitespace-nowrap border-0"`.)
+Note: `sr-only` ships with Tailwind v4 by default (this project uses Tailwind v4 per CLAUDE.md), so it should work out of the box. Only if the smoke test in Step 4 shows the text rendering visibly should you fall back to the literal equivalent: `className="absolute w-px h-px p-0 m-[-1px] overflow-hidden whitespace-nowrap border-0"`.
 
 - [ ] **Step 3: Type check**
 
