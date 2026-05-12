@@ -191,6 +191,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Idempotency check runs before the Stripe API round-trip so retries
+    // (double-clicks, network flakes) short-circuit at the DB lookup instead
+    // of incurring an unnecessary paymentIntents.retrieve.
+    const [existingOrder] = await db
+      .select({ id: orders.id, userId: orders.userId })
+      .from(orders)
+      .where(eq(orders.stripePaymentIntentId, normalizedStripePaymentIntentId))
+      .limit(1);
+
+    if (existingOrder) {
+      if (existingOrder.userId && existingOrder.userId !== authResult.user.id) {
+        return NextResponse.json({ error: "Payment intent already used" }, { status: 409 });
+      }
+      return NextResponse.json(
+        { orderId: existingOrder.id, idempotent: true },
+        { status: 200 }
+      );
+    }
+
+    // Retrieve the PaymentIntent for authoritative total + status check.
     let stripePI;
     try {
       stripePI = await getStripe().paymentIntents.retrieve(
@@ -199,6 +219,17 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json(
         { error: "stripe_pi_not_found" },
+        { status: 400 },
+      );
+    }
+
+    // Refuse to write an order row unless the PI is in a terminal-success
+    // state. Without this, a client could submit a clientSecret while the PI
+    // is still `requires_confirmation` / `requires_action` / `processing` and
+    // slip an order row through ahead of (or instead of) a successful charge.
+    if (stripePI.status !== "succeeded") {
+      return NextResponse.json(
+        { error: "stripe_pi_not_succeeded", status: stripePI.status },
         { status: 400 },
       );
     }
@@ -232,22 +263,6 @@ export async function POST(req: NextRequest) {
       for (const v of item.variants) {
         priceLookup.set(priceLookupKey(item.id, v.label), v.price);
       }
-    }
-
-    const [existingOrder] = await db
-      .select({ id: orders.id, userId: orders.userId })
-      .from(orders)
-      .where(eq(orders.stripePaymentIntentId, normalizedStripePaymentIntentId))
-      .limit(1);
-
-    if (existingOrder) {
-      if (existingOrder.userId && existingOrder.userId !== authResult.user.id) {
-        return NextResponse.json({ error: "Payment intent already used" }, { status: 409 });
-      }
-      return NextResponse.json(
-        { orderId: existingOrder.id, idempotent: true },
-        { status: 200 }
-      );
     }
 
     let normalizedParentNote: string | null = null;
