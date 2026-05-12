@@ -12,6 +12,7 @@ import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/component
 import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 import { posthog } from "@/lib/analytics/client";
+import { SHIP_FEE_AUD } from "@/lib/shipping";
 
 type Prefill = { studentName: string; year: string; rollClass: string } | null;
 
@@ -132,7 +133,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
   }, []);
 
   const subtotal = cartTotal(lines);
-  const ship = delivery === "ship" ? 9.5 : 0;
+  const ship = delivery === "ship" ? SHIP_FEE_AUD : 0;
   const total = subtotal + ship;
   const gst = total / 11;
 
@@ -260,7 +261,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
         studentYear: student.year,
         studentRoll: student.rollClass,
         delivery,
-        deliveryFee: delivery === "ship" ? 9.5 : 0,
+        deliveryFee: delivery === "ship" ? SHIP_FEE_AUD : 0,
         subtotal,
         gst,
         total,
