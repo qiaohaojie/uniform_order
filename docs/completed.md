@@ -266,6 +266,8 @@ Replaces the static `"Riley wore size 14 last year"` placeholder with a real pre
 
 Code complete; type-check passing. Smoke tests T2/T3/T4/T5/T6/T7 verified via DB-injected test data. Checkout-path smoke test (T3/T4 via real Stripe payment) is blocked on NSBH's Stripe Express account onboarding — same gap as `remaining_work.md` §2.8 / §5 checklist item 4. Re-run once the Stripe Connect account is active.
 
+Removed 2026-05-12 — see `docs/remaining_work.md` §2.14 for reasoning.
+
 ### 4.9 Drizzle-kit `neon_auth.*` exclusion ✅
 
 **Source:** former `remaining_work.md` §4.11 — completed 2026-05-08 in PR #8 (`chore/drizzle-tablesfilter`, commit `6d2602b`).
