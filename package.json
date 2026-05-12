@@ -6,7 +6,8 @@
     "build:web": "pnpm --filter web build",
     "start:web": "pnpm --filter web start",
     "check-types": "pnpm -r check-types",
-    "check-types:web": "pnpm --filter web check-types"
+    "check-types:web": "pnpm --filter web check-types",
+    "print-qa": "pnpm --filter web print-qa"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

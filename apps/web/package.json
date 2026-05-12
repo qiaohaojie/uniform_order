@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "print-qa": "node tests/print/print-qa.mjs"
   },
   "dependencies": {
     "@gravity-ui/icons": "^2.18.0",
@@ -46,6 +47,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "drizzle-kit": "^0.31.10",
+    "playwright": "^1.59.1",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3"
   }

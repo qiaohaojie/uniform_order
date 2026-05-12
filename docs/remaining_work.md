@@ -72,9 +72,15 @@ Already counted in §1.5 as a blocker for the consent step. Listed again here be
 
 The reports page produces monthly GST totals client-side. Before go-live, have an Australian accountant confirm the formula (1/11 of GST-inclusive total), the rounding rules, and the Stripe-fee deduction model.
 
-### 3.7 Print stylesheet QA — manual A4 verification only
+### 3.7 Print stylesheet QA — ✅ shipped
 
-Code half shipped via PR #21 (squash `11667af`); see `completed.md` §4.23. Remaining: real A4 paper QA in Chrome and Safari on macOS — single slip prints clean, batch prints one slip per page with no trailing blank, parent-note banner appears on slips that have a note, barcode renders, Kanban never appears in print output.
+Code shipped via PR #21 (squash `11667af`); see `completed.md` §4.23. Print verification automated 2026-05-12 via Playwright harness at `apps/web/tests/print/print-qa.mjs` (Chromium PDFs + WebKit screenshots), exercised against two NSBH orders (one with parent note, one without). All assertions pass:
+
+- Single slip: barcode renders, `[data-no-print]` elements hidden, no Kanban column-header row, exactly 1 A4 page per slip, parent-note banner shows note text when present.
+- Batch (`/admin/<tenant>/orders` in print emulation): Kanban hidden, `break-after-page` count = slips − 1, PDF page count = slip count — no trailing blank.
+- Cross-engine: WebKit print-media screenshots saved alongside Chromium PDFs for Safari visual parity check.
+
+Artifacts (gitignored) under `apps/web/tests/print/output/`. Re-runnable via `pnpm print-qa --tenant=<slug> --orders=<id1>,<id2>` after one-time `--auth` session capture.
 
 ### 3.8 Accessibility audit — ✅ shipped
 
