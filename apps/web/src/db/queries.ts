@@ -2,7 +2,6 @@ import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRe
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { cache } from "react";
-import { CATALOG } from "@/lib/data";
 import type { CatalogItem, Tenant } from "@/lib/data";
 
 export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
@@ -846,33 +845,6 @@ export async function getOrderForReceipt(orderId: string) {
 // ─── Parent UI adapters ───────────────────────────────────────────────────────
 
 /**
- * v1 size-source bridge. Looks up the UI's `sizes` array from the static
- * `CATALOG` flat array, keyed by itemId + variant label.
- *
- * The static CATALOG uses unprefixed item ids (e.g., 'shirt-ls'). The seed
- * inserts those same unprefixed ids for NSBH/RGSH, so direct lookup works
- * for the launch tenants. The wizard's clone path produces destination ids
- * shaped `${dstTenantId}-${sourceItemId}` (e.g., 'mbg-shirt-ls') because
- * `catalog_items.id` is a single-column PK and tenants need globally
- * unique ids in the DB. For those cloned ids we fall back to stripping
- * the tenantId prefix and re-searching the static CATALOG.
- *
- * TODO(post-launch): add a `sizes jsonb` column to `catalog_variants` and
- * sunset this lookup. Tracked as a follow-up in remaining_work.md.
- */
-function sizesForVariant(tenantId: string, itemId: string, variantLabel: string): string[] {
-  // Direct match — covers the launch tenants whose seed inserted unprefixed ids.
-  let item = CATALOG.find((i) => i.id === itemId);
-  // Cloned-tenant fallback — strip `${tenantId}-` prefix and retry.
-  if (!item && itemId.startsWith(`${tenantId}-`)) {
-    const stripped = itemId.slice(tenantId.length + 1);
-    item = CATALOG.find((i) => i.id === stripped);
-  }
-  const v = item?.variants.find((v) => v.label === variantLabel);
-  return v?.sizes ?? [variantLabel];
-}
-
-/**
  * Active catalog for a tenant in the parent UI's `CatalogItem` shape.
  * Returns only items with `active=true` AND at least one `active=true` variant
  * (innerJoin), sorted by sort_order. Items with zero active variants would
@@ -890,6 +862,7 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
       sortOrder: catalogItems.sortOrder,
       varLabel: catalogVariants.label,
       varPrice: catalogVariants.price,
+      varSizes: catalogVariants.sizes,
     })
     .from(catalogItems)
     .innerJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
@@ -918,7 +891,7 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
     map.get(r.itemId)!.variants.push({
       label: r.varLabel,
       price: Number(r.varPrice),
-      sizes: sizesForVariant(tenantId, r.itemId, r.varLabel),
+      sizes: (r.varSizes as string[]) ?? [],
     });
   }
   return Array.from(map.values());
