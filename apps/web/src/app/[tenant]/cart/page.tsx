@@ -16,7 +16,7 @@ export default async function CartPage({ params }: PageProps<"/[tenant]/cart">) 
       ? { name: active.name, year: `Year ${active.year}` }
       : null;
   return (
-    <MobileShell bg="var(--color-paper)">
+    <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
       <CartScreen tenant={tenant} activeChild={activeChild} />
       <TenantFooter tenant={tenantRecord} />
     </MobileShell>

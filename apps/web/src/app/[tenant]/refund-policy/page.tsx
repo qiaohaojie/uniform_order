@@ -32,7 +32,7 @@ export default async function RefundPolicyPage({
   }
 
   return (
-    <MobileShell>
+    <MobileShell logoUrl={tenant.logoUrl ?? undefined}>
       <div className="px-5 py-6">
         <h1
           className="font-serif text-2xl font-semibold pb-2 mb-4 border-b-2"

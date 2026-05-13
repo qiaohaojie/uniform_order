@@ -22,7 +22,7 @@ export default async function OrderPlacedPage({ params, searchParams }: PageProp
   const receiptEmail = order?.parentEmail ?? "your email";
 
   return (
-    <MobileShell bg="var(--color-parchment)">
+    <MobileShell bg="var(--color-parchment)" logoUrl={tenantRecord.logoUrl ?? undefined}>
       <div className="px-7 pt-16 pb-4 text-center flex-shrink-0">
         <div
           className="w-[76px] h-[76px] mx-auto rounded-[38px] bg-white flex items-center justify-center mb-3"

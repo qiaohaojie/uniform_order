@@ -28,7 +28,7 @@ export default async function CheckoutPage({ params }: PageProps<"/[tenant]/chec
       : null;
 
   return (
-    <MobileShell bg="var(--color-paper)">
+    <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
       <CheckoutScreen tenant={tenant} prefill={prefill} />
       <TenantFooter tenant={tenantRecord} />
     </MobileShell>

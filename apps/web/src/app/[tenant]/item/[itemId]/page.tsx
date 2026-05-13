@@ -59,7 +59,7 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
   const tenant = toTenantBrand(tenantRecord);
 
   return (
-    <MobileShell bg="var(--color-paper)">
+    <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
       <ItemDetailInteractive
         tenant={tenant}
         item={resolvedItem}
