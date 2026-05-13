@@ -667,6 +667,30 @@ export async function updateCatalogItem(
   await db.batch(stmts);
 }
 
+/**
+ * Bulk-renumber a tenant's catalog items to dense 0..N-1 order.
+ * Uses db.batch (neon-http) — not db.transaction (unsupported on neon-http).
+ * db.batch is a pipeline, not a transaction: individual statements can succeed
+ * independently. A partial failure leaves sort_order in a mixed state;
+ * re-dragging recovers. Revisit if neon pooled mode (transactions) is adopted.
+ * Caller must have already validated that `orderedIds` is the exhaustive set
+ * of catalog item IDs for this tenant.
+ */
+export async function reorderCatalogItems(
+  tenantId: string,
+  orderedIds: string[],
+): Promise<void> {
+  if (orderedIds.length === 0) return;
+  const statements = orderedIds.map((id, index) =>
+    db
+      .update(catalogItems)
+      .set({ sortOrder: index, updatedAt: new Date() })
+      .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId))),
+  );
+  // neon-http: db.batch accepts a tuple of queries; we cast for the variadic shape.
+  await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+}
+
 export async function deleteCatalogItem(itemId: string) {
   return db
     .delete(catalogItems)
