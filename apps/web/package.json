@@ -31,7 +31,7 @@
     "next": "^16.2.4",
     "posthog-js": "^1.372.9",
     "posthog-node": "^5.33.3",
-    "react": "link:@neondatabase/auth/react",
+    "react": "^19.2.5",
     "react-aria-components": "^1.17.0",
     "react-dom": "^19.2.5",
     "react-resizable-panels": "^4.10.0",
