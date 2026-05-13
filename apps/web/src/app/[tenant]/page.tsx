@@ -16,7 +16,8 @@ import { LandingScreen } from "./landing-screen";
 const DEFAULT_CATEGORY = "Winter";
 
 export default async function CatalogPage({ params, searchParams }: PageProps<"/[tenant]">) {
-  const { tenant: slug } = await params;
+  const { tenant: rawSlug } = await params;
+  const slug = rawSlug.toLowerCase();
   // Read cookie before DB queries — header lookup, no I/O
   const cookieStore = await cookies();
   const hasVisited = !!cookieStore.get(`uo:visited:${slug}`)?.value;
