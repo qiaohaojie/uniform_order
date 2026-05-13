@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { CATEGORIES } from "@/lib/data";
-import { getTenant, getActiveCatalog, toTenantBrand } from "@/db/queries";
+import { getTenant, getActiveCatalog, toTenantBrand, getPopularItems } from "@/db/queries";
 import { getActiveChild } from "@/lib/active-child.server";
 import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { Crest } from "@/components/crest";
@@ -10,14 +11,24 @@ import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
 import { TenantFooter } from "@/components/tenant-footer";
 import { CatalogGrid } from "./catalog-grid";
+import { LandingScreen } from "./landing-screen";
 
 const DEFAULT_CATEGORY = "Winter";
 
 export default async function CatalogPage({ params, searchParams }: PageProps<"/[tenant]">) {
   const { tenant: slug } = await params;
+  // Read cookie before DB queries — header lookup, no I/O
+  const cookieStore = await cookies();
+  const hasVisited = !!cookieStore.get(`uo:visited:${slug}`)?.value;
+
+  // Parallel fetch — returning visitors get getTenant + getActiveCatalog in parallel.
+  // First-time visitors skip getActiveCatalog (not needed for landing) and get an
+  // empty placeholder instead; getPopularItems runs after the visibility gate below.
   const [tenantRecord, catalog] = await Promise.all([
     getTenant(slug),
-    getActiveCatalog(slug),
+    hasVisited
+      ? getActiveCatalog(slug)
+      : Promise.resolve([] as Awaited<ReturnType<typeof getActiveCatalog>>),
   ]);
   if (!tenantRecord) notFound();
 
@@ -34,6 +45,22 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
   }
 
   const tenant = toTenantBrand(tenantRecord);
+
+  // ── Landing branch — AFTER visibility gate so hidden tenants still 404 ───────
+  if (!hasVisited) {
+    const popularItems = await getPopularItems(slug);
+    return (
+      <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
+        <LandingScreen
+          tenant={tenantRecord}
+          popularItems={popularItems}
+          accent={tenant.accent}
+        />
+      </MobileShell>
+    );
+  }
+
+  // ── Catalogue branch — catalog already fetched above ──────────────────────────
   const sp = await searchParams;
   const catParam = typeof sp.cat === "string" ? sp.cat : undefined;
   const activeCat = (catParam && CATEGORIES.includes(catParam as never) ? catParam : DEFAULT_CATEGORY) as string;
