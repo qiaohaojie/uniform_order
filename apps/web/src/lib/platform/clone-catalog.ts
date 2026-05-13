@@ -72,6 +72,7 @@ export async function cloneCatalogFromTenantUnsafe(
         label: v.label,
         price: v.price,
         active: v.active,
+        sizes: v.sizes,
       })),
     );
     await db.batch([itemsInsert, variantsInsert]);

@@ -1,0 +1,1 @@
+ALTER TABLE "catalog_variants" ADD COLUMN "sizes" jsonb DEFAULT '[]'::jsonb NOT NULL;

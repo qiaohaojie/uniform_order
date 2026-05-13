@@ -29,6 +29,7 @@ export const catalogVariantInputSchema = z.object({
   label: z.string().trim().min(1).max(40),
   price: z.number().positive().max(10000),
   active: z.boolean().optional(),
+  sizes: z.array(z.string().min(1).max(20)).max(40).default([]),
 });
 
 export const catalogItemInputSchema = z.object({
