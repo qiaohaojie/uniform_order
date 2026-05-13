@@ -936,6 +936,7 @@ export const getCatalogItemForPDP = cache(async (
       varPrice: catalogVariants.price,
       varSizes: catalogVariants.sizes,
       varActive: catalogVariants.active,
+      imageUrl: catalogItems.imageUrl,
     })
     .from(catalogItems)
     .leftJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
@@ -957,6 +958,7 @@ export const getCatalogItemForPDP = cache(async (
     cat: r0.category as CatalogItem["cat"],
     description: r0.description ?? "",
     sizeGuide: (r0.sizeGuide as CatalogItem["sizeGuide"]) ?? undefined,
+    imageUrl: r0.imageUrl ?? undefined,
     variants: [],
   } as unknown as CatalogItem;
 
