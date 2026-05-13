@@ -40,6 +40,9 @@ my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
 .claude/skills/integration-nextjs-app-router/references
 .claude/scheduled_tasks.lock
 
+# repomix
+repomix-output.xml
+
 # playwright-cli artifacts
 .playwright-cli/
 # §3.8 a11y audit — local Neon Auth session, never commit
