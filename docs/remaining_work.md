@@ -185,7 +185,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
   - Phase 2 (real bundles with single Add-all-to-cart via `catalog_bundles` table) tracked separately — large, defer until phase-1 ships and a school asks.
   - ~2–3d.
 
-- [ ] **Per-tenant homepage option (gap-analysis §5.17).** Today `/<tenant>` shows the catalog grid directly. Add an optional cookie-gated landing rendered on first visit (subsequent visits skip straight to catalog). Surfaces: crest, `tenant.motto`, pickup banner (`shopHours` + `collectionInstructions`), and a "Most ordered this term" row driven from order history. ~6h.
+- [x] **Per-tenant homepage option (gap-analysis §5.17).** ✅ shipped (4 commits: cookie helper, `getPopularItems` query, `LandingScreen` component, `page.tsx` cookie branch). Cookie-gated landing on `/<tenant>` first visit — crest, motto, shop hours card, popular items grid (last 90 days), Browse Catalogue CTA (`router.refresh()`). 30-day `uo:visited:{slug}` cookie. Returning visitors go straight to catalogue unchanged.
 
 - [ ] **Desktop frame for parent shop (gap-analysis §5.18).** Parent shop is hard-capped at 430px (`components/mobile-shell.tsx:17`); on a desktop browser the column floats mid-page and reads as broken on first sight (credibility issue for school decision-makers). Keep the 430px column but style the surrounding desktop canvas as a parchment-backed frame: subtle shadow, school crest faded into the corner, a "Tip: open on your phone for the full experience" line. **Do not widen the catalog grid** — mobile-first is core to the visual brand. ~4h.
 
