@@ -154,7 +154,7 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
                       src={it.imageUrl}
                       alt={it.name}
                       fill
-                      style={{ objectFit: "contain" }}
+                      className="object-contain"
                       sizes="(max-width: 430px) 50vw, 200px"
                     />
                   </div>

@@ -71,7 +71,8 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
                 alt={resolvedItem.name}
                 width={210}
                 height={210}
-                style={{ objectFit: "contain" }}
+                priority
+                className="object-contain"
               />
             ) : (
               <GarmentVector itemId={resolvedItem.id} accent={tenant.accent} size={210} />
