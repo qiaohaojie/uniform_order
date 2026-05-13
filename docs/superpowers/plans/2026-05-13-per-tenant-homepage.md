@@ -4,9 +4,9 @@
 
 **Goal:** Show a cookie-gated welcome screen on first visit to `/<tenant>` — crest, motto, shop hours, popular items — then go straight to the catalogue on return visits.
 
-**Architecture:** The existing RSC at `app/[tenant]/page.tsx` reads a `uo:visited:{slug}` cookie server-side and branches: landing path fetches popular items and renders `<LandingScreen>`; catalogue path is unchanged. No new routes. `LandingScreen` is a `"use client"` component that sets the cookie + navigates on any CTA tap.
+**Architecture:** The existing RSC at `app/[tenant]/page.tsx` reads a `uo:visited:{slug}` cookie before the DB fetch, then branches: landing path skips `getActiveCatalog` and fetches popular items instead; catalogue path is unchanged. No new routes. `LandingScreen` is a `"use client"` component that sets the cookie + triggers RSC refresh (CTA) or navigates to an item page (tiles).
 
-**Tech Stack:** Next.js 15 App Router (RSC + Server Actions), Drizzle ORM + neon-http (`db.execute(sql\`...\`)`), `next/headers` cookies, `next/navigation` useRouter, Tailwind CSS v4.
+**Tech Stack:** Next.js 15 App Router (RSC + client companion), Drizzle ORM + neon-http, `next/headers` cookies, `next/navigation` useRouter, Tailwind CSS v4.
 
 ---
 
@@ -74,7 +74,10 @@ export type PopularItem = {
 };
 ```
 
-- [ ] **Step 2: Add `getPopularItems` function at the end of queries.ts (before the final closing)**
+- [ ] **Step 2: Add `getPopularItems` function at the end of queries.ts**
+
+`db.execute` with a generic parameter may not exist on the NeonHttpDatabase type used here. Use
+an explicit row-type cast instead of the generic form:
 
 ```ts
 export async function getPopularItems(
@@ -83,13 +86,14 @@ export async function getPopularItems(
   days = 90,
 ): Promise<PopularItem[]> {
   try {
-    const result = await db.execute<{
+    type Row = {
       itemId: string;
       name: string | null;
       imageUrl: string | null;
-      minPrice: string | null;   // postgres numeric → string over neon-http
+      minPrice: string | null; // postgres numeric → string over neon-http
       totalQty: number;
-    }>(sql`
+    };
+    const result = (await db.execute(sql`
       WITH ranked AS (
         SELECT ol.item_id, SUM(ol.qty)::int AS total_qty
         FROM order_lines ol
@@ -102,15 +106,16 @@ export async function getPopularItems(
         LIMIT ${limit}
       )
       SELECT
-        r.item_id            AS "itemId",
+        r.item_id          AS "itemId",
         ci.name,
-        ci.image_url         AS "imageUrl",
+        ci.image_url       AS "imageUrl",
         (SELECT MIN(price)::text FROM catalog_variants cv
          WHERE cv.item_id = r.item_id AND cv.active = true) AS "minPrice",
-        r.total_qty          AS "totalQty"
+        r.total_qty        AS "totalQty"
       FROM ranked r
       LEFT JOIN catalog_items ci ON ci.id = r.item_id
-    `);
+      ORDER BY r.total_qty DESC
+    `)) as { rows: Row[] };
     return result.rows.map((r) => ({
       itemId: r.itemId,
       name: r.name ?? r.itemId,
@@ -124,16 +129,22 @@ export async function getPopularItems(
 }
 ```
 
+**Why CTE + outer `ORDER BY`:** aggregation happens in `ranked` first (no fan-out from the
+variants join), then `min_price` is a per-row lateral subquery. The outer `ORDER BY r.total_qty DESC`
+is required because PostgreSQL does not guarantee CTE row order is preserved through a join.
+
+**Status filter** excludes `pending_payment` (never paid) and `refunded` (fully reversed).
+All other statuses (`new`, `packing`, `ready`, `collected`, `partially_refunded`) represent
+real demand. Deny-list is intentional — a future new status is almost certainly a legitimate
+fulfillment state.
+
 - [ ] **Step 3: Type-check**
 
 ```bash
 pnpm check-types:web
 ```
 
-Expected: no errors. If `db.execute` type signature complains about the generic, change to:
-```ts
-const result = await db.execute(sql`...`) as { rows: { itemId: string; ... }[] };
-```
+Expected: no errors.
 
 - [ ] **Step 4: Commit**
 
@@ -148,6 +159,10 @@ git commit -m "feat(§5.17): getPopularItems query — top-3 by qty last 90 days
 
 **Files:**
 - Create: `apps/web/src/app/[tenant]/landing-screen.tsx`
+
+**Prop note:** `LandingScreen` receives `tenant: TenantRow` (the raw DB row, nullables intact), not
+the `toTenantBrand(...)` projection (which coerces null fields to `""`). The `shopHours`,
+`collectionInstructions`, and `motto` null checks below depend on this.
 
 - [ ] **Step 1: Create the component**
 
@@ -175,9 +190,16 @@ export function LandingScreen({
 }) {
   const router = useRouter();
 
-  function visit(path: string) {
+  // CTA: already at /<slug>, so refresh the RSC to re-read the cookie
+  function visitCatalogue() {
     setVisitedCookie(tenant.id);
-    router.push(path);
+    router.refresh();
+  }
+
+  // Item tiles: navigate to a different URL, so push works fine
+  function visitItem(itemId: string) {
+    setVisitedCookie(tenant.id);
+    router.push(`/${tenant.id}/${itemId}`);
   }
 
   return (
@@ -259,7 +281,7 @@ export function LandingScreen({
               {popularItems.map((item) => (
                 <button
                   key={item.itemId}
-                  onClick={() => visit(`/${tenant.id}/${item.itemId}`)}
+                  onClick={() => visitItem(item.itemId)}
                   className="flex flex-col items-center rounded-[8px] border p-2.5 text-center cursor-pointer hover:border-current transition-colors"
                   style={{ background: "var(--color-paper)", borderColor: "var(--color-rule)" }}
                 >
@@ -271,6 +293,10 @@ export function LandingScreen({
                       <img
                         src={item.imageUrl}
                         alt=""
+                        width={40}
+                        height={40}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-contain"
                       />
                     ) : (
@@ -302,9 +328,9 @@ export function LandingScreen({
           </div>
         )}
 
-        {/* CTA */}
+        {/* CTA — uses router.refresh() not router.push() because we're already at /<slug> */}
         <button
-          onClick={() => visit(`/${tenant.id}`)}
+          onClick={visitCatalogue}
           className="w-full rounded-[9px] py-3.5 text-sm font-semibold text-white tracking-wide"
           style={{ background: accent }}
         >
@@ -332,7 +358,8 @@ export function LandingScreen({
 pnpm check-types:web
 ```
 
-Expected: no errors. Common issue to watch for: `GarmentVector` may not accept a `className` prop — check `components/garment.tsx`. If it doesn't, wrap it in a `<div className="...">` instead.
+Expected: no errors. Common issue: `GarmentVector` may not accept a `className` prop — check
+`components/garment.tsx`. If it doesn't, wrap it: `<div className="block"><GarmentVector .../></div>`.
 
 - [ ] **Step 3: Commit**
 
@@ -348,27 +375,33 @@ git commit -m "feat(§5.17): LandingScreen component — crest/motto/hours/popul
 **Files:**
 - Modify: `apps/web/src/app/[tenant]/page.tsx`
 
-Three surgical edits to the existing file. The catalogue JSX (`return (...)`) is untouched.
+Two surgical edits. The catalogue JSX (`return (...)`) and the visibility gate are untouched.
 
 - [ ] **Step 1: Add three new imports**
 
-At the top of `page.tsx`, add:
+At the top of `page.tsx`, add `cookies` from `next/headers`, merge `getPopularItems` into the
+`@/db/queries` line, and add `LandingScreen`. The full import block becomes:
 
 ```ts
-import { cookies } from "next/headers";                    // after "next/navigation"
-import { getPopularItems } from "@/db/queries";            // merge into existing @/db/queries line
-import { LandingScreen } from "./landing-screen";          // after CatalogGrid import
-```
-
-The `@/db/queries` import line should become:
-
-```ts
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { CATEGORIES } from "@/lib/data";
 import { getTenant, getActiveCatalog, toTenantBrand, getPopularItems } from "@/db/queries";
+import { getActiveChild } from "@/lib/active-child.server";
+import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
+import { Crest } from "@/components/crest";
+import { CartIcon } from "@/components/icons";
+import { MobileShell } from "@/components/mobile-shell";
+import { BottomNav } from "@/components/bottom-nav";
+import { TenantFooter } from "@/components/tenant-footer";
+import { CatalogGrid } from "./catalog-grid";
+import { LandingScreen } from "./landing-screen";
 ```
 
-- [ ] **Step 2: Replace the initial `Promise.all` + split fetch**
+- [ ] **Step 2: Replace the initial `Promise.all` block with the cookie-aware parallel fetch**
 
-Find this block near the top of `CatalogPage` (lines 1-4 of the function body):
+Find this block at the top of `CatalogPage` (immediately after `const { tenant: slug } = await params;`):
 
 ```ts
 const [tenantRecord, catalog] = await Promise.all([
@@ -381,20 +414,30 @@ if (!tenantRecord) notFound();
 Replace with:
 
 ```ts
-const tenantRecord = await getTenant(slug);
+// Read cookie before DB queries — header lookup, no I/O
+const cookieStore = await cookies();
+const hasVisited = !!cookieStore.get(`uo:visited:${slug}`)?.value;
+
+// Parallel fetch — returning visitors get getTenant + getActiveCatalog in parallel.
+// First-time visitors skip getActiveCatalog (not needed for landing) and get an
+// empty placeholder instead; getPopularItems runs after the visibility gate below.
+const [tenantRecord, catalog] = await Promise.all([
+  getTenant(slug),
+  hasVisited
+    ? getActiveCatalog(slug)
+    : Promise.resolve([] as Awaited<ReturnType<typeof getActiveCatalog>>),
+]);
 if (!tenantRecord) notFound();
 ```
 
-Then find the line `const tenant = toTenantBrand(tenantRecord);` and insert the landing branch
-**immediately after it**:
+Then find `const tenant = toTenantBrand(tenantRecord);` and insert the landing branch
+**immediately after it** — this is after the existing visibility gate, so hidden tenants
+still 404 on first visit:
 
 ```ts
 const tenant = toTenantBrand(tenantRecord);
 
-// ── Landing branch — first-visit only ──────────────────────────────────────
-const cookieStore = await cookies();
-const hasVisited = !!cookieStore.get(`uo:visited:${slug}`)?.value;
-
+// ── Landing branch — AFTER visibility gate so hidden tenants still 404 ───────
 if (!hasVisited) {
   const popularItems = await getPopularItems(slug);
   return (
@@ -408,19 +451,14 @@ if (!hasVisited) {
   );
 }
 
-// ── Catalogue branch — returning visitors (everything below is unchanged) ───
-const catalog = await getActiveCatalog(slug);
+// ── Catalogue branch — catalog already fetched above ──────────────────────────
 ```
 
-- [ ] **Step 3: Remove the now-stale `catalog` variable reference if needed**
+Everything below (the `const sp = await searchParams;` block, `getActiveChild`, and the full
+`return (...)`) remains exactly as it is. The `catalog` variable from the `Promise.all` is
+consumed unchanged by `<CatalogGrid items={catalog} .../>`.
 
-Because `getActiveCatalog` was moved out of the original `Promise.all`, find any remaining
-destructured `catalog` reference from the old `Promise.all` (if the editor left one). The variable
-`catalog` should now only come from the `const catalog = await getActiveCatalog(slug);` line added
-in Step 2. The rest of the function body (`sp`, `activeCat`, `getActiveChild`, the `return (...)`)
-stays exactly as it was.
-
-- [ ] **Step 4: Type-check**
+- [ ] **Step 3: Type-check**
 
 ```bash
 pnpm check-types:web
@@ -428,19 +466,20 @@ pnpm check-types:web
 
 Expected: no errors.
 
-- [ ] **Step 5: Manual smoke test**
+- [ ] **Step 4: Manual smoke test**
 
 ```bash
 pnpm dev:web
 ```
 
-1. Open `http://localhost:3000/nsbh` in a private/incognito window (no cookie) → should see the landing screen: large crest, school name, motto, shop hours card, and popular items row (or no row if the DB has no orders in the last 90 days).
-2. Click "Browse Catalogue →" → navigates back to `/nsbh` and the catalogue grid appears (cookie is now set).
+1. Open `http://localhost:3000/nsbh` in a **private/incognito** window → should see the landing screen: large crest, school name, italic motto, shop hours card, popular items row (or no row if the DB has no orders in the last 90 days).
+2. Click "Browse Catalogue →" → RSC re-runs, cookie is now present, catalogue grid appears.
 3. Reload `http://localhost:3000/nsbh` in the same window → catalogue directly, no landing.
-4. Open `http://localhost:3000/rgsh` in a new private window → landing appears with RGSH accent colour and data.
-5. Confirm the visibility gate still works: a tenant with `isPubliclyListed = false` should return 404 for a non-admin visitor on both the landing and catalogue branches.
+4. Open `http://localhost:3000/rgsh` in a new private window → landing with RGHS green accent and data.
+5. Confirm the **visibility gate** still works: a tenant with `isPubliclyListed = false` should return 404 for a non-admin visitor on both landing and catalogue branches.
+6. Confirm **admin bypass**: sign in as a platform-admin email and open a hidden/pending tenant → should see the landing (gate falls through for admins).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/app/[tenant]/page.tsx
