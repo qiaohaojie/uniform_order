@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { CatalogItem } from "@/lib/data";
 import { CATEGORIES } from "@/lib/data";
@@ -17,6 +18,7 @@ type CatalogGridProps = {
 export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridProps) {
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const clearSearch = () => {
     setQ("");
     inputRef.current?.focus();
@@ -76,15 +78,21 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
         </span>
       </div>
 
-      {/* Category chips */}
-      <div className="px-4 pt-2.5 pb-1 flex gap-2 overflow-x-auto flex-shrink-0 [&::-webkit-scrollbar]:hidden">
+      {/* Category chips — dimmed while search is active; click resets search */}
+      <div
+        className="px-4 pt-2.5 pb-1 flex gap-2 overflow-x-auto flex-shrink-0 [&::-webkit-scrollbar]:hidden transition-opacity"
+        style={{ opacity: q.length > 0 ? 0.5 : 1 }}
+      >
         {CATEGORIES.map((c) => {
           const on = c === activeCat;
           return (
-            <Link
+            <button
               key={c}
-              href={`/${tenantId}?cat=${c}`}
-              scroll={false}
+              type="button"
+              onClick={() => {
+                setQ("");
+                router.push(`/${tenantId}?cat=${c}`, { scroll: false });
+              }}
               className="h-[30px] px-3 rounded-full inline-flex items-center text-[12px] font-semibold flex-shrink-0 border"
               style={{
                 borderColor: on ? accent : "var(--color-rule)",
@@ -93,7 +101,7 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
               }}
             >
               {c}
-            </Link>
+            </button>
           );
         })}
       </div>
