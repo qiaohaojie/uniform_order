@@ -11,22 +11,20 @@ export function MobileShell({
 }) {
   return (
     <div
-      className="min-h-dvh w-full flex flex-col items-center sm:justify-center relative"
+      className="min-h-dvh w-full flex flex-col items-center sm:justify-center"
       style={{ background: "var(--color-parchment)" }}
     >
-      {logoUrl && (
-        <div className="max-w-[430px] mx-auto absolute inset-0 pointer-events-none hidden sm:block">
+      <div
+        className="relative w-full max-w-[430px] min-h-dvh sm:min-h-0 sm:my-6 flex flex-col sm:rounded-[10px] sm:shadow-[0_4px_32px_rgba(8,26,45,0.14),0_1px_6px_rgba(8,26,45,0.07)]"
+        style={{ background: bg }}
+      >
+        {logoUrl && (
           <img
             alt=""
             src={logoUrl}
-            className="absolute top-4 right-4 w-24 h-24 object-contain opacity-[0.08]"
+            className="absolute top-4 right-4 w-24 h-24 object-contain opacity-[0.08] pointer-events-none hidden sm:block"
           />
-        </div>
-      )}
-      <div
-        className="w-full max-w-[430px] min-h-dvh sm:min-h-0 flex flex-col sm:rounded-[10px] sm:shadow-[0_4px_32px_rgba(8,26,45,0.14),0_1px_6px_rgba(8,26,45,0.07)]"
-        style={{ background: bg }}
-      >
+        )}
         {children}
       </div>
       <p
