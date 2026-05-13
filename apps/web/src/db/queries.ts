@@ -914,6 +914,64 @@ export const getCatalogItem = cache(async (
 });
 
 /**
+ * PDP variant of the above: fetches ALL variants for the item (active + inactive),
+ * tagging inactive ones with `disabled: true`. Used only by the item detail page
+ * so parents see unavailable sizes/fits rather than a silent gap.
+ * Still returns null if the item itself is inactive or belongs to another tenant.
+ */
+export const getCatalogItemForPDP = cache(async (
+  tenantId: string,
+  itemId: string,
+): Promise<CatalogItem | null> => {
+  const rows = await db
+    .select({
+      itemId: catalogItems.id,
+      name: catalogItems.name,
+      category: catalogItems.category,
+      description: catalogItems.description,
+      sizeGuide: catalogItems.sizeGuide,
+      varLabel: catalogVariants.label,
+      varPrice: catalogVariants.price,
+      varSizes: catalogVariants.sizes,
+      varActive: catalogVariants.active,
+    })
+    .from(catalogItems)
+    .leftJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
+    .where(
+      and(
+        eq(catalogItems.tenantId, tenantId),
+        eq(catalogItems.id, itemId),
+        eq(catalogItems.active, true),
+      ),
+    )
+    .orderBy(catalogVariants.label);
+
+  if (rows.length === 0) return null;
+
+  const r0 = rows[0]!;
+  const item: CatalogItem = {
+    id: r0.itemId,
+    name: r0.name,
+    cat: r0.category as CatalogItem["cat"],
+    description: r0.description ?? "",
+    sizeGuide: (r0.sizeGuide as CatalogItem["sizeGuide"]) ?? undefined,
+    variants: [],
+  } as unknown as CatalogItem;
+
+  for (const r of rows) {
+    if (r.varLabel === null) continue;
+    item.variants.push({
+      label: r.varLabel,
+      price: Number(r.varPrice),
+      sizes: Array.isArray(r.varSizes) ? (r.varSizes as string[]) : [],
+      ...(r.varActive === false ? { disabled: true } : {}),
+    });
+  }
+
+  return item.variants.length > 0 ? item : null;
+});
+
+/**
  * Adapt a DB tenant row to the parent UI's `Tenant` shape. Materializes
  * `accentInk` (default white) and replaces nullable copy fields with empty
  * strings so existing components don't need null guards.

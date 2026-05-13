@@ -444,7 +444,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
             }}
             icon={<PickupIcon size={18} />}
             title="Pickup at school office"
-            sub="Free · Ready in 1–2 school days"
+            sub={tenant.shopHours ? `Free · ${tenant.shopHours}` : "Free · Ready in 1–2 school days"}
           />
           <DeliveryOption
             tenant={tenant}

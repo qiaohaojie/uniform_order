@@ -1,6 +1,6 @@
 import { permanentRedirect, notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getTenant, getCatalogItem, toTenantBrand } from "@/db/queries";
+import { getTenant, getCatalogItemForPDP, toTenantBrand } from "@/db/queries";
 
 export async function generateMetadata({
   params,
@@ -8,7 +8,7 @@ export async function generateMetadata({
   params: Promise<{ tenant: string; itemId: string }>;
 }): Promise<Metadata> {
   const { tenant: slug, itemId } = await params;
-  const [tenant, item] = await Promise.all([getTenant(slug), getCatalogItem(slug, itemId)]);
+  const [tenant, item] = await Promise.all([getTenant(slug), getCatalogItemForPDP(slug, itemId)]);
   if (!tenant || !item) return { title: "Item" };
   return {
     title: `${item.name} — ${tenant.name}`,
@@ -27,7 +27,7 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
   const { tenant: slug, itemId } = await params;
   const [tenantRecord, item] = await Promise.all([
     getTenant(slug),
-    getCatalogItem(slug, itemId),
+    getCatalogItemForPDP(slug, itemId),
   ]);
   if (!tenantRecord) notFound();
 
@@ -46,7 +46,7 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
     // Legacy-URL fallback: try the prefixed canonical id (Task 1.6 seed shape).
     const canonicalId = `${slug}-${itemId}`;
     if (canonicalId !== itemId) {
-      const fallback = await getCatalogItem(slug, canonicalId);
+      const fallback = await getCatalogItemForPDP(slug, canonicalId);
       if (fallback) {
         // 308 permanent redirect — bookmarks update, search engines learn the new URL.
         permanentRedirect(`/${slug}/item/${canonicalId}`);
