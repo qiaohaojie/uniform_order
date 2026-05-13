@@ -10,6 +10,9 @@
     "print-qa": "node tests/print/print-qa.mjs"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@gravity-ui/icons": "^2.18.0",
     "@heroui-pro/react": "1.0.0-beta.2",
     "@heroui/react": "^3.0.3",
