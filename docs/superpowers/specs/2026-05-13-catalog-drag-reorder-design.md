@@ -27,7 +27,7 @@ Give school admins a direct-manipulation UI to reorder catalogue items, with the
 
 ### 4.1 Visual
 
-A new leftmost column (~28px) on the catalog table contains a small `⠿` grip glyph rendered in `var(--color-ink-dim)`. On hover the glyph darkens to ink-primary; cursor switches to `grab`. Active drag switches to `grabbing` and applies dnd-kit's transform to the row.
+A new leftmost column (~28px) on the catalog table contains a small `⠿` grip glyph rendered in `var(--color-ink-dim)`. This adds a 7th column: the existing `<thead>` row (`catalog-table.tsx:73-79`) gets a new leading `<th className="w-[28px]"></th>` and every `<tr>` gets a matching leading `<td>` housing the grip handle. Empty-state row's `colSpan` bumps from 6 to 7. On hover the glyph darkens to ink-primary; cursor switches to `grab`. Active drag switches to `grabbing` and applies dnd-kit's transform to the row.
 
 The rest of the row continues to be clickable to open the edit drawer (existing behaviour at `catalog-table.tsx:87`). The handle column has its own pointer target and stops propagation, so dragging the handle never opens the drawer and clicking elsewhere on the row never starts a drag.
 
@@ -59,7 +59,7 @@ The rest of the row continues to be clickable to open the edit drawer (existing 
 **Route placement:** `apps/web/src/app/api/catalog/reorder/route.ts` (sibling of the existing `apps/web/src/app/api/catalog/[itemId]/route.ts`). Tenant is supplied in the body rather than the URL because there is no single `itemId` to derive it from, and adding a `[tenant]` path segment would diverge from the existing `/api/catalog/*` shape.
 
 **Validation:**
-- Auth: `requireSessionUser` → resolve tenant via `getTenantBySlug(tenantSlug)` (same helper used elsewhere) → `ensureTenantAccess(user, tenant.shopEmail)`. Platform-admin emails pass via the same path the PATCH route uses.
+- Auth: `requireSessionUser` → resolve tenant via `getTenantBySlug(tenantSlug)` (same helper used elsewhere) → `ensureTenantAccess(user, tenant.shopEmail)`. `ensureTenantAccess` already handles platform-admin pass-through (confirmed at `app/api/catalog/[itemId]/route.ts:50` — the single call covers both operator and platform-admin paths). Do not add a separate `isPlatformAdminEmail` check.
 - `orderedIds` must be a non-empty `string[]` of UUIDs.
 - The set of `orderedIds` must equal the full set of catalog item IDs for the tenant — no missing IDs, no extras, no duplicates. Mismatch returns `400 { error: "stale_set" }`.
 
@@ -88,7 +88,7 @@ Add to `apps/web/package.json`:
 - `@dnd-kit/core`
 - `@dnd-kit/sortable`
 
-Both work fine under React Server Components when used inside a `"use client"` boundary (the table is already a client component). Combined bundle impact ≈ 10kb gz.
+Both work fine under React Server Components when used inside a `"use client"` boundary (the table is already a client component). Combined bundle impact ≈ 15–20kb gz; only loads on the admin catalog route.
 
 ### 6.2 Component changes
 
@@ -99,7 +99,7 @@ Both work fine under React Server Components when used inside a `"use client"` b
 2. Compute new order with `arrayMove(items, oldIndex, newIndex)`.
 3. Capture `previousItems = items` for rollback.
 4. Call `setItems(newOrder.map((it, i) => ({ ...it, sortOrder: i })))` — keeps in-memory `sortOrder` consistent so the drawer's `initialFromItem` reads the right number.
-5. `fetch('/api/catalog/reorder', { method: 'POST', body: JSON.stringify({ orderedIds: newOrder.map(it => it.id) }) })`.
+5. `fetch('/api/catalog/reorder', { method: 'POST', body: JSON.stringify({ tenantSlug: tenant.slug, orderedIds: newOrder.map(it => it.id) }) })`.
 6. On non-ok response or thrown error: `setItems(previousItems)` + `setTableError("Reorder failed: " + msg)`.
 
 ### 6.3 Concurrent-edit handling
@@ -144,7 +144,7 @@ No unit tests (project has no test runner — CLAUDE.md: "`check-types` is the c
 1. Open `/admin/nsbh/catalog` as operator. Drag a row down by 3 positions; refresh the page; order persists.
 2. Open `/nsbh` parent shop in another tab; reordered item appears in the new position after `revalidate`/next visit.
 3. Drag and drop in the same position — DevTools Network shows no POST.
-4. Throttle network in DevTools, drag a row, immediately fail the request (offline toggle): row snaps back + error banner appears.
+4. Toggle DevTools to **Offline before the drop**, then drag a row and release: the POST fails immediately, row snaps back, error banner appears. (Toggling offline mid-flight does not cancel an already-dispatched fetch — set offline first.)
 5. With two browser sessions on the same tenant: A drags while B deletes a row; A sees "Catalog changed — please retry" and refreshes cleanly.
 6. Keyboard-only: tab to grip, Space, arrow down, Space — order changes and persists.
 7. `pnpm check-types:web` passes.
