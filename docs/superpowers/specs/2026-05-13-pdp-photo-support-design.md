@@ -37,7 +37,7 @@ Both surfaces use the same visual pattern: a fixed-size square container, `objec
 
 | Surface | Container | Fallback |
 |---|---|---|
-| PDP parchment area | 150 × 150 px, centered | `GarmentVector size={210}` |
+| PDP parchment area | 210 × 210 px, centered | `GarmentVector size={210}` |
 | Catalog grid card | 120 × 120 px, centered | `GarmentVector size={120}` |
 
 `next/image` is used with `fill` + a sized wrapper div. `sizes` prop set to match container width so the browser requests an appropriately-sized srcset variant.
@@ -76,13 +76,13 @@ The `garment` prop passed to `<ItemDetailInteractive>` currently hardcodes `<Gar
 garment={
   <div className="flex justify-center py-1 pb-2.5" style={{ background: "var(--color-parchment)" }}>
     {resolvedItem.imageUrl ? (
-      <div style={{ width: 150, height: 150, position: "relative" }}>
+      <div style={{ width: 210, height: 210, position: "relative" }}>
         <Image
           src={resolvedItem.imageUrl}
           alt={resolvedItem.name}
           fill
           style={{ objectFit: "contain" }}
-          sizes="150px"
+          sizes="210px"
         />
       </div>
     ) : (
