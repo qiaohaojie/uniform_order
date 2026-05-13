@@ -604,6 +604,17 @@ Post-review fixes: `console.error` in `getPopularItems` catch block; `rawSlug.to
 
 Spec: `docs/superpowers/specs/2026-05-13-per-tenant-homepage-design.md`. Plan: `docs/superpowers/plans/2026-05-13-per-tenant-homepage.md`.
 
+### 4.33 Admin catalog drag-to-reorder (§3.12, drag half) ✅
+
+Shipped 2026-05-14.
+
+`@dnd-kit/sortable` wired into `app/admin/[tenant]/catalog/catalog-table.tsx`. Each row gains a leading `⠿` grip column; rest of the row continues to open the edit drawer on click. On drop, the table renumbers items optimistically and POSTs the new `orderedIds[]` to a new bulk endpoint at `app/api/catalog/reorder/route.ts`. Server validates the set is exhaustive for the tenant (catches concurrent add/delete), then runs a single `db.batch` of `UPDATE catalog_items SET sort_order = $i` per item, plus one `logAuditEvent` row with `action: "catalog.reordered"`. On failure (offline, stale set, auth), client snaps back to previous order and surfaces an inline banner; stale-set additionally pulls fresh state via the existing `refresh()` prop. An in-flight guard (`pendingRef`) prevents a second drag racing the first fetch.
+
+Dense renumber `0..N-1` on every drop — sparse spacing rejected as YAGNI at ≤100 SKUs/tenant. Keyboard-accessible via dnd-kit's `KeyboardSensor`. No DB migration (column already existed). Size-guide editor (the other half of §3.12) deferred to a separate spec.
+
+Spec: `docs/superpowers/specs/2026-05-13-catalog-drag-reorder-design.md`.
+Plan: `docs/superpowers/plans/2026-05-14-catalog-drag-reorder.md`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
