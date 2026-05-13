@@ -68,6 +68,14 @@ export type LiveReportsData = {
   gstRows: LiveGstRow[];
 };
 
+export type PopularItem = {
+  itemId: string;
+  name: string;
+  imageUrl: string | null;
+  minPrice: number;
+  totalQty: number;
+};
+
 export function money(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
@@ -1067,4 +1075,52 @@ export async function getMaxLegalVersionForTenant(tenantId: string): Promise<num
     .from(tenantLegalVersions)
     .where(eq(tenantLegalVersions.tenantId, tenantId));
   return row?.max ?? 0;
+}
+
+export async function getPopularItems(
+  tenantSlug: string,
+  limit = 3,
+  days = 90,
+): Promise<PopularItem[]> {
+  try {
+    type Row = {
+      itemId: string;
+      name: string | null;
+      imageUrl: string | null;
+      minPrice: string | null; // postgres numeric → string over neon-http
+      totalQty: number;
+    };
+    const result = (await db.execute(sql`
+      WITH ranked AS (
+        SELECT ol.item_id, SUM(ol.qty)::int AS total_qty
+        FROM order_lines ol
+        JOIN orders o ON o.id = ol.order_id
+        WHERE o.tenant_id = ${tenantSlug}
+          AND o.created_at >= NOW() - make_interval(days => ${days})
+          AND o.status NOT IN ('pending_payment', 'refunded')
+        GROUP BY ol.item_id
+        ORDER BY total_qty DESC
+        LIMIT ${limit}
+      )
+      SELECT
+        r.item_id          AS "itemId",
+        ci.name,
+        ci.image_url       AS "imageUrl",
+        (SELECT MIN(price)::text FROM catalog_variants cv
+         WHERE cv.item_id = r.item_id AND cv.active = true) AS "minPrice",
+        r.total_qty        AS "totalQty"
+      FROM ranked r
+      LEFT JOIN catalog_items ci ON ci.id = r.item_id
+      ORDER BY r.total_qty DESC
+    `)) as { rows: Row[] };
+    return result.rows.map((r) => ({
+      itemId: r.itemId,
+      name: r.name ?? r.itemId,
+      imageUrl: r.imageUrl,
+      minPrice: r.minPrice != null ? parseFloat(r.minPrice) : 0,
+      totalQty: r.totalQty,
+    }));
+  } catch {
+    return [];
+  }
 }
