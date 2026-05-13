@@ -47,6 +47,7 @@ export interface ItemVariant {
   label: string;
   price: number;
   sizes: string[];
+  disabled?: boolean;
 }
 
 export interface SizeGuide {

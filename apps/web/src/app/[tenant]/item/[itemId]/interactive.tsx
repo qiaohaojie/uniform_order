@@ -22,12 +22,15 @@ export function ItemDetailInteractive({
 }) {
   const router = useRouter();
   const { lines, add } = useCart();
-  const [variantIdx, setVariantIdx] = useState(0);
-  const [size, setSize] = useState(item.variants[0]?.sizes[Math.min(2, item.variants[0].sizes.length - 1)] ?? "");
+  const firstActiveIdx = item.variants.findIndex((v) => !v.disabled);
+  const safeIdx = firstActiveIdx >= 0 ? firstActiveIdx : 0;
+  const [variantIdx, setVariantIdx] = useState(safeIdx);
+  const [size, setSize] = useState(item.variants[safeIdx]?.sizes[Math.min(2, item.variants[safeIdx]!.sizes.length - 1)] ?? "");
   const [qty, setQty] = useState(1);
   const [showGuide, setShowGuide] = useState(false);
 
   const variant = item.variants[variantIdx]!;
+  const allDisabled = item.variants.every((v) => v.disabled);
   const cartCount = lines.reduce((s, l) => s + l.qty, 0);
 
   const onAdd = () => {
@@ -79,6 +82,20 @@ export function ItemDetailInteractive({
           <div className="flex flex-col gap-2">
             {item.variants.map((v, i) => {
               const on = i === variantIdx;
+              if (v.disabled) {
+                return (
+                  <div
+                    key={v.label}
+                    className="h-11 rounded-lg px-3.5 flex items-center justify-between border"
+                    style={{ borderColor: "var(--color-rule)", background: "#FAFAFA", opacity: 0.55 }}
+                    aria-disabled="true"
+                    aria-label={`${v.label} – Currently unavailable`}
+                  >
+                    <span className="text-[13px] font-semibold line-through" style={{ color: "var(--color-ink-dim)" }}>{v.label}</span>
+                    <span className="text-[11px] font-medium" style={{ color: "var(--color-ink-dim)" }}>Unavailable</span>
+                  </div>
+                );
+              }
               return (
                 <button
                   type="button"
@@ -129,31 +146,33 @@ export function ItemDetailInteractive({
           </div>
         )}
 
-        <div className="px-5 pt-1.5 pb-2">
-          <div className="font-sans text-[11px] font-bold tracking-[1px] uppercase mb-2" style={{ color: "var(--color-ink)" }}>
-            Size
+        {!allDisabled && (
+          <div className="px-5 pt-1.5 pb-2">
+            <div className="font-sans text-[11px] font-bold tracking-[1px] uppercase mb-2" style={{ color: "var(--color-ink)" }}>
+              Size
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {variant.sizes.map((s) => {
+                const on = s === size;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSize(s)}
+                    className="h-[42px] rounded-md flex items-center justify-center text-[13px] font-bold border"
+                    style={{
+                      borderColor: on ? tenant.accent : "var(--color-rule)",
+                      background: on ? tenant.accent : "#fff",
+                      color: on ? "#fff" : "var(--color-ink)",
+                    }}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {variant.sizes.map((s) => {
-              const on = s === size;
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSize(s)}
-                  className="h-[42px] rounded-md flex items-center justify-center text-[13px] font-bold border"
-                  style={{
-                    borderColor: on ? tenant.accent : "var(--color-rule)",
-                    background: on ? tenant.accent : "#fff",
-                    color: on ? "#fff" : "var(--color-ink)",
-                  }}
-                >
-                  {s}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        )}
       </div>
 
       <div
@@ -167,6 +186,7 @@ export function ItemDetailInteractive({
           <button
             type="button"
             onClick={() => setQty((q) => Math.max(1, q - 1))}
+            disabled={allDisabled}
             className="w-9 h-11 flex items-center justify-center text-[18px]"
             style={{ color: "var(--color-ink)" }}
           >
@@ -176,14 +196,15 @@ export function ItemDetailInteractive({
           <button
             type="button"
             onClick={() => setQty((q) => q + 1)}
+            disabled={allDisabled}
             className="w-9 h-11 flex items-center justify-center text-[16px]"
             style={{ color: "var(--color-ink)" }}
           >
             +
           </button>
         </div>
-        <Btn variant="primary" size="lg" fullWidth accent={tenant.accent} onClick={onAdd}>
-          Add to cart · ${variant.price * qty}
+        <Btn variant="primary" size="lg" fullWidth accent={tenant.accent} onClick={onAdd} disabled={allDisabled}>
+          {allDisabled ? "Currently unavailable" : `Add to cart · $${variant.price * qty}`}
         </Btn>
       </div>
     </>
