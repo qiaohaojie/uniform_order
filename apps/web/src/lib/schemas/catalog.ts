@@ -56,7 +56,7 @@ export type CatalogVariantInput = z.infer<typeof catalogVariantInputSchema>;
 
 export const catalogReorderSchema = z.object({
   tenantSlug: z.string().min(1).max(64),
-  orderedIds: z.array(z.string().uuid()).min(1).max(500, "Catalog too large to reorder in one request — contact support"),
+  orderedIds: z.array(z.string().min(1)).min(1).max(500, "Catalog too large to reorder in one request — contact support"),
 });
 
 export type CatalogReorderInput = z.infer<typeof catalogReorderSchema>;

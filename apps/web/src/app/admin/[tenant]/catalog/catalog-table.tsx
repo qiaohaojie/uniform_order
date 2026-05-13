@@ -45,6 +45,10 @@ export function CatalogTable({
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Remove "${name}" from the catalog?`)) return;
+    if (pendingRef.current) {
+      setTableError("Another operation is in progress — please wait.");
+      return;
+    }
     pendingRef.current = true;
     const previous = items;
     setTableError("");

@@ -684,7 +684,7 @@ export async function reorderCatalogItems(
   const statements = orderedIds.map((id, index) =>
     db
       .update(catalogItems)
-      .set({ sortOrder: index })
+      .set({ sortOrder: index, updatedAt: new Date() })
       .where(and(eq(catalogItems.id, id), eq(catalogItems.tenantId, tenantId))),
   );
   // neon-http: db.batch accepts a tuple of queries; we cast for the variadic shape.
