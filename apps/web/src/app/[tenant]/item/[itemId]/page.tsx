@@ -1,5 +1,6 @@
 import { permanentRedirect, notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { getTenant, getCatalogItemForPDP, toTenantBrand } from "@/db/queries";
 
 export async function generateMetadata({
@@ -64,7 +65,17 @@ export default async function ItemDetailPage({ params }: PageProps<"/[tenant]/it
         item={resolvedItem}
         garment={
           <div className="flex justify-center py-1 pb-2.5" style={{ background: "var(--color-parchment)" }}>
-            <GarmentVector itemId={resolvedItem.id} accent={tenant.accent} size={210} />
+            {resolvedItem.imageUrl ? (
+              <Image
+                src={resolvedItem.imageUrl}
+                alt={resolvedItem.name}
+                width={210}
+                height={210}
+                style={{ objectFit: "contain" }}
+              />
+            ) : (
+              <GarmentVector itemId={resolvedItem.id} accent={tenant.accent} size={210} />
+            )}
           </div>
         }
       >
