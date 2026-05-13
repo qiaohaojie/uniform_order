@@ -1120,7 +1120,8 @@ export async function getPopularItems(
       minPrice: r.minPrice != null ? parseFloat(r.minPrice) : 0,
       totalQty: r.totalQty,
     }));
-  } catch {
+  } catch (err) {
+    console.error("getPopularItems failed", err);
     return [];
   }
 }
