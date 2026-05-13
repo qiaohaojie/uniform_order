@@ -1,7 +1,7 @@
 # Desktop Frame for Parent Shop — Design Spec
 
 **Date:** 2026-05-13
-**Status:** Approved (rev 2 — incorporates review feedback)
+**Status:** Approved (rev 3 — watermark geometry fix, alt="", inline shadow value, min-h-0)
 **Backlog ref:** `remaining_work.md` §3.12 / gap-analysis §5.18
 **Effort:** ~4h
 
@@ -28,7 +28,7 @@ Style the desktop canvas so the 430 px column reads as a deliberate design choic
 | Element | Detail |
 |---|---|
 | Column shadow | `box-shadow: 0 4px 32px rgba(8,26,45,0.14), 0 1px 6px rgba(8,26,45,0.07)` — applied at `sm:` (≥ 640 px) only; full-bleed on real phones gets none |
-| Logo watermark | `tenant.logoUrl` rendered as an `<img>` near the top-right of the column, 96 × 96 px, `object-contain`, **8% opacity (tunable 8–12% based on visual check across NSBH and RGSH logos)**, `pointer-events-none`. Not rendered when `logoUrl` is null/empty. |
+| Logo watermark | `tenant.logoUrl` rendered as an `<img alt="">` near the top-right of the column, 96 × 96 px, `object-contain`, **8% opacity (tunable 8–12% based on visual check across NSBH and RGSH logos)**, `pointer-events-none`. `alt=""` marks it as decorative so screen readers skip it. Not rendered when `logoUrl` is null/empty. |
 | Tip line | `"Open on your phone for the best experience"` — small text centred below the column, `hidden sm:block`. Styled with inline `style={{ color: "var(--color-gold)" }}` at reduced opacity (matches codebase convention). |
 | Canvas background | Unchanged — `var(--color-parchment)` (`#FAF6EE`). |
 
@@ -46,9 +46,9 @@ Outer container today: `min-h-dvh w-full flex justify-center`.
 
 Restructure to:
 - **Outer:** `min-h-dvh w-full flex flex-col items-center sm:justify-center relative` (column-stack, `relative` so watermark can be absolutely positioned).
-- **Inner column:** `w-full max-w-[430px] min-h-dvh sm:min-h-fit flex flex-col sm:rounded-[10px] sm:shadow-[…]`. Dropping `min-h-dvh` at `sm:` lets the tip sibling render directly below the column on desktop while preserving full-screen fill on phones.
+- **Inner column:** `w-full max-w-[430px] min-h-dvh sm:min-h-0 flex flex-col sm:rounded-[10px] sm:shadow-[0_4px_32px_rgba(8,26,45,0.14),0_1px_6px_rgba(8,26,45,0.07)]`. Dropping `min-h-dvh` at `sm:` (via `sm:min-h-0`) lets the tip sibling render directly below the column on desktop while preserving full-screen fill on phones.
 - **Tip (sibling after inner column):** `hidden sm:block text-center text-xs mt-3 tracking-wide opacity-60`.
-- **Watermark (sibling, absolute):** wrapped in a `max-w-3xl mx-auto absolute inset-0 pointer-events-none hidden sm:block` overlay; the `<img>` sits at `top-4 right-4` of that overlay. This keeps the watermark adjacent to the column even on ultrawide (1920px+) viewports — without the cap it would drift ~745 px from the column.
+- **Watermark (sibling, absolute):** wrapped in a `max-w-[430px] mx-auto absolute inset-0 pointer-events-none hidden sm:block` overlay; the `<img alt="">` sits at `top-4 right-4` of that overlay. The overlay is exactly as wide as the column, so `right-4` places the logo 16 px inside the column's right edge on all viewport widths.
 
 ---
 
@@ -113,7 +113,7 @@ All 7 tenant pages already fetch the tenant record (verified via grep) — addin
 ## Acceptance criteria
 
 1. On a ≥ 640 px viewport, the column has a visible shadow and rounded corners.
-2. When `tenant.logoUrl` is set, the logo appears near the top-right of the column (constrained to `max-w-3xl` overlay) at low opacity; when not set, that area is empty.
+2. When `tenant.logoUrl` is set, the logo appears 16 px inside the column's top-right corner (`max-w-[430px]` overlay + `right-4`) at low opacity; when not set, that area is empty.
 3. The tip line appears directly below the column on desktop (not after a viewport-height gap), absent on mobile.
 4. Non-tenant routes (`/` school picker, `/orders/*`) render with shadow + tip but no watermark — no errors, no broken images.
 5. The 430 px column width, its internal layout, and the parchment background are unchanged.
