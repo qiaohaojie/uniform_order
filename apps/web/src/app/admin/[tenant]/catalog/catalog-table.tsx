@@ -45,6 +45,7 @@ export function CatalogTable({
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Remove "${name}" from the catalog?`)) return;
+    pendingRef.current = true;
     const previous = items;
     setTableError("");
     setItems((prev) => prev.filter((it) => it.id !== id));
@@ -58,6 +59,8 @@ export function CatalogTable({
       console.error("Delete failed:", err);
       setItems(previous);
       setTableError(err instanceof Error ? err.message : "Failed to delete item.");
+    } finally {
+      pendingRef.current = false;
     }
   };
 
@@ -108,7 +111,7 @@ export function CatalogTable({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenantSlug: tenant.id,
+          tenantSlug: tenant.id, // tenant.id is the slug ("nsbh") in this codebase
           orderedIds: reordered.map((it) => it.id),
         }),
       });

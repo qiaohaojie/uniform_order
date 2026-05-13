@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     if (incomingIds.size !== orderedIds.length) {
       return NextResponse.json(
-        { error: "duplicate_ids" },
+        { error: "duplicate_ids", message: "Duplicate item IDs in request." },
         { status: 400 },
       );
     }

@@ -670,6 +670,9 @@ export async function updateCatalogItem(
 /**
  * Bulk-renumber a tenant's catalog items to dense 0..N-1 order.
  * Uses db.batch (neon-http) — not db.transaction (unsupported on neon-http).
+ * db.batch is a pipeline, not a transaction: individual statements can succeed
+ * independently. A partial failure leaves sort_order in a mixed state;
+ * re-dragging recovers. Revisit if neon pooled mode (transactions) is adopted.
  * Caller must have already validated that `orderedIds` is the exhaustive set
  * of catalog item IDs for this tenant.
  */
