@@ -579,6 +579,31 @@ Files: `apps/web/src/app/[tenant]/` (contact page, layout metadata, item metadat
 
 **Files:** `apps/web/src/db/queries.ts`, `apps/web/src/app/[tenant]/item/[itemId]/page.tsx`, `apps/web/src/app/[tenant]/catalog-grid.tsx`.
 
+### 4.31 Desktop frame for parent shop (§5.18) ✅
+
+**Source:** `remaining_work.md` §3.12 — shipped 2026-05-13 via PR #32.
+
+Styles the desktop canvas around the 430px parent-shop column so it reads as intentional rather than broken on wide screens: parchment background, subtle box-shadow on the mobile column, school crest faded as a watermark behind the frame, and a muted "Tip: open on your phone for the full experience" line below the column. The 430px column width is unchanged — mobile-first visual brand preserved.
+
+`MobileShell` gained a `logoUrl?: string` prop used to render the crest watermark. The prop was threaded through all 7 pages that render `MobileShell` (`[tenant]/page.tsx`, `item/[itemId]/page.tsx`, `cart/page.tsx`, `checkout/page.tsx`, `order/placed/page.tsx`, `contact/page.tsx`, `refund-policy/page.tsx`). Three feedback fixes applied before merge: breakpoint (watermark hidden below `sm`), watermark opacity, and column padding.
+
+Spec: `docs/superpowers/specs/2026-05-13-desktop-frame-design.md`.
+
+### 4.32 Per-tenant first-visit landing page (§5.17) ✅
+
+**Source:** `remaining_work.md` §3.12 — shipped 2026-05-13 (commits 4b39421–496b8c6 on main).
+
+Cookie-gated first-visit landing screen on `/<tenant>`. First-time visitors see a branded landing page instead of the catalogue grid; returning visitors (cookie present) hit the catalogue directly — the existing path is unchanged.
+
+- **`lib/landing-visit.client.ts`** — `setVisitedCookie(slug)` writes `uo:visited:{slug}=1; Path=/{slug}; Max-Age=2592000; SameSite=Lax` (30-day, conditional `Secure` on HTTPS).
+- **`db/queries.ts`** — `getPopularItems(tenantSlug, limit=3, days=90)`: CTE aggregates order qty in `ranked` first (avoids variant-join fan-out); lateral subquery for `MIN(price)` per item; deny-list `NOT IN ('pending_payment', 'refunded')`; outer `ORDER BY total_qty DESC` (PG does not preserve CTE order through joins). Returns `[]` on error.
+- **`app/[tenant]/landing-screen.tsx`** — `"use client"` component: header strip (accent, 28px crest), hero (80px crest + motto), divider, shop hours card, popular items 3-col grid (image / `GarmentVector` fallback, name + price), "Browse Catalogue →" CTA (`router.refresh()` — same URL, forces RSC cookie re-read), 30-day footer note.
+- **`app/[tenant]/page.tsx`** — slug normalised to lowercase; cookie read before `Promise.all`; first-time visitors skip `getActiveCatalog` (empty typed placeholder); landing branch runs after visibility gate so hidden tenants still 404.
+
+Post-review fixes: `console.error` in `getPopularItems` catch block; `rawSlug.toLowerCase()` defensive normalization.
+
+Spec: `docs/superpowers/specs/2026-05-13-per-tenant-homepage-design.md`. Plan: `docs/superpowers/plans/2026-05-13-per-tenant-homepage.md`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -587,4 +612,4 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions, Apple Pay domain verification (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); admin drag-to-reorder + size-guide editor, catalog collections, per-tenant homepage, desktop frame, magic-link login, account deletion/export (§3.12).
+- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); admin drag-to-reorder + size-guide editor, catalog collections, magic-link login, account deletion/export (§3.12).
