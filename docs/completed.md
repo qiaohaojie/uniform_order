@@ -565,6 +565,20 @@ Files: `apps/web/src/app/[tenant]/` (contact page, layout metadata, item metadat
 
 **Files:** `db/schema.ts`, `drizzle/0012_catalog_variants_sizes.sql`, `db/queries.ts`, `lib/schemas/catalog.ts`, `api/catalog/route.ts`, `api/catalog/[itemId]/route.ts`, `app/admin/[tenant]/catalog/item-drawer.tsx`, `scripts/backfill-sizes.mjs`, `scripts/seed.mjs`.
 
+### 4.30 PDP photo support (gap-analysis §5.13) ✅
+
+**Source:** `remaining_work.md` §3.12 — shipped 2026-05-13 via PR #31 (squash `10a50c0`).
+
+`catalog_items.imageUrl` was already written by the admin catalog drawer (UploadThing-hosted, schema-validated at `lib/schemas/catalog.ts:18-23`) but the read path rendered `GarmentVector` unconditionally on both surfaces.
+
+**Shipped:**
+- `getActiveCatalog` and `getCatalogItemForPDP` in `db/queries.ts` SELECT `imageUrl` from `catalog_items` and map it as `imageUrl: r.imageUrl ?? undefined` into `CatalogItem` (no migration — column already existed)
+- PDP (`app/[tenant]/item/[itemId]/page.tsx`): renders `<Image width={210} height={210} priority className="object-contain">` when `imageUrl` is set; falls back to `<GarmentVector size={210}>`
+- Catalog grid (`app/[tenant]/catalog-grid.tsx`): renders `<Image fill className="object-contain">` inside a `relative w-full aspect-square` parchment wrapper when `imageUrl` is set; falls back to `<GarmentVector size={120}>`
+- `next.config.ts` already had UploadThing CDN in `images.remotePatterns` — no config change needed
+
+**Files:** `apps/web/src/db/queries.ts`, `apps/web/src/app/[tenant]/item/[itemId]/page.tsx`, `apps/web/src/app/[tenant]/catalog-grid.tsx`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -573,4 +587,4 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions, Apple Pay domain verification (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); stock disabled-not-hidden on PDP, shop hours on checkout, PDP photo support, catalog collections (§3.12).
+- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); admin drag-to-reorder + size-guide editor, catalog collections, per-tenant homepage, desktop frame, magic-link login, account deletion/export (§3.12).
