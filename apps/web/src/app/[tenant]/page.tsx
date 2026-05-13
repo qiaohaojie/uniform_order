@@ -45,7 +45,7 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
       : null;
 
   return (
-    <MobileShell bg="var(--color-paper)">
+    <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
       {/* Tenant-themed header strip */}
       <div className="text-white px-4 pt-1 pb-3.5 flex-shrink-0" style={{ background: tenant.accent }}>
         <div className="flex items-center gap-2.5 py-1.5">

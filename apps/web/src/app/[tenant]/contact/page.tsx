@@ -33,7 +33,7 @@ export default async function ContactPage({
   }
 
   return (
-    <MobileShell bg="var(--color-paper)">
+    <MobileShell bg="var(--color-paper)" logoUrl={tenant.logoUrl ?? undefined}>
       <div className="px-5 py-6">
         <h1
           className="font-serif text-2xl font-semibold pb-2 mb-4 border-b-2"
