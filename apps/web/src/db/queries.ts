@@ -867,6 +867,7 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
       varLabel: catalogVariants.label,
       varPrice: catalogVariants.price,
       varSizes: catalogVariants.sizes,
+      imageUrl: catalogItems.imageUrl,
     })
     .from(catalogItems)
     .innerJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
@@ -889,6 +890,7 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
         cat: r.category as CatalogItem["cat"],
         description: r.description ?? "",
         sizeGuide: (r.sizeGuide as CatalogItem["sizeGuide"]) ?? undefined,
+        imageUrl: r.imageUrl ?? undefined,
         variants: [],
       } as unknown as CatalogItem);
     }
@@ -934,6 +936,7 @@ export const getCatalogItemForPDP = cache(async (
       varPrice: catalogVariants.price,
       varSizes: catalogVariants.sizes,
       varActive: catalogVariants.active,
+      imageUrl: catalogItems.imageUrl,
     })
     .from(catalogItems)
     .leftJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
@@ -955,6 +958,7 @@ export const getCatalogItemForPDP = cache(async (
     cat: r0.category as CatalogItem["cat"],
     description: r0.description ?? "",
     sizeGuide: (r0.sizeGuide as CatalogItem["sizeGuide"]) ?? undefined,
+    imageUrl: r0.imageUrl ?? undefined,
     variants: [],
   } as unknown as CatalogItem;
 
