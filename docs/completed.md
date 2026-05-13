@@ -549,6 +549,22 @@ Seven items shipped together:
 
 Files: `apps/web/src/app/[tenant]/` (contact page, layout metadata, item metadata, footer in 6 route files), `src/components/tenant-footer.tsx` (new), `src/app/api/orders/route.ts`, `src/app/api/stripe/payment-intent/route.ts`, `src/app/api/stripe/webhook/route.ts`, `src/app/api/orders/size-hint/route.ts` (deleted), `src/app/robots.ts` (new), `src/app/sitemap.ts` (new), `src/db/queries.ts`, `src/lib/audit/types.ts`, `src/lib/order-totals.ts` (new), `src/lib/shipping.ts` (new), `public/.well-known/apple-developer-merchantid-domain-association` (placeholder).
 
+### 4.29 Per-variant `sizes` on `catalog_variants` ✅
+
+**Source:** `remaining_work.md` §2.14 (NSBH gap-analysis §5.15) — shipped 2026-05-13. Spec: `docs/superpowers/specs/2026-05-13-catalog-variant-sizes-design.md`; plan: `docs/superpowers/plans/2026-05-13-catalog-variant-sizes.md`.
+
+**Problem:** Sizes were hard-coded in `lib/data.ts` via `sizesForVariant`, making it impossible for operators to manage size lists without a code deploy. Blocked self-service onboarding past tenant #2.
+
+**Shipped:**
+- `catalog_variants.sizes jsonb NOT NULL DEFAULT '[]'` column (migration 0012, applied via Neon MCP `run_sql_transaction` per the drizzle-kit websocket-blocker workaround)
+- Backfill script (`scripts/backfill-sizes.mjs`) populated all existing rows from the `sizesForVariant` map in `lib/data.ts`
+- Read path: `getActiveCatalog` reads `sizes` from DB (retired `sizesForVariant`)
+- Write path: Zod schema + POST/PATCH routes + db helpers all thread `sizes: string[]`
+- Admin drawer: comma-separated input in variant row grid (`label | price | sizes | remove`)
+- Seed script updated to include `sizes` per variant
+
+**Files:** `db/schema.ts`, `drizzle/0012_catalog_variants_sizes.sql`, `db/queries.ts`, `lib/schemas/catalog.ts`, `api/catalog/route.ts`, `api/catalog/[itemId]/route.ts`, `app/admin/[tenant]/catalog/item-drawer.tsx`, `scripts/backfill-sizes.mjs`, `scripts/seed.mjs`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -557,5 +573,4 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions, Apple Pay domain verification (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Schema** — `sizes jsonb` on `catalog_variants` to unblock self-service onboarding past tenant #2 (§2.14).
 - **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); stock disabled-not-hidden on PDP, shop hours on checkout, PDP photo support, catalog collections (§3.12).

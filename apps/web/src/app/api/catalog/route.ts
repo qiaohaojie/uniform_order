@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
         label: v.label,
         price: v.price,
         active: v.active,
+        sizes: v.sizes ?? [],
       })),
     });
 

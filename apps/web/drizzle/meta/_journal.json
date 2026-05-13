@@ -85,6 +85,13 @@
       "when": 1778472698162,
       "tag": "0011_audit_events",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778603321296,
+      "tag": "0012_catalog_variants_sizes",
+      "breakpoints": true
     }
   ]
 }

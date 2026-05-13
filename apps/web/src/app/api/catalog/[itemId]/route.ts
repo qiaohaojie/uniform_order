@@ -85,13 +85,13 @@ export async function PATCH(
     }
     if (variants !== undefined) {
       const existingVariantKey = item.variants
-        .map((v) => `${v.id}|${v.label}|${String(v.price)}|${v.active}`)
+        .map((v) => `${v.id}|${v.label}|${String(v.price)}|${v.active}|${[...(v.sizes ?? [])].sort().join(";")}`)
         .sort()
         .join(",");
       const incomingVariantKey = variants
         .map(
           (v) =>
-            `${v.id ?? ""}|${v.label}|${String(v.price.toFixed(2))}|${v.active ?? true}`,
+            `${v.id ?? ""}|${v.label}|${String(v.price.toFixed(2))}|${v.active ?? true}|${[...(v.sizes ?? [])].sort().join(";")}`,
         )
         .sort()
         .join(",");

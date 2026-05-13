@@ -117,6 +117,7 @@ export const catalogVariants = pgTable("catalog_variants", {
     .references(() => catalogItems.id, { onDelete: "cascade" }),
   label: text("label").notNull(), // e.g. "Size 8", "Small"
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  sizes: jsonb("sizes").$type<string[]>().notNull().default([]),
   active: boolean("active").notNull().default(true),
 });
 

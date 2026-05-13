@@ -53,6 +53,7 @@ export function CatalogTable({
       id: v.id,
       label: v.label,
       price: v.price,
+      sizes: Array.isArray(v.sizes) ? (v.sizes as string[]) : [],
       active: v.active,
     })),
   });

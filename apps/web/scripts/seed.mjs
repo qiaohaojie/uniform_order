@@ -111,73 +111,73 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
 
   const variants = [
     // shirt-ss (paper form has only one size row: 10–26 → $32)
-    { itemId: "shirt-ss", label: "10–26", price: 32 },
+    { itemId: "shirt-ss", label: "10–26", price: 32, sizes: ["10", "12", "14", "16", "18", "20", "22", "24", "26"] },
     // cap
-    { itemId: "cap", label: "One size", price: 17 },
+    { itemId: "cap", label: "One size", price: 17, sizes: [] },
     // sock-white
-    { itemId: "sock-white", label: "3–9", price: 5 },
-    { itemId: "sock-white", label: "7–11", price: 5 },
+    { itemId: "sock-white", label: "3–9", price: 5, sizes: ["3-9"] },
+    { itemId: "sock-white", label: "7–11", price: 5, sizes: ["7-11"] },
     // shirt-ls (paper form has only one size row: 10–24 → $28)
-    { itemId: "shirt-ls", label: "10–24", price: 28 },
+    { itemId: "shirt-ls", label: "10–24", price: 28, sizes: ["10", "12", "14", "16", "18", "20", "22", "24"] },
     // jumper
-    { itemId: "jumper", label: "12–16", price: 75 },
-    { itemId: "jumper", label: "18–22", price: 77 },
-    { itemId: "jumper", label: "24–26", price: 82 },
+    { itemId: "jumper", label: "12–16", price: 75, sizes: ["12", "14", "16"] },
+    { itemId: "jumper", label: "18–22", price: 77, sizes: ["18", "20", "22"] },
+    { itemId: "jumper", label: "24–26", price: 82, sizes: ["24", "26"] },
     // trousers (paper form: 10,12,…,18 → $57; men 5–8 → $59)
-    { itemId: "trousers", label: "10–18", price: 57 },
-    { itemId: "trousers", label: "Mens 5–8", price: 59 },
+    { itemId: "trousers", label: "10–18", price: 57, sizes: ["10", "12", "14", "16", "18"] },
+    { itemId: "trousers", label: "Mens 5–8", price: 59, sizes: ["5", "6", "7", "8"] },
     // belt
-    { itemId: "belt", label: "70–95cm", price: 15 },
+    { itemId: "belt", label: "70–95cm", price: 15, sizes: ["70cm", "75cm", "80cm", "85cm", "90cm", "95cm"] },
     // jacket
-    { itemId: "jacket", label: "12–3XL", price: 100 },
+    { itemId: "jacket", label: "12–3XL", price: 100, sizes: ["12", "14", "16", "18", "20", "XS", "S", "M", "L", "XL", "2XL", "3XL"] },
     // tie (paper form: 4 length-by-year-group rows)
-    { itemId: "tie", label: "Year 7–10 short (127cm)", price: 17 },
-    { itemId: "tie", label: "Year 7–10 long (137cm)", price: 18 },
-    { itemId: "tie", label: "Year 11–12 short (137cm)", price: 17 },
-    { itemId: "tie", label: "Year 11–12 long (147cm)", price: 18 },
+    { itemId: "tie", label: "Year 7–10 short (127cm)", price: 17, sizes: [] },
+    { itemId: "tie", label: "Year 7–10 long (137cm)", price: 18, sizes: [] },
+    { itemId: "tie", label: "Year 11–12 short (137cm)", price: 17, sizes: [] },
+    { itemId: "tie", label: "Year 11–12 long (147cm)", price: 18, sizes: [] },
     // polo
-    { itemId: "polo", label: "10–26", price: 40 },
+    { itemId: "polo", label: "10–26", price: 40, sizes: ["10", "12", "14", "16", "18", "20", "22", "24", "26"] },
     // shorts-sport
-    { itemId: "shorts-sport", label: "12–24", price: 30 },
+    { itemId: "shorts-sport", label: "12–24", price: 30, sizes: ["12", "14", "16", "18", "20", "22", "24"] },
     // hoodie
-    { itemId: "hoodie", label: "12–XXL", price: 47 },
+    { itemId: "hoodie", label: "12–XXL", price: 47, sizes: ["12", "14", "16", "18", "20", "XS", "S", "M", "L", "XL", "XXL"] },
     // tracks
-    { itemId: "tracks", label: "12–16", price: 43 },
-    { itemId: "tracks", label: "18–26", price: 45 },
+    { itemId: "tracks", label: "12–16", price: 43, sizes: ["12", "14", "16"] },
+    { itemId: "tracks", label: "18–26", price: 45, sizes: ["18", "20", "22", "24", "26"] },
     // sock-sport
-    { itemId: "sock-sport", label: "2–7 / 7–11 / XL", price: 12 },
+    { itemId: "sock-sport", label: "2–7 / 7–11 / XL", price: 12, sizes: ["2-7", "7-11", "XL"] },
     // blazer
-    { itemId: "blazer", label: "88–95cm chest", price: 185 },
-    { itemId: "blazer", label: "100–115cm chest", price: 210 },
+    { itemId: "blazer", label: "88–95cm chest", price: 185, sizes: ["88cm", "90cm", "92cm", "95cm"] },
+    { itemId: "blazer", label: "100–115cm chest", price: 210, sizes: ["100cm", "105cm", "110cm", "115cm"] },
     // backpack
-    { itemId: "backpack", label: "One size", price: 89 },
+    { itemId: "backpack", label: "One size", price: 89, sizes: [] },
     // sportsbag
-    { itemId: "sportsbag", label: "Small", price: 39 },
-    { itemId: "sportsbag", label: "Large", price: 46 },
+    { itemId: "sportsbag", label: "Small", price: 39, sizes: [] },
+    { itemId: "sportsbag", label: "Large", price: 46, sizes: [] },
     // calc
-    { itemId: "calc", label: "N/A", price: 33 },
+    { itemId: "calc", label: "N/A", price: 33, sizes: [] },
     // mathset
-    { itemId: "mathset", label: "N/A", price: 7 },
+    { itemId: "mathset", label: "N/A", price: 7, sizes: [] },
     // shorts-navy
-    { itemId: "shorts-navy", label: "Boys 10–16", price: 43 },
-    { itemId: "shorts-navy", label: "Mens 4–8", price: 45 },
+    { itemId: "shorts-navy", label: "Boys 10–16", price: 43, sizes: ["10", "12", "14", "16"] },
+    { itemId: "shorts-navy", label: "Mens 4–8", price: 45, sizes: ["4", "5", "6", "7", "8"] },
     // sock-grey
-    { itemId: "sock-grey", label: "3–9", price: 5 },
-    { itemId: "sock-grey", label: "7–11", price: 5 },
+    { itemId: "sock-grey", label: "3–9", price: 5, sizes: ["3-9"] },
+    { itemId: "sock-grey", label: "7–11", price: 5, sizes: ["7-11"] },
     // scarf
-    { itemId: "scarf", label: "One size", price: 20 },
+    { itemId: "scarf", label: "One size", price: 20, sizes: [] },
     // prefect-tie
-    { itemId: "prefect-tie", label: "147cm", price: 22 },
+    { itemId: "prefect-tie", label: "147cm", price: 22, sizes: [] },
     // soccer-jersey
-    { itemId: "soccer-jersey", label: "12–22", price: 40 },
+    { itemId: "soccer-jersey", label: "12–22", price: 40, sizes: ["12", "14", "16", "18", "20", "22"] },
     // swimming-briefs
-    { itemId: "swimming-briefs", label: "XS–XXL", price: 45 },
+    { itemId: "swimming-briefs", label: "XS–XXL", price: 45, sizes: ["XS", "S", "M", "L", "XL", "XXL"] },
     // exercise-book-a4
-    { itemId: "exercise-book-a4", label: "N/A", price: 2 },
+    { itemId: "exercise-book-a4", label: "N/A", price: 2, sizes: [] },
     // exercise-book-math
-    { itemId: "exercise-book-math", label: "N/A", price: 2 },
+    { itemId: "exercise-book-math", label: "N/A", price: 2, sizes: [] },
     // ring-binder
-    { itemId: "ring-binder", label: "N/A", price: 5 },
+    { itemId: "ring-binder", label: "N/A", price: 5, sizes: [] },
   ];
 
   const rgshCatalogVariantsRows = variants.map((v) => ({
@@ -195,8 +195,8 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
 
   for (const v of allVariants) {
     await sql`
-      INSERT INTO catalog_variants (item_id, label, price)
-      VALUES (${v.itemId}, ${v.label}, ${v.price})
+      INSERT INTO catalog_variants (item_id, label, price, sizes)
+      VALUES (${v.itemId}, ${v.label}, ${v.price}, ${JSON.stringify(v.sizes ?? [])}::jsonb)
     `;
   }
 

@@ -108,7 +108,7 @@ These were classified as "Should" in the gap analysis but are genuine bugs / har
   - Call from `POST /api/orders` (`api/orders/route.ts` before insert) and `POST /api/stripe/payment-intent` (before `paymentIntents.create`). Return 400 with `{ code: 'totals_mismatch', expected, received }` on delta.
   - Do **before** marketing the BAS export as audit-grade. ~2h.
 
-- [ ] **`sizes jsonb` column on `catalog_variants` (gap-analysis §5.15).**
+- [x] **`sizes jsonb` column on `catalog_variants` (gap-analysis §5.15).** ✅ shipped (Tasks 1-6, this PR).
   - Today the per-variant `sizes[]` array lives in static `lib/data.ts` (acknowledged TODO at `db/queries.ts:904`). Schools beyond NSBH/RGSH cannot define their own size grids without a code change — blocks self-service onboarding past tenant #2.
   - Migration: add `sizes jsonb not null default '[]'::jsonb` to `catalog_variants` (use Neon MCP `run_sql_transaction` per the drizzle-kit websocket blocker memory). Migrate existing rows from `lib/data.ts` shape: `{ variantId → string[] }` map.
   - Update `db/queries.ts:904` read path to read from the column instead of the static map.
