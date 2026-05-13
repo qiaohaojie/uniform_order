@@ -70,6 +70,7 @@ export function CatalogTable({
         <table className="w-full text-[13px]">
           <thead className="bg-white sticky top-0">
             <tr className="text-left" style={{ color: "var(--color-ink-dim)" }}>
+              <th className="px-2 py-2 w-[28px]" aria-label="Reorder"></th>
               <th className="px-3 py-2 w-[60px]">Image</th>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2 w-[110px]">Category</th>
@@ -86,6 +87,18 @@ export function CatalogTable({
                 style={{ borderColor: "var(--color-rule)" }}
                 onClick={() => setDrawer({ open: true, mode: "edit", item: it })}
               >
+                <td
+                  className="px-2 py-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span
+                    aria-label={`Reorder ${it.name}`}
+                    className="inline-flex items-center justify-center w-5 h-5 select-none"
+                    style={{ color: "var(--color-ink-dim)", cursor: "grab" }}
+                  >
+                    ::
+                  </span>
+                </td>
                 <td className="px-3 py-2">
                   {it.imageUrl ? (
                     <Image
@@ -126,8 +139,8 @@ export function CatalogTable({
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center" style={{ color: "var(--color-ink-dim)" }}>
-                  No items yet. Click “Add item” to create one.
+                <td colSpan={7} className="px-3 py-6 text-center" style={{ color: "var(--color-ink-dim)" }}>
+                  No items yet. Click "Add item" to create one.
                 </td>
               </tr>
             )}
