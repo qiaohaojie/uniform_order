@@ -1,6 +1,6 @@
 "use client";
 
-import { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, SetStateAction, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Image from "next/image";
 import {
@@ -37,6 +37,7 @@ export function CatalogTable({
   tenant: Tenant;
 }) {
   const [tableError, setTableError] = useState("");
+  const pendingRef = useRef(false);
   const [drawer, setDrawer] = useState<
     | { open: false }
     | { open: true; mode: "edit"; item: CatalogItemWithVariants }
@@ -89,6 +90,11 @@ export function CatalogTable({
     const newIndex = items.findIndex((it) => it.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
 
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+
+    // Snapshot before mutation; safe because handleDelete uses setItems((prev) => ...)
+    // and React only batches across await points — no overlap window in synchronous path.
     const previous = items;
     const reordered = arrayMove(items, oldIndex, newIndex).map((it, i) => ({
       ...it,
@@ -122,17 +128,20 @@ export function CatalogTable({
       const isStale =
         err instanceof Error &&
         (err as Error & { isStale?: boolean }).isStale === true;
-      setTableError(
-        err instanceof Error ? `Reorder failed: ${err.message}` : "Reorder failed.",
-      );
       if (isStale) {
         // Server rejected our premise (set membership changed) — previous
         // snapshot is also stale, so let refresh() be the sole source of truth.
+        setTableError("Catalog changed — please refresh.");
         await refresh();
       } else {
         // Transient failure — roll back optimistic reorder.
+        setTableError(
+          err instanceof Error ? `Reorder failed: ${err.message}` : "Reorder failed.",
+        );
         setItems(previous);
       }
+    } finally {
+      pendingRef.current = false;
     }
   };
 
