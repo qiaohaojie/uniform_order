@@ -125,7 +125,7 @@ export function CatalogTable({
         const err = new Error(
           isStale
             ? "Catalog changed — please refresh."
-            : data?.message ?? data?.error ?? "Reorder failed.",
+            : data?.message ?? data?.error ?? "An unknown error occurred.",
         );
         (err as Error & { isStale?: boolean }).isStale = isStale;
         throw err;
