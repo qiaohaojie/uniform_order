@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import type { CatalogItem } from "@/lib/data";
 import { CATEGORIES } from "@/lib/data";
 import { GarmentVector } from "@/components/garment";
@@ -147,7 +148,19 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
                 className="bg-white rounded-[10px] border overflow-hidden block"
                 style={{ borderColor: "var(--color-rule)" }}
               >
-                <GarmentVector itemId={it.id} accent={accent} size={120} className="w-full h-auto block" />
+                {it.imageUrl ? (
+                  <div className="relative w-full aspect-square" style={{ background: "var(--color-parchment)" }}>
+                    <Image
+                      src={it.imageUrl}
+                      alt={it.name}
+                      fill
+                      style={{ objectFit: "contain" }}
+                      sizes="(max-width: 430px) 50vw, 200px"
+                    />
+                  </div>
+                ) : (
+                  <GarmentVector itemId={it.id} accent={accent} size={120} className="w-full h-auto block" />
+                )}
                 <div className="px-2.5 pt-2 pb-2.5">
                   <div className="font-serif text-[13px] font-medium leading-[1.2] line-clamp-2 min-h-8" style={{ color: "var(--color-ink)" }}>
                     {it.name}
