@@ -96,7 +96,7 @@ export function CatalogTable({
                     className="inline-flex items-center justify-center w-5 h-5 select-none"
                     style={{ color: "var(--color-ink-dim)", cursor: "grab" }}
                   >
-                    ::
+                    ⠿
                   </span>
                 </td>
                 <td className="px-3 py-2">
