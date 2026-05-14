@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { UploadDropzone } from "@/components/uploadthing";
 import { GarmentVector } from "@/components/garment";
-import type { Tenant } from "@/lib/data";
+import type { Tenant, SizeGuide } from "@/lib/data";
 import { ITEM_CATEGORIES } from "@/lib/schemas/catalog";
 
 type ZodFlatten = {
@@ -55,7 +55,7 @@ export type ItemDrawerInitial = {
   active?: boolean;
   sortOrder?: number;
   variants?: InitialVariant[];
-  sizeGuide?: { unit: string; cols: string[]; rows: string[][] } | null;
+  sizeGuide?: SizeGuide | null;
 };
 
 type SizeGuideForm = {

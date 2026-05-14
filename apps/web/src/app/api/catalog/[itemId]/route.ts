@@ -87,6 +87,8 @@ export async function PATCH(
       // Normalize key order before comparing: PostgreSQL jsonb returns keys alphabetically
       // ({cols, rows, unit}) while the client sends {unit, cols, rows}. Comparing raw
       // JSON.stringify strings without normalization always fires, even on no-op saves.
+      // Shallow normalization is sufficient: cols/rows are arrays whose element order
+      // is preserved by jsonb, so only the top-level key order needs fixing.
       const normalizeGuide = (g: unknown) => {
         if (!g) return null;
         const { unit, cols, rows } = g as { unit: string; cols: string[]; rows: string[][] };
