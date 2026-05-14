@@ -31,7 +31,6 @@ export function AuthPageClient({ path }: { path: string }) {
           replace={(href) => router.replace(href)}
           onSessionChange={router.refresh}
           Link={Link}
-          magicLink
         >
           <AuthView path={path} />
         </NeonAuthUIProvider>
