@@ -1057,6 +1057,7 @@ export function toTenantBrand(row: typeof tenants.$inferSelect): Tenant {
     address: row.address ?? "",
     shopHours: row.shopHours ?? "",
     shopEmail: row.shopEmail ?? "",
+    timezone: row.timezone,
   };
 }
 
