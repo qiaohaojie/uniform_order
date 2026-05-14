@@ -297,24 +297,39 @@ function toSizeGuidePayload(
 
 > `unit.trim() || "cm"` trims **before** the OR fallback so a whitespace-only input falls back to `"cm"` rather than being passed through and rejected by `z.string().trim().min(1)` upstream.
 
-- [ ] **Step 3: Initialise form state from `initial.sizeGuide`**
+- [ ] **Step 3: Add state slots and re-sync them inside the existing `useEffect`**
 
-Inside `ItemDrawer`, alongside the existing `useState` calls (name/category/.../variants), add:
+The drawer uses `useEffect(..., [open, initial])` (around item-drawer.tsx:84-104) to re-sync every field whenever the drawer reopens against a different item. A `useState(() => ...)` lazy initialiser fires only once per mount — using it would carry stale guide state across opens. So:
+
+(a) Alongside the other `useState` calls at the top of `ItemDrawer` (after `const [variants, setVariants] = ...`), add the two slots with plain defaults — **not** lazy initialisers:
 
 ```ts
-  const [sizeGuide, setSizeGuide] = useState<SizeGuideForm>(() => {
-    const sg = initial?.sizeGuide;
-    if (!sg) return { unit: "cm", colsRaw: "", rows: [] };
-    return {
-      unit: sg.unit,
-      colsRaw: sg.cols.join(", "),
-      rows: sg.rows.map((r) => [...r]),
-    };
+  const [sizeGuide, setSizeGuide] = useState<SizeGuideForm>({
+    unit: "cm",
+    colsRaw: "",
+    rows: [],
   });
-  const [sizeGuideOpen, setSizeGuideOpen] = useState<boolean>(
-    () => Boolean(initial?.sizeGuide),
-  );
+  const [sizeGuideOpen, setSizeGuideOpen] = useState<boolean>(false);
 ```
+
+(b) Inside the existing `useEffect(() => { ... }, [open, initial])` block (alongside `setName`, `setCategory`, …, `setError(null)`), add:
+
+```ts
+    const sg = initial?.sizeGuide;
+    if (sg) {
+      setSizeGuide({
+        unit: sg.unit,
+        colsRaw: sg.cols.join(", "),
+        rows: sg.rows.map((r) => [...r]),
+      });
+      setSizeGuideOpen(true);
+    } else {
+      setSizeGuide({ unit: "cm", colsRaw: "", rows: [] });
+      setSizeGuideOpen(false);
+    }
+```
+
+> Reset is mandatory in the `else` branch — without it, closing the drawer for an item with a guide and re-opening for one without would inherit the previous guide's state.
 
 - [ ] **Step 4: Render the collapsible editor section**
 
@@ -469,18 +484,17 @@ Find the variants section inside the drawer body. Add this new `<section>` immed
 
 > "Remove size guide" only clears local form state. The `null` lands on the server when the operator clicks the drawer's main **Save** button — same flow as variant edits.
 
-- [ ] **Step 5: Include `sizeGuide` in the save payload**
+- [ ] **Step 5: Include `sizeGuide` in `basePayload`**
 
-Find the existing save handler (the function that builds the POST/PATCH body from form state and calls `fetch`). It currently constructs an object with `name, category, description, imageUrl, active, sortOrder, variants`.
+Find the `basePayload` object inside `handleSubmit` (around item-drawer.tsx:128-135). It's the single shared payload used for both POST and PATCH — currently has `name, category, description, imageUrl, active, sortOrder, variants`.
 
-Add one line to the payload object:
+Add one line to that object (placement adjacent to `variants:` is fine):
 
 ```ts
         sizeGuide: toSizeGuidePayload(sizeGuide),
 ```
 
-> For new items (POST), `toSizeGuidePayload` returns `null` when the operator left the section empty — the API route's `?? null` collapses it for insert.
-> For edits (PATCH), `null` here is the explicit "remove guide" signal and is **not** filtered out before send — the diff branch in Task 3 needs the key present to detect a removal.
+> Do **not** wrap this in any `if (mode.kind === "edit")` branch and do **not** strip `null` before send. The PATCH diff branch in Task 3 needs the key present to detect a removal; for POST, the API route's `?? null` collapses `null` for insert.
 
 - [ ] **Step 6: Type-check**
 
@@ -496,31 +510,49 @@ git commit -m "feat(catalog): size-guide editor section in item drawer"
 
 ---
 
-### Task 5: Wire the drawer's `initial` prop to read `sizeGuide` from the loaded item
+### Task 5: Extend `initialFromItem` in `catalog-table.tsx` to surface `sizeGuide`
 
 **Files:**
-- Modify: `apps/web/src/app/admin/[tenant]/catalog/page-client.tsx` (or wherever the drawer is instantiated with item data)
+- Modify: `apps/web/src/app/admin/[tenant]/catalog/catalog-table.tsx` (helper at L71-85)
 
-- [ ] **Step 1: Locate the call site that passes `initial` to `<ItemDrawer />`**
+The edit-mode `<ItemDrawer />` is mounted at catalog-table.tsx:211 with `initial={initialFromItem(drawer.item)}`. The helper at L71-85 maps the loaded `CatalogItemWithVariants` row into the `ItemDrawerInitial` shape. That's the single seam where `sizeGuide` needs to surface.
 
-Run: `grep -n "ItemDrawer" apps/web/src/app/admin/'[tenant]'/catalog/*.tsx`
+`page-client.tsx` is the create-mode mount and passes no `initial` — it needs no change.
 
-Open the file that renders `<ItemDrawer ... initial={...} />` for edit mode.
+- [ ] **Step 1: Add `sizeGuide` to the `initialFromItem` mapping**
 
-- [ ] **Step 2: Add `sizeGuide` to the `initial` object**
+In `catalog-table.tsx`, find the helper:
 
-The loaded item is fetched from `getCatalogItemById` or equivalent and already includes the `sizeGuide` column (selected via `select()` — verified). Add `sizeGuide: item.sizeGuide` (or whatever the local variable is named) to the `initial` prop object. The drawer's `useState` initialiser handles the null/undefined cases.
+```ts
+  const initialFromItem = (it: CatalogItemWithVariants): ItemDrawerInitial => ({
+    name: it.name,
+    category: it.category as ItemCategory,
+    description: it.description ?? undefined,
+    imageUrl: it.imageUrl ?? undefined,
+    active: it.active,
+    sortOrder: it.sortOrder,
+    variants: it.variants.map((v) => ({ ... })),
+  });
+```
 
-- [ ] **Step 3: Type-check**
+Add one line just above `variants:`:
+
+```ts
+    sizeGuide: (it.sizeGuide as { unit: string; cols: string[]; rows: string[][] } | null) ?? null,
+```
+
+> The explicit cast mirrors the `it.variants.sizes` pattern used in the same helper (`Array.isArray(v.sizes) ? (v.sizes as string[]) : []`). Drizzle types `jsonb` columns as `unknown`, so the narrowing is local to the call site rather than a schema-wide change.
+
+- [ ] **Step 2: Type-check**
 
 Run: `pnpm check-types:web`
-Expected: clean. If a type complains because `getCatalogItemById`'s row type is wider than the `ItemDrawerInitial` shape, narrow with an explicit cast: `sizeGuide: (item.sizeGuide as { unit: string; cols: string[]; rows: string[][] } | null) ?? null`.
+Expected: clean. If `CatalogItemWithVariants` doesn't already include `sizeGuide`, locate the type (`grep -n "CatalogItemWithVariants" apps/web/src/`) and add `sizeGuide: unknown` (or the existing column type) to its definition.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add apps/web/src/app/admin/[tenant]/catalog/page-client.tsx
-git commit -m "feat(catalog): pass sizeGuide into item drawer initial state"
+git add apps/web/src/app/admin/[tenant]/catalog/catalog-table.tsx
+git commit -m "feat(catalog): surface sizeGuide via initialFromItem mapping"
 ```
 
 ---
@@ -618,7 +650,7 @@ git commit -m "docs: record admin size-guide editor (§4.35)"
 - §6 client form state + helpers (`parseCols`, `syncRows`, `toSizeGuidePayload`) → Task 4.
 - §6 trim-before-OR for unit → Task 4 Step 2.
 - §7 audit log reuses `catalog_item.updated` with `changedFields` → Task 3.
-- §8 files touched (5 listed) → Tasks 1, 2, 3, 4, 5. Task 5 (page-client.tsx) is the +1 over the spec's §8 count — needed to surface the loaded `sizeGuide` to the drawer; called out here so reviewers don't flag it.
+- §8 files touched (5 listed): schemas/catalog.ts, db/queries.ts, both API routes, item-drawer.tsx. The plan adds one more file — `catalog-table.tsx` — for the edit-mode `initialFromItem` mapping (Task 5). Called out here so reviewers don't flag the +1 as scope creep; it's a necessary plumbing seam the spec missed when enumerating §8's file list. The spec's read-path claim ("no PDP changes, no new files") still holds.
 - §10 verification (5 items) → Task 6 (8 steps, all spec items covered).
 - §10 stale schema comment fix → Task 2 Step 3.
 
