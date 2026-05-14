@@ -2,7 +2,6 @@
 
 import "@neondatabase/auth-ui/css";
 import { AuthView, NeonAuthUIProvider } from "@neondatabase/auth-ui";
-import type { AuthViewPath } from "@neondatabase/auth-ui";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
