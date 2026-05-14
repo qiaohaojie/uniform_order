@@ -173,7 +173,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 
 - [x] **Shop hours on pickup option pre-purchase (gap-analysis §5.9).** ✅ shipped. Read `tenant.shopHours` in `app/[tenant]/checkout/page.tsx`, thread to `CheckoutScreen`. In `checkout-screen.tsx:415` replace the literal `"Free · Ready in 1–2 school days"` copy on the pickup `DeliveryOption` card with `tenant.shopHours` when set, fall back to existing copy otherwise. ~1h.
 
-- [ ] **Admin size-guide editor (gap-analysis §5.12 — drag-to-reorder portion ✅ shipped).** Drag-to-reorder shipped via `@dnd-kit/sortable` on `catalog-table.tsx` + new `POST /api/catalog/reorder` bulk endpoint; see `completed.md` §4.33. Size-guide editor still outstanding: `catalog_items.sizeGuide jsonb` is rendered on PDP but only seeded via `lib/data.ts`. Same drawer should gain a tabular editor — column headers as comma-list, rows as a grid with add/remove. ~½d.
+- [x] **Admin size-guide editor (gap-analysis §5.12 — drag-to-reorder portion ✅ shipped).** ✅ shipped (PR #36). See `completed.md` §4.35. Collapsible editor in item drawer; Zod schema + PATCH diff with key-order normalization; audit-log reuse; no migration needed.
 
 - [x] **PDP photo support — read `item.imageUrl` + UploadThing in admin drawer (gap-analysis §5.13).** ✅ shipped (PR #31, squash `10a50c0`). See `completed.md` §4.30.
 

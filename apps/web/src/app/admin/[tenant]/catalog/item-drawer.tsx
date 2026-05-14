@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { UploadDropzone } from "@/components/uploadthing";
 import { GarmentVector } from "@/components/garment";
-import type { Tenant } from "@/lib/data";
+import type { Tenant, SizeGuide } from "@/lib/data";
 import { ITEM_CATEGORIES } from "@/lib/schemas/catalog";
 
 type ZodFlatten = {
@@ -55,7 +55,40 @@ export type ItemDrawerInitial = {
   active?: boolean;
   sortOrder?: number;
   variants?: InitialVariant[];
+  sizeGuide?: SizeGuide | null;
 };
+
+type SizeGuideForm = {
+  unit: string;
+  colsRaw: string;
+  rows: string[][];
+};
+
+function parseCols(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function syncRows(rows: string[][], newColCount: number): string[][] {
+  return rows.map((row) => {
+    if (row.length === newColCount) return row;
+    if (row.length < newColCount) {
+      return [...row, ...Array(newColCount - row.length).fill("") as string[]];
+    }
+    return row.slice(0, newColCount);
+  });
+}
+
+function toSizeGuidePayload(
+  form: SizeGuideForm,
+): { unit: string; cols: string[]; rows: string[][] } | null {
+  const cols = parseCols(form.colsRaw);
+  if (cols.length === 0 || form.rows.length === 0) return null;
+  const rows = form.rows.map((r) => syncRows([r], cols.length)[0]);
+  return { unit: form.unit.trim() || "cm", cols, rows };
+}
 
 export function ItemDrawer({
   tenant,
@@ -78,6 +111,12 @@ export function ItemDrawer({
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [active, setActive] = useState(true);
   const [variants, setVariants] = useState<Variant[]>([{ label: "", price: "", sizes: "" }]);
+  const [sizeGuide, setSizeGuide] = useState<SizeGuideForm>({
+    unit: "cm",
+    colsRaw: "",
+    rows: [],
+  });
+  const [sizeGuideOpen, setSizeGuideOpen] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,6 +140,18 @@ export function ItemDrawer({
         : [{ label: "", price: "", sizes: "" }]
     );
     setError(null);
+    const sg = initial?.sizeGuide;
+    if (sg) {
+      setSizeGuide({
+        unit: sg.unit,
+        colsRaw: sg.cols.join(", "),
+        rows: sg.rows.map((r) => [...r]),
+      });
+      setSizeGuideOpen(true);
+    } else {
+      setSizeGuide({ unit: "cm", colsRaw: "", rows: [] });
+      setSizeGuideOpen(false);
+    }
   }, [open, initial]);
 
   const setVariant = (i: number, patch: Partial<Variant>) =>
@@ -142,6 +193,7 @@ export function ItemDrawer({
             .filter(Boolean),
           active: v.active,
         })),
+        sizeGuide: toSizeGuidePayload(sizeGuide),
       };
 
       const url =
@@ -378,6 +430,157 @@ export function ItemDrawer({
             >
               + Add variant
             </button>
+          </section>
+
+          {/* Size guide */}
+          <section>
+            <button
+              type="button"
+              onClick={() => setSizeGuideOpen((v) => !v)}
+              aria-expanded={sizeGuideOpen}
+              className="w-full flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.4px]"
+            >
+              <span>Size guide (optional)</span>
+              <span aria-hidden style={{ color: "var(--color-ink-dim)" }}>
+                {sizeGuideOpen ? "−" : "+"}
+              </span>
+            </button>
+
+            {sizeGuideOpen && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-[11px] block mb-1" style={{ color: "var(--color-ink-dim)" }}>
+                    Unit
+                  </label>
+                  <input
+                    type="text"
+                    value={sizeGuide.unit}
+                    onChange={(e) =>
+                      setSizeGuide((s) => ({ ...s, unit: e.target.value }))
+                    }
+                    placeholder="cm"
+                    className="w-full border rounded px-2 py-1 text-[13px]"
+                    style={{ borderColor: "var(--color-rule)" }}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] block mb-1" style={{ color: "var(--color-ink-dim)" }}>
+                    Columns (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={sizeGuide.colsRaw}
+                    onChange={(e) => {
+                      const newRaw = e.target.value;
+                      setSizeGuide((s) => {
+                        const newCount = parseCols(newRaw).length;
+                        return {
+                          ...s,
+                          colsRaw: newRaw,
+                          rows: syncRows(s.rows, newCount),
+                        };
+                      });
+                    }}
+                    placeholder="Size, Chest, Length"
+                    className="w-full border rounded px-2 py-1 text-[13px]"
+                    style={{ borderColor: "var(--color-rule)" }}
+                  />
+                </div>
+
+                {(() => {
+                  const cols = parseCols(sizeGuide.colsRaw);
+                  if (cols.length === 0) return null;
+                  return (
+                    <div className="space-y-1">
+                      <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+                        Rows
+                      </div>
+                      <table className="w-full text-[12px] tnum">
+                        <thead>
+                          <tr style={{ color: "var(--color-ink-dim)" }}>
+                            {cols.map((c, ci) => (
+                              <th key={ci} className="text-left font-semibold py-1 pr-2">{c}</th>
+                            ))}
+                            <th aria-hidden />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sizeGuide.rows.map((row, ri) => (
+                            <tr key={ri}>
+                              {row.map((cell, ci) => (
+                                <td key={ci} className="py-1 pr-2">
+                                  <input
+                                    type="text"
+                                    value={cell}
+                                    aria-label={`${cols[ci] ?? `Column ${ci + 1}`}, row ${ri + 1}`}
+                                    onChange={(e) => {
+                                      const newVal = e.target.value;
+                                      setSizeGuide((s) => {
+                                        const rows = s.rows.map((r) => [...r]);
+                                        rows[ri][ci] = newVal;
+                                        return { ...s, rows };
+                                      });
+                                    }}
+                                    className="w-full border rounded px-2 py-1 text-[12px]"
+                                    style={{ borderColor: "var(--color-rule)" }}
+                                  />
+                                </td>
+                              ))}
+                              <td className="py-1 pl-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSizeGuide((s) => ({
+                                      ...s,
+                                      rows: s.rows.filter((_, i) => i !== ri),
+                                    }))
+                                  }
+                                  aria-label={`Remove row ${ri + 1}`}
+                                  className="text-[14px]"
+                                  style={{ color: "var(--color-ink-dim)" }}
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSizeGuide((s) => {
+                            const colCount = parseCols(s.colsRaw).length;
+                            return {
+                              ...s,
+                              rows: [...s.rows, Array(colCount).fill("") as string[]],
+                            };
+                          })
+                        }
+                        className="text-[12px] underline mt-1"
+                        style={{ color: tenant.accent }}
+                      >
+                        + Add row
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {(sizeGuide.colsRaw.length > 0 || sizeGuide.rows.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSizeGuide({ unit: "cm", colsRaw: "", rows: [] })
+                    }
+                    className="text-[12px] underline"
+                    style={{ color: "var(--color-ink-dim)" }}
+                  >
+                    Remove size guide
+                  </button>
+                )}
+              </div>
+            )}
           </section>
 
           {/* Active toggle */}

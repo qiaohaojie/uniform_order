@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       imageUrl: input.imageUrl,
       active: input.active,
       sortOrder: input.sortOrder,
+      sizeGuide: input.sizeGuide ?? null,
       variants: input.variants.map((v) => ({
         label: v.label,
         price: v.price,

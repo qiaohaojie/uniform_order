@@ -22,7 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GarmentVector } from "@/components/garment";
 import { ItemDrawer, type ItemDrawerInitial } from "./item-drawer";
-import type { Tenant, ItemCategory } from "@/lib/data";
+import type { Tenant, ItemCategory, SizeGuide } from "@/lib/data";
 import type { CatalogItemWithVariants } from "@/db/queries";
 
 export function CatalogTable({
@@ -75,6 +75,7 @@ export function CatalogTable({
     imageUrl: it.imageUrl ?? undefined,
     active: it.active,
     sortOrder: it.sortOrder,
+    sizeGuide: it.sizeGuide as SizeGuide | null,
     variants: it.variants.map((v) => ({
       id: v.id,
       label: v.label,

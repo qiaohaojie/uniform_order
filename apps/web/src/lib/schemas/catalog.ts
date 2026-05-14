@@ -32,6 +32,21 @@ export const catalogVariantInputSchema = z.object({
   sizes: z.array(z.string().min(1).max(20)).max(40).default([]),
 });
 
+export const sizeGuideSchema = z
+  .object({
+    unit: z.string().trim().min(1).max(20),
+    cols: z.array(z.string().trim().min(1).max(40)).min(1).max(8),
+    rows: z
+      .array(z.array(z.string().trim().max(40)).min(1).max(8))
+      .min(1)
+      .max(50),
+  })
+  .refine((g) => g.rows.every((r) => r.length === g.cols.length), {
+    message: "Every row must have the same number of cells as columns",
+  });
+
+export type SizeGuideInput = z.infer<typeof sizeGuideSchema>;
+
 export const catalogItemInputSchema = z.object({
   tenantId: z.string().min(1),
   name: z.string().trim().min(1).max(80),
@@ -40,6 +55,7 @@ export const catalogItemInputSchema = z.object({
   imageUrl: catalogImageUrlSchema.nullable().optional(),
   active: z.boolean().default(true),
   sortOrder: z.number().int().min(0).default(0),
+  sizeGuide: sizeGuideSchema.nullable().optional(),
   variants: z.array(catalogVariantInputSchema).min(1),
 });
 
@@ -48,6 +64,7 @@ export const catalogItemPatchSchema = catalogItemInputSchema
   .partial()
   .extend({
     variants: z.array(catalogVariantInputSchema).min(1).optional(),
+    sizeGuide: sizeGuideSchema.nullable().optional(),
   });
 
 export type CatalogItemInput = z.infer<typeof catalogItemInputSchema>;
