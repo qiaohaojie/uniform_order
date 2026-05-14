@@ -87,15 +87,31 @@ export const sizeGuideSchema = z
 Limits (8 cols, 50 rows) are generous vs. real-world uniform guides (typically 3 cols × 8 rows) but bound the payload.
 
 ### Queries (`db/queries.ts`)
-- `addCatalogItem(input)` (~line 537): accept `sizeGuide?: SizeGuide | null`, insert into `catalog_items.size_guide`.
-- `updateCatalogItem(itemId, input)` (~line 593): accept `sizeGuide?: SizeGuide | null` and update the column when the key is present in the patch.
+- `addCatalogItem(data)` (line 528): the `data` parameter object adds `sizeGuide?: SizeGuide | null`. The `db.insert(catalogItems).values({...})` block adds `sizeGuide: data.sizeGuide ?? null`.
+- `updateCatalogItem(itemId, fields, variants?)` (line 575): the `fields` parameter type adds `sizeGuide?: SizeGuide | null`. The conditional update block adds `if (fields.sizeGuide !== undefined) updates.sizeGuide = fields.sizeGuide;`.
+- `getCatalogItemById` (line 512) uses `select()` which already returns all columns including `sizeGuide` — no change.
 - Existing read paths (`getActiveCatalog`, `getCatalogItemForPDP`) already select `sizeGuide` — no change.
 
 ### API routes
-- `POST /api/catalog/route.ts` — pass `parsed.sizeGuide ?? null` into `addCatalogItem`.
-- `PATCH /api/catalog/[itemId]/route.ts`:
-  - Extend the no-op diff fingerprint at line 88–94 to include `sizeGuide` (serialise as `JSON.stringify(sizeGuide ?? null)`).
-  - Add `"sizeGuide"` to the `changedFields` computation alongside the existing field-diff logic so the audit-log `catalog_item.updated` payload reports it.
+
+**`POST /api/catalog/route.ts`** — the `addCatalogItem({...})` call (line ~78) gains one line: `sizeGuide: input.sizeGuide ?? null,`. The subsequent `catalog_item.created` audit payload is unchanged (variant-summary only).
+
+**`PATCH /api/catalog/[itemId]/route.ts`** — the no-op diff block (route lines 65–101) currently has two parts: a scalar-field loop over `scalarCandidates`, and a variant-fingerprint comparison. Add a third part for size-guide:
+
+```ts
+// After the scalar loop, before the variant block:
+if (fields.sizeGuide !== undefined) {
+  const existingJson = JSON.stringify(item.sizeGuide ?? null);
+  const incomingJson = JSON.stringify(fields.sizeGuide ?? null);
+  if (existingJson !== incomingJson) changedFields.push("sizeGuide");
+}
+```
+
+`sizeGuide` is **not** added to `scalarCandidates`. That loop compares with raw `!==`, which on a jsonb object would always trigger reference inequality. The stringify-based branch above is the correct comparator.
+
+The `updateCatalogItem` call (`await updateCatalogItem(itemId, fields, variants)`) already destructures `fields` from `input`, so `fields.sizeGuide` flows through once the schema accepts it — no change to that call site.
+
+The audit-log `payload: { changedFields }` block is unchanged; `sizeGuide` rides through the existing array.
 
 ## 6. Client form state
 
