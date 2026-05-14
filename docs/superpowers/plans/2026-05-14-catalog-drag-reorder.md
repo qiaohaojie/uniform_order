@@ -16,7 +16,7 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `apps/web/package.json` | Modify | Add `@dnd-kit/core` + `@dnd-kit/sortable` deps |
+| `apps/web/package.json` | Modify | Add `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/utilities` deps |
 | `apps/web/src/db/queries.ts` | Modify | New `reorderCatalogItems(tenantId, orderedIds)` helper using `db.batch` |
 | `apps/web/src/lib/schemas/catalog.ts` | Modify | New `catalogReorderSchema` Zod schema |
 | `apps/web/src/app/api/catalog/reorder/route.ts` | Create | `POST` handler — auth, set-equality validation, batched UPDATE, audit log |
@@ -33,19 +33,21 @@
 
 Run from repo root:
 ```bash
-pnpm --filter web add @dnd-kit/core @dnd-kit/sortable
+pnpm --filter web add @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 ```
 
-Expected: `package.json` gets two new `dependencies` entries; `pnpm-lock.yaml` updates.
+`@dnd-kit/utilities` is a regular (non-peer) dependency of `@dnd-kit/sortable`. Under pnpm's strict resolution, transitive deps are not directly importable from the consumer package, so we add it explicitly — Task 6 imports `CSS` from it.
+
+Expected: `package.json` gets three new `dependencies` entries; `pnpm-lock.yaml` updates.
 
 - [ ] **Step 2: Verify install succeeded**
 
 Run:
 ```bash
-pnpm --filter web ls @dnd-kit/core @dnd-kit/sortable
+pnpm --filter web ls @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 ```
 
-Expected: both resolve to a concrete version (≥ 6.x for core, ≥ 8.x for sortable).
+Expected: all three resolve to a concrete version (≥ 6.x for core, ≥ 8.x for sortable, ≥ 3.x for utilities).
 
 - [ ] **Step 3: Type-check baseline**
 
@@ -60,7 +62,7 @@ Expected: passes (no source changes yet, just deps).
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml
-git commit -m "feat(catalog): add @dnd-kit deps for drag-to-reorder"
+git commit -m "feat(catalog): add @dnd-kit/core+sortable+utilities deps"
 ```
 
 ---
@@ -180,12 +182,12 @@ Create `apps/web/src/app/api/catalog/reorder/route.ts` with this exact content:
 ```ts
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getTenant,
-  getCatalogItems,
+  getCatalogByTenant,
   reorderCatalogItems,
 } from "@/db/queries";
 import {
   ensureTenantAccess,
+  isPlatformAdminEmail,
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import { requireTenantApproved } from "@/lib/auth/require-tenant-approved";
@@ -224,33 +226,33 @@ export async function POST(req: NextRequest) {
     }
     const { tenantSlug, orderedIds } = parsed.data;
 
-    const tenant = await getTenant(tenantSlug);
-    if (!tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
-    }
-
-    const approval = await requireTenantApproved(tenant.id);
+    // requireTenantApproved resolves the tenant by slug (the slug doubles as
+    // the PK in this codebase) AND enforces approval gating in one round-trip.
+    const approval = await requireTenantApproved(tenantSlug);
     if ("response" in approval) return approval.response;
+    const { tenant } = approval;
 
     const accessDenied = ensureTenantAccess(authResult.user, tenant.shopEmail);
     if (accessDenied) return accessDenied;
 
     // Exhaustive-set check: orderedIds must equal the full set of catalog item
     // IDs for this tenant. This catches concurrent add/delete by another
-    // operator and any client/server drift.
-    const currentItems = await getCatalogItems(tenant.id);
+    // operator and any client/server drift. Use getCatalogByTenant (not the
+    // active-only variant) so inactive items participate in ordering — see
+    // spec §4.3.
+    const currentItems = await getCatalogByTenant(tenant.id);
     const currentIds = new Set(currentItems.map((it) => it.id));
     const incomingIds = new Set(orderedIds);
 
-    if (orderedIds.length !== currentIds.size) {
-      return NextResponse.json(
-        { error: "stale_set", message: "Catalog changed — please refresh." },
-        { status: 400 },
-      );
-    }
     if (incomingIds.size !== orderedIds.length) {
       return NextResponse.json(
         { error: "duplicate_ids" },
+        { status: 400 },
+      );
+    }
+    if (orderedIds.length !== currentIds.size) {
+      return NextResponse.json(
+        { error: "stale_set", message: "Catalog changed — please refresh." },
         { status: 400 },
       );
     }
@@ -267,12 +269,14 @@ export async function POST(req: NextRequest) {
 
     await logAuditEvent({
       tenantId: tenant.id,
-      actorRole: "operator",
-      actorEmail: authResult.user.email ?? null,
+      actorEmail: authResult.user.email,
+      actorRole: isPlatformAdminEmail(authResult.user.email)
+        ? "platform_admin"
+        : "operator",
       action: "catalog.reordered",
       targetType: "tenant",
       targetId: tenant.id,
-      metadata: { itemCount: orderedIds.length },
+      payload: { itemCount: orderedIds.length },
     });
 
     return NextResponse.json({ ok: true }, { status: 200 });
@@ -286,9 +290,12 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-If `getCatalogItems` doesn't exist (it should — used elsewhere), confirm the actual name by running `grep -n "export async function getCatalog" apps/web/src/db/queries.ts` and substitute the right one. The function we want returns all catalog items for a tenant (active **and** inactive — match what the admin table fetches).
-
-If `logAuditEvent`'s parameter shape doesn't match (e.g. `metadata` is `actorMetadata`), open `apps/web/src/lib/audit/log.ts` and adjust the call to its exact signature. Match the call shape used at `apps/web/src/app/api/catalog/[itemId]/route.ts:133`.
+Field-name confirmations (against the actual codebase, verified during plan review):
+- `logAuditEvent` field is `payload` (`lib/audit/types.ts` — `LogAuditEventInput.payload?: Record<string, unknown>`), **not** `metadata`.
+- `actorEmail` is `string` (not nullable); pass `authResult.user.email` directly.
+- `actorRole` mirrors the conditional at `[itemId]/route.ts:135-137` so platform-admin reorders are correctly attributed.
+- Query helper is `getCatalogByTenant(tenantId)` at `queries.ts:488` — returns active + inactive — **not** `getCatalogItems`.
+- `requireTenantApproved` returns `{ tenant }` on success; reuse it rather than calling `getTenant(slug)` separately.
 
 - [ ] **Step 3: Type-check**
 
@@ -297,12 +304,7 @@ Run:
 pnpm check-types:web
 ```
 
-Expected: passes. Likely failures + fixes:
-- `getCatalogItems` not found → use whatever the admin page calls (search `apps/web/src/app/admin/[tenant]/catalog/page.tsx`).
-- `logAuditEvent` field mismatch → mirror the call in `[itemId]/route.ts:133`.
-- `actorRole` must be a specific union → mirror the same call.
-
-Fix and re-run until green.
+Expected: passes. If a name still doesn't resolve, mirror the import/call shape at `apps/web/src/app/api/catalog/[itemId]/route.ts:1-15, 31-50, 133-142`.
 
 - [ ] **Step 4: Commit**
 
@@ -589,20 +591,33 @@ const handleDragEnd = async (event: DragEndEvent) => {
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       const isStale = data?.error === "stale_set";
-      throw new Error(
+      const err = new Error(
         isStale
           ? "Catalog changed — please refresh."
           : data?.message ?? data?.error ?? "Reorder failed.",
       );
+      // Marker so the catch block can branch without re-parsing.
+      (err as Error & { isStale?: boolean }).isStale = isStale;
+      throw err;
     }
   } catch (err) {
     console.error("Reorder failed:", err);
-    setItems(previous);
+    const isStale =
+      err instanceof Error &&
+      (err as Error & { isStale?: boolean }).isStale === true;
     setTableError(
       err instanceof Error ? `Reorder failed: ${err.message}` : "Reorder failed.",
     );
-    // Pull authoritative state from the server in case it changed under us.
-    await refresh();
+    if (isStale) {
+      // Server authoritatively rejected our premise (set membership changed).
+      // The `previous` snapshot is also stale — skip the optimistic rollback
+      // and let refresh() be the sole source of truth.
+      await refresh();
+    } else {
+      // Transient failure (offline, 500, auth). Roll back the optimistic
+      // reorder so the user sees the order they had before the drag.
+      setItems(previous);
+    }
   }
 };
 ```
