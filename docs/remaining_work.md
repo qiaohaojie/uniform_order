@@ -22,7 +22,7 @@ This document lists every item that must be resolved (or explicitly deferred) be
 
 ## 2. 🟠 High — required for an acceptable v1
 
-> §2.1, §2.2, §2.3, §2.6, §2.7, §2.10, §3.1, §3.3, §3.4, §3.5, §3.10 follow-ups #1/#2, §4.1, §4.9, §4.10, §4.11 — **shipped.** See `docs/completed.md` §4. Their ops / verification follow-ups (where they exist) remain below in §2.8, §2.9, §2.11, §2.12.
+> §2.1, §2.2, §2.3, §2.6, §2.7, §2.10, §2.13, §2.14, §3.1, §3.3, §3.4, §3.5, §3.10 follow-ups #1/#2, §4.1, §4.9, §4.10, §4.11 — **shipped.** See `docs/completed.md` §4. Their ops / verification follow-ups (where they exist) remain below in §2.8, §2.9, §2.11, §2.12.
 
 ### 2.8 Ops / verification follow-ups (carried over from completed code work)
 
@@ -61,7 +61,7 @@ The parent-account / "add another child" feature shipped via PR #6 (squash-merge
 - [ ] Run the same E2E with Google sign-in.
 - [ ] After deploy, verify `tenants.is_publicly_listed = true` for `nsbh` and `rgsh` (the migration's seed UPDATE should have applied; if not, run `UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh');`).
 
-### 2.13 NSBH gap-analysis musts (next sprint)
+### 2.13 NSBH gap-analysis musts — ✅ shipped (PR #29)
 
 Sourced from `my_doc/NSBH/gap-analysis.md` §5 (2026-05-12). Email/DNS ops items intentionally excluded — already covered by §2.8 and parked until post-development. Guest checkout (§5.2) excluded — replaced by magic-link + Google sign-in direction (see §2.14).
 
@@ -83,9 +83,9 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 (2026-05-12). Email/DNS ops items
   - Verify `uniformorder.online` in Stripe Dashboard via Connect platform account.
   - No DB change; destination-charge config unchanged. ~1d.
 
-### 2.14 Bug-class items lifted from NSBH gap-analysis (real defects, not nice-to-haves)
+### 2.14 Bug-class items lifted from NSBH gap-analysis — ✅ shipped (PR #29 + PR #30)
 
-These were classified as "Should" in the gap analysis but are genuine bugs / hardening, not feature work. Treat with the same urgency as anything else in §2.
+These were classified as "Should" in the gap analysis but are genuine bugs / hardening, not feature work. All shipped; see `docs/completed.md` §4.28–§4.29.
 
 - [x] **`payment_intent.payment_failed` webhook + audit log on dashboard refunds (gap-analysis §5.11).** ✅ shipped prelaunch-hardening PR. Pivoted to audit-only (Option B): declined cards never produce an order row in this codebase, so audit entries target the PaymentIntent (`targetType: 'payment_intent'`). No order-row state machinery needed.
   - Today `orders.status = 'pending_payment'` rows orphan in DB after card declines because nothing cleans them up. Add a `payment_intent.payment_failed` branch to `api/stripe/webhook/route.ts` that deletes or cancels the matched pending order (lookup by `stripePaymentIntentId`).
