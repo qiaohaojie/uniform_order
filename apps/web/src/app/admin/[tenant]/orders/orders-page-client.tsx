@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { Tenant } from "@/lib/data";
 import { AdminTopbar } from "@/components/admin-shell";
 import { OrdersBoard } from "./orders-board";
+import { ExportOrdersButton } from "@/components/export-orders-button";
 
 export function OrdersPageClient({
   tenantId,
@@ -67,6 +68,11 @@ export function OrdersPageClient({
               </svg>
               {newCount > 0 ? `Print pick slips (${newCount})` : "Print pick slips"}
             </button>
+            <ExportOrdersButton
+              tenantId={tenantId}
+              tenantShort={tenant.short}
+              accent={tenant.accent}
+            />
             <button
               onClick={() => {
                 // Open email client to email all parents with ready orders
