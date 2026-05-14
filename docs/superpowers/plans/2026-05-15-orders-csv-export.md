@@ -32,29 +32,43 @@
 
 ### Task 0: Recon (5 min, no commits)
 
-Confirm two field names before touching code. The plan assumes them; verify the actual identifiers and use those throughout subsequent tasks if they differ.
+Confirm field names and DB conventions before touching code. The plan assumes specific identifiers; verify them and use the actuals throughout subsequent tasks if they differ.
 
 **Files (read-only):**
-- Read `apps/web/src/db/schema.ts` — find the `tenants` table definition, note the **operator-email field name** (likely `operatorEmail` mapping to column `operator_email`).
-- Read `apps/web/src/db/queries.ts` — find `toTenantBrand` and confirm it maps DB row fields to the `Tenant` interface in `lib/data.ts`.
+- Read `apps/web/src/app/admin/[tenant]/layout.tsx` — the canonical auth-check pattern for tenant-scoped admin pages.
+- Read `apps/web/src/db/schema.ts` — find the `tenants` table.
+- Read `apps/web/src/db/queries.ts` — find `toTenantBrand`.
 
-- [ ] **Step 1: Read schema for tenant operator email field name**
+- [ ] **Step 1: Read the admin layout to confirm the auth pattern**
 
-Run: `grep -n -A 2 "operator_email\\|operatorEmail" apps/web/src/db/schema.ts`
+Run: `cat apps/web/src/app/admin/[tenant]/layout.tsx`
 
-Expected: a column definition like `operatorEmail: text("operator_email")...`. **Note the exact field name** — referred to as `tenants.operatorEmail` below.
+Expected: the file does an `isPlatformAdminEmail(user.email) || isTenantOperatorEmail(user.email, tenant.shopEmail)` check (or equivalent). **Confirm the tenant field name used for the operator email** — the plan assumes `tenant.shopEmail` per the existing convention. If it's something else, replace `tenant.shopEmail` in Task 4 accordingly.
 
 - [ ] **Step 2: Read `toTenantBrand` to confirm shape**
 
 Run: `grep -n -A 20 "function toTenantBrand" apps/web/src/db/queries.ts`
 
-Expected: a function returning a `Tenant`-typed object built from row fields. **Note whether it spreads or explicitly maps fields** — Task 3 needs this.
+Expected: a function returning a `Tenant`-typed object built from row fields. **Note whether it spreads or explicitly maps fields** — Task 2 needs this.
 
 - [ ] **Step 3: Read `db/index` to confirm Drizzle client exports**
 
 Run: `grep -n "export" apps/web/src/db/index.ts | head -20`
 
 Expected: re-exports of `db`, `tenants`, `orders`, `orderLines`, etc. Confirm we can import all four from `@/db`.
+
+- [ ] **Step 4: Verify the `__drizzle_migrations` bookkeeping table shape**
+
+Via Neon MCP `run_sql`:
+
+```sql
+SELECT table_schema, column_name, data_type
+FROM information_schema.columns
+WHERE table_name = '__drizzle_migrations'
+ORDER BY table_schema, ordinal_position;
+```
+
+Expected: one or more rows showing the schema (often `drizzle` or `public`) and columns (typically `id`, `hash`, `created_at`). **Note the table_schema** — Task 1 Step 4 may need to qualify the insert as `drizzle.__drizzle_migrations` or just `__drizzle_migrations`. If the query returns zero rows, stop and consult the user before continuing — this repo's drizzle bookkeeping is in an unexpected state.
 
 No commit — recon only.
 
@@ -108,20 +122,20 @@ If anything else appears in the file (drift from an unrelated schema change), st
 
 - [ ] **Step 4: Apply the SQL against the dev Neon DB**
 
-Use the Neon MCP `run_sql_transaction` tool (do NOT use Bash for this — drizzle-kit migrate hangs in this env per project memory):
+Use the Neon MCP `run_sql_transaction` tool (do NOT use Bash for this — drizzle-kit migrate hangs in this env per project memory). **This repo never uses `drizzle-kit migrate`; the canonical pattern is "apply SQL via Neon MCP + manually insert the bookkeeping row" for both dev and prod.** Do not try to switch strategies mid-feature.
 
 - Project: this repo's Neon project (visible via `mcp__Neon__list_projects`)
 - Branch: the default/dev branch
 - SQL: the contents of `0013_tenant_timezone.sql`
 
-Then insert the migrations bookkeeping row in the same call:
+Then insert the migrations bookkeeping row in the same call. **Use the schema-qualified table name from Recon Step 4** — typically `drizzle.__drizzle_migrations` but verify before running:
 
 ```sql
-INSERT INTO __drizzle_migrations (hash, created_at)
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
 VALUES ('manual_0013_tenant_timezone', extract(epoch from now()) * 1000);
 ```
 
-(The `hash` column accepts any unique text; the convention in this repo is `manual_<migration_filename>` per the existing pattern.)
+(The `hash` column accepts any unique text; the convention in this repo is `manual_<migration_filename>`. If Recon Step 4 showed the table lives in `public`, drop the `drizzle.` prefix.)
 
 - [ ] **Step 5: Verify the column exists**
 
@@ -249,6 +263,7 @@ export type ExportStatusFilter = ExportOrderStatus | "all";
 
 export const EXPORT_STATUS_OPTIONS: ExportStatusFilter[] = [
   "all",
+  "pending_payment",
   "new",
   "packing",
   "ready",
@@ -314,18 +329,20 @@ export function formatExportTotal(total: string | number): string {
 //   variant only    →  "{itemName} ({variantLabel}) ×{qty}"
 //   size only       →  "{itemName} ({size}) ×{qty}"
 //   neither         →  "{itemName} ×{qty}"
-// Lines joined with "; " in input order (callers pass them ordered by id).
+// Lines joined with "; ". Callers pass them in alphabetical (itemName, variantLabel, size)
+// order for deterministic output across exports — the table's id is a random UUID and
+// can't drive a meaningful sort.
 export function formatItemsSummary(
   lines: ReadonlyArray<{
     itemName: string;
-    variantLabel: string | null;
+    variantLabel: string;
     size: string | null;
     qty: number;
   }>
 ): string {
   return lines
     .map((line) => {
-      const variant = line.variantLabel?.trim() ?? "";
+      const variant = line.variantLabel.trim();
       const size = line.size?.trim() ?? "";
       let parens = "";
       if (variant && size) parens = `(${variant} / ${size})`;
@@ -373,9 +390,9 @@ console.log(escapeCsvField("Smith, Jane")); // "Smith, Jane"
 console.log(escapeCsvField("Said \"hi\"")); // "Said ""hi"""
 console.log(formatItemsSummary([
   { itemName: "School Shirt", variantLabel: "Navy", size: "S", qty: 2 },
-  { itemName: "Shorts", variantLabel: null, size: "10", qty: 1 },
+  { itemName: "Shorts", variantLabel: "", size: "10", qty: 1 },
   { itemName: "Tie", variantLabel: "Prefect", size: null, qty: 1 },
-  { itemName: "Socks", variantLabel: "", size: "", qty: 3 },
+  { itemName: "Socks", variantLabel: "", size: null, qty: 3 },
 ]));
 // School Shirt (Navy / S) ×2; Shorts (10) ×1; Tie (Prefect) ×1; Socks ×3
 console.log(formatExportDate(new Date("2026-05-15T22:00:00Z"), "Australia/Sydney")); // 16/05/2026
@@ -417,6 +434,7 @@ import {
   isTenantOperatorEmail,
 } from "@/lib/auth/authorization";
 import {
+  buildExportFilename,
   CSV_HEADERS,
   EXPORT_STATUS_OPTIONS,
   formatExportDate,
@@ -460,9 +478,11 @@ export async function exportOrdersCsv(
 
   // Authorization: platform admin OR this tenant's operator.
   // Client-supplied tenantId is validated here, never trusted blindly.
+  // NOTE: the "operator email" on the tenants table is `shopEmail` (column `shop_email`)
+  // — that's the convention used across all admin routes (verify in Recon Step 1).
   const allowed =
     isPlatformAdminEmail(user.email) ||
-    isTenantOperatorEmail(user.email, tenant.operatorEmail);
+    isTenantOperatorEmail(user.email, tenant.shopEmail);
   if (!allowed) {
     throw new Error("Forbidden");
   }
@@ -490,6 +510,9 @@ export async function exportOrdersCsv(
     .orderBy(desc(orders.createdAt));
 
   // Fetch all line items for these orders in one query (avoids N+1).
+  // Order alphabetically — orderLines.id is a random UUID and can't drive a meaningful sort.
+  // Alphabetical (itemName, variantLabel, size) makes the Items column deterministic
+  // across exports for the same dataset.
   const orderIds = orderRows.map((o) => o.id);
   const lineRows = orderIds.length
     ? await db
@@ -499,14 +522,13 @@ export async function exportOrdersCsv(
           variantLabel: orderLines.variantLabel,
           size: orderLines.size,
           qty: orderLines.qty,
-          id: orderLines.id,
         })
         .from(orderLines)
         .where(inArray(orderLines.orderId, orderIds))
-        .orderBy(asc(orderLines.id))
+        .orderBy(asc(orderLines.itemName), asc(orderLines.variantLabel), asc(orderLines.size))
     : [];
 
-  // Group lines by orderId, preserving the asc(id) order.
+  // Group lines by orderId, preserving the alphabetical order from the query.
   const linesByOrder = new Map<string, typeof lineRows>();
   for (const line of lineRows) {
     const bucket = linesByOrder.get(line.orderId) ?? [];
@@ -532,7 +554,7 @@ export async function exportOrdersCsv(
   const csv = serializeCsv(CSV_HEADERS, dataRows);
 
   // Filename uses today's date in the tenant's timezone for a sortable, scoped name.
-  const filename = buildExportFilenameInternal(tenantId, status, new Date(), tz);
+  const filename = buildExportFilename(tenantId, status, new Date(), tz);
 
   return {
     csv,
@@ -540,24 +562,7 @@ export async function exportOrdersCsv(
     rowCount: dataRows.length,
   };
 }
-
-// Local re-export indirection so the import block stays tidy.
-function buildExportFilenameInternal(
-  tenantSlug: string,
-  status: ExportStatusFilter,
-  now: Date,
-  timezone: string
-): string {
-  // Defer to the pure helper.
-  // (Imported via dynamic destructuring would also work, but keeping the import set explicit
-  //  at the top of the file is clearer for review.)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { buildExportFilename } = require("./csv") as typeof import("./csv");
-  return buildExportFilename(tenantSlug, status, now, timezone);
-}
 ```
-
-**Note on the `buildExportFilenameInternal` shim:** if `require` triggers a lint or type complaint, replace the shim with a direct named import added to the top-level import block (`buildExportFilename` alongside the others) and call `buildExportFilename(...)` directly. The shim is only there because some older Next.js setups complain about "barrel re-exports" — it's fine to remove if your local toolchain is happy.
 
 - [ ] **Step 2: Type check**
 
@@ -760,11 +765,21 @@ export function ExportOrdersButton({
             className="mt-2.5 text-[11.5px] leading-snug"
             style={{ color: "var(--color-ink-dim)" }}
           >
-            Exports all{" "}
-            <strong style={{ color: "var(--color-ink)" }}>
-              {STATUS_LABELS[status].toLowerCase()}
-            </strong>{" "}
-            orders for {tenantShort}, regardless of your current search.
+            {status === "all" ? (
+              <>
+                Exports{" "}
+                <strong style={{ color: "var(--color-ink)" }}>every</strong>{" "}
+                order for {tenantShort}, regardless of your current search.
+              </>
+            ) : (
+              <>
+                Exports all{" "}
+                <strong style={{ color: "var(--color-ink)" }}>
+                  {STATUS_LABELS[status].toLowerCase()}
+                </strong>{" "}
+                orders for {tenantShort}, regardless of your current search.
+              </>
+            )}
           </p>
 
           {error && (
@@ -902,7 +917,7 @@ Open `http://localhost:3000/admin/nsbh/orders` in a browser. Sign in if prompted
 Click "Export CSV". Verify:
 - Popover appears below the button
 - Status select defaults to "All statuses"
-- Helper text reads "Exports all all statuses orders for NSBH, regardless of your current search." *(Minor: the doubled "all" is acceptable — flag for follow-up if it bothers; cheap fix is a special case in the label.)*
+- Helper text reads exactly: **"Exports every order for NSBH, regardless of your current search."** (the "every" special case for the `all` status). When you change the dropdown to, say, "Ready", the text becomes: **"Exports all ready orders for NSBH, regardless of your current search."**
 - The status `<select>` has focus (tab indicator visible)
 - Two buttons: Cancel (outline), Download (accent)
 
@@ -933,28 +948,18 @@ Open the downloaded file. Verify:
 
 Reopen, select "Ready" → Download. Verify filename is `nsbh-orders-ready-<today>.csv` and row count matches the "Ready" Kanban column count.
 
-- [ ] **Step 8: Cross-tenant authorization**
+- [ ] **Step 8: Cross-tenant authorization (positive check)**
 
-Sign out, sign in as an RGSH-only operator (or use a non-admin tenant operator account if available). Navigate to `/admin/nsbh/orders` — should redirect/forbid per existing middleware. Then test the server action directly via devtools console:
+Sign out, then sign in as an RGSH-only operator (a user whose email matches `tenants.shopEmail` for `rgsh` but is not on `PLATFORM_ADMIN_EMAILS`).
 
-```js
-import("/_next/static/chunks/..." /* your bundled actions */)
-// Or, easier: navigate to /admin/rgsh/orders, click Export CSV, watch the network tab.
-// Confirm only RGSH orders appear.
-```
+1. Navigate to `/admin/nsbh/orders` — the existing middleware/layout auth should redirect or 403 before the page renders. Confirm you cannot reach the page.
+2. Navigate to `/admin/rgsh/orders` — should render normally.
+3. Click "Export CSV" → select "All statuses" → Download.
+4. Open the downloaded CSV and verify **every Order ID begins with `RGSH-`** (or whatever the RGSH-side prefix is). No NSBH order IDs anywhere.
 
-For a stronger test, modify the call to forge `tenantId: "nsbh"` from an RGSH session and confirm the server action throws. Use the React DevTools or paste this into the browser console while on `/admin/rgsh/orders`:
+If any NSBH data appears in the RGSH operator's export, **stop and report** — the auth check is broken.
 
-```js
-// Replace exportOrdersCsv with the actual server-action URL/hash seen in Network tab when triggered.
-fetch("/admin/rgsh/orders", {
-  method: "POST",
-  headers: { "next-action": "<action-id-from-network-tab>", "content-type": "application/json" },
-  body: JSON.stringify(["nsbh", "all"]),
-}).then(r => r.text()).then(console.log);
-```
-
-Expected: `Forbidden` error in response. If the action returns NSBH data, **stop and report** — auth is broken.
+(A stronger test — forging a `tenantId: "nsbh"` argument to the server action from an RGSH session — would require fishing the `next-action` ID out of the Network tab and hand-crafting a fetch, which is brittle across Next.js versions. The positive test above is sufficient for manual smoke. An automated repro belongs in a future test suite, out of scope for this PR.)
 
 - [ ] **Step 9: Type check (final)**
 
@@ -1014,7 +1019,37 @@ PR body should include:
 - Spec link: `docs/superpowers/specs/2026-05-15-orders-csv-export-design.md`
 - Plan link: `docs/superpowers/plans/2026-05-15-orders-csv-export.md`
 - Test plan: refer to Task 7 smoke-test checklist
-- Migration note: "0013 adds `tenants.timezone text NOT NULL DEFAULT 'Australia/Sydney'`. Applied to dev via Neon MCP per the drizzle-kit-websocket-blocker workaround. Apply to prod manually before deploy."
+- Migration: explicit prod application steps (see below)
+
+**Prod migration application** — paste this section into the PR body verbatim so the merger knows exactly what to do post-merge, before deploying the Hostinger Node.js app:
+
+```
+Migration 0013_tenant_timezone must be applied to the prod Neon DB before
+deploying this build. The repo uses the standard "manual via Neon MCP"
+pattern (drizzle-kit migrate is not used in this repo).
+
+Steps (via Neon MCP run_sql_transaction against the PROD branch):
+
+1) Apply the schema change:
+
+   ALTER TABLE "tenants" ADD COLUMN "timezone" text DEFAULT 'Australia/Sydney' NOT NULL;
+
+2) Record the migration (use the table_schema confirmed via the dev recon —
+   typically drizzle.__drizzle_migrations):
+
+   INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+   VALUES ('manual_0013_tenant_timezone', extract(epoch from now()) * 1000);
+
+3) Verify:
+
+   SELECT column_name, column_default, is_nullable
+   FROM information_schema.columns
+   WHERE table_name = 'tenants' AND column_name = 'timezone';
+   -- expect: timezone | 'Australia/Sydney'::text | NO
+
+4) Restart the Hostinger Node.js app (hPanel → Advanced → Node.js → Restart)
+   after deploying the new build so the runtime picks up the schema-aware code.
+```
 
 ---
 
@@ -1022,8 +1057,9 @@ PR body should include:
 
 - **Spec coverage:** Each spec section is covered — Schema (Task 1), Data model + items table (Task 3), Server action + auth + Cache-Control (Task 4; note that server actions are POST-only and therefore inherently uncacheable, so no explicit header is needed), Client component + a11y (Task 5), Topbar integration (Task 6), Smoke test incl. cross-tenant auth (Task 7).
 - **Drizzle journal/snapshot:** Task 1 Step 2 uses `drizzle-kit generate` which produces both files automatically, with a hand-write fallback if that fails.
-- **`require()` shim:** Acknowledged inline in Task 4; remove if the local toolchain allows direct top-level import.
-- **Doubled-"all" label nit:** Surfaced in Task 7 Step 3 as a low-priority follow-up rather than blocking the smoke test.
+- **`__drizzle_migrations` table:** Recon Step 4 verifies the table schema (often `drizzle.*`) so Task 1 Step 4's INSERT targets the right place.
+- **Auth field name:** Recon Step 1 confirms `tenants.shopEmail` is the operator-email field used by the existing `admin/[tenant]/layout.tsx` auth check; Task 4 uses the same field.
+- **Items ordering:** `orderLines.id` is a random UUID, so Task 4 sorts by `(itemName, variantLabel, size)` for deterministic export output.
 - **No new env vars, no new dependencies, no PostHog events** — matches spec.
 
 ---
