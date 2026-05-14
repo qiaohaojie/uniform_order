@@ -647,6 +647,14 @@ Adds a collapsible "Size guide (optional)" section to the existing catalog item 
 Spec: `docs/superpowers/specs/2026-05-14-admin-size-guide-editor-design.md`.
 Plan: `docs/superpowers/plans/2026-05-14-admin-size-guide-editor.md`.
 
+### 4.36 `getActiveCatalog` dedup — price-only checkout validation query ✅
+
+**Source:** `remaining_work.md` §4.13 — shipped 2026-05-15 (commit `64c10d7`).
+
+`POST /api/stripe/payment-intent` and `POST /api/orders` were both calling `getActiveCatalog` (full column set across `catalog_items` + `catalog_variants`) solely to build a price-lookup map. Replaced with a new `getCatalogPriceLookup(tenantId)` helper that SELECTs only `(itemId, variantLabel, priceCents)` — a 3-column projection that skips images, descriptions, size guides, and other heavy columns on every checkout request.
+
+**Files:** `apps/web/src/db/queries.ts` (`getCatalogPriceLookup` added), `apps/web/src/app/api/stripe/payment-intent/route.ts`, `apps/web/src/app/api/orders/route.ts`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)

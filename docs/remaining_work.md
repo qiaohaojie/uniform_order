@@ -207,6 +207,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 > - §4.5 — inventory stock counts dropped 2026-05-11 as not a product fit (school shops fulfil from a storeroom; oversells absorbed operationally). PDP §3.2 softened to match. Do not re-raise without an explicit school request.
 > - §4.2 — Dashboard "New product" now links to `/admin/[tenant]/catalog`; "Export" deleted as redundant with the Reports CSV exporter.
 > - §4.7 — Catalog drag-to-reorder shipped 2026-05-14, `completed.md` §4.33 (PR #34).
+> - §4.13 — `getActiveCatalog` dedup shipped 2026-05-15, `completed.md` §4.36 (commit `64c10d7`).
 
 ---
 
