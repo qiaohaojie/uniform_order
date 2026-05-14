@@ -14,6 +14,7 @@ export interface Tenant {
   address: string;
   shopHours: string;
   shopEmail: string;
+  timezone: string;
 }
 
 export const TENANTS: Record<TenantId, Tenant> = {
@@ -27,6 +28,7 @@ export const TENANTS: Record<TenantId, Tenant> = {
     address: "Falcon St, Crows Nest NSW 2065",
     shopHours: "Mon & Thu · 8:15am – 1:30pm",
     shopEmail: "uniformshop@nsbh.nsw.edu.au",
+    timezone: "Australia/Sydney",
   },
   rgsh: {
     id: "rgsh",
@@ -38,6 +40,7 @@ export const TENANTS: Record<TenantId, Tenant> = {
     address: "Huntleys Point Rd, Huntleys Point NSW 2111",
     shopHours: "Tue & Fri · 8:00am – 1:00pm",
     shopEmail: "uniformshop@rghs.nsw.edu.au",
+    timezone: "Australia/Sydney",
   },
 };
 
