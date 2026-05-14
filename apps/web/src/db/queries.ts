@@ -2,7 +2,7 @@ import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRe
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { cache } from "react";
-import type { CatalogItem, Tenant } from "@/lib/data";
+import type { CatalogItem, SizeGuide, Tenant } from "@/lib/data";
 
 export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
 
@@ -532,6 +532,7 @@ export async function addCatalogItem(data: {
   category: string;
   description?: string | null;
   imageUrl?: string | null;
+  sizeGuide?: SizeGuide | null;
   active?: boolean;
   sortOrder?: number;
   variants: { label: string; price: number; active?: boolean; sizes?: string[] }[];
@@ -545,6 +546,7 @@ export async function addCatalogItem(data: {
     category: data.category,
     description: data.description ?? null,
     imageUrl: data.imageUrl ?? null,
+    sizeGuide: data.sizeGuide ?? null,
     active: data.active ?? true,
     sortOrder: data.sortOrder ?? 0,
   });
@@ -582,6 +584,7 @@ export async function updateCatalogItem(
     category?: string;
     description?: string | null;
     imageUrl?: string | null;
+    sizeGuide?: SizeGuide | null;
     active?: boolean;
     sortOrder?: number;
   },
@@ -603,6 +606,7 @@ export async function updateCatalogItem(
   if (fields.category !== undefined) updates.category = fields.category;
   if (fields.description !== undefined) updates.description = fields.description;
   if (fields.imageUrl !== undefined) updates.imageUrl = fields.imageUrl;
+  if (fields.sizeGuide !== undefined) updates.sizeGuide = fields.sizeGuide;
   if (fields.active !== undefined) updates.active = fields.active;
   if (fields.sortOrder !== undefined) updates.sortOrder = fields.sortOrder;
 

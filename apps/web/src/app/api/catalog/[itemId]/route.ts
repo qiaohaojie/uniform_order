@@ -83,6 +83,21 @@ export async function PATCH(
         changedFields.push(f);
       }
     }
+    if (fields.sizeGuide !== undefined) {
+      // Normalize key order before comparing: PostgreSQL jsonb returns keys alphabetically
+      // ({cols, rows, unit}) while the client sends {unit, cols, rows}. Comparing raw
+      // JSON.stringify strings without normalization always fires, even on no-op saves.
+      // Shallow normalization is sufficient: cols/rows are arrays whose element order
+      // is preserved by jsonb, so only the top-level key order needs fixing.
+      const normalizeGuide = (g: unknown) => {
+        if (!g) return null;
+        const { unit, cols, rows } = g as { unit: string; cols: string[]; rows: string[][] };
+        return { unit, cols, rows };
+      };
+      const existingJson = JSON.stringify(normalizeGuide(item.sizeGuide ?? null));
+      const incomingJson = JSON.stringify(normalizeGuide(fields.sizeGuide ?? null));
+      if (existingJson !== incomingJson) changedFields.push("sizeGuide");
+    }
     if (variants !== undefined) {
       const existingVariantKey = item.variants
         .map((v) => `${v.id}|${v.label}|${String(v.price)}|${v.active}|${[...(v.sizes ?? [])].sort().join(";")}`)
