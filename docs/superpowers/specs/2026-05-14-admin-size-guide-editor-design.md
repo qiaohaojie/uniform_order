@@ -48,7 +48,7 @@ A collapsible `<section>` titled **"Size guide (optional)"** is rendered inside 
 1. **Unit** — single `<input type="text">`, default value `"cm"`. Free-text per spec answer.
 2. **Columns** — single `<input type="text">` (comma-separated), e.g. `Size, Chest, Length`. Parsed on blur to drive the editable grid.
 3. **Rows grid** — an HTML `<table>` where each row is one size and each cell is an `<input type="text">`. Header row reflects the parsed columns. One **trash** icon per row. **"+ Add row"** button below the table inserts a new row of empty cells (length = current column count).
-4. **Remove size guide** — destructive link/button below the editor that clears all three fields and stages a `null` save.
+4. **Remove size guide** — destructive link/button below the editor that clears all three fields locally. The `null` is committed only when the operator clicks the drawer's main **Save** button (same flow as variant edits — no auto-save side effect).
 
 ### Column / row sync rule
 When the columns input loses focus (or the user types), the row grid auto-resizes:
@@ -111,6 +111,13 @@ if (fields.sizeGuide !== undefined) {
 
 The `updateCatalogItem` call (`await updateCatalogItem(itemId, fields, variants)`) already destructures `fields` from `input`, so `fields.sizeGuide` flows through once the schema accepts it — no change to that call site.
 
+**`null` vs `undefined` contract.** The schema declares `sizeGuide` as `.nullable().optional()`, so Zod accepts both. The semantics downstream are:
+- `undefined` → key not present in patch → no diff entry, query layer skips the column.
+- `null` → operator removed the guide → diff fires (if previous was non-null), query layer writes `NULL`.
+- object → operator edited the guide → JSON-compare against existing.
+
+Both the PATCH diff branch above and `updateCatalogItem`'s `if (fields.sizeGuide !== undefined)` guard rely on this distinction; treating `null` as "untouched" would silently swallow removals.
+
 The audit-log `payload: { changedFields }` block is unchanged; `sizeGuide` rides through the existing array.
 
 ## 6. Client form state
@@ -128,7 +135,7 @@ type SizeGuideForm = {
 Helpers (local to the drawer, no exports):
 - `parseCols(raw: string): string[]` — split on `,`, trim, drop empty entries.
 - `syncRows(rows, newColCount)` — pad with `""` or truncate.
-- `toPayload(form): SizeGuide | null` — return `null` when `cols.length === 0 || rows.length === 0`; otherwise `{ unit: form.unit || "cm", cols, rows }`.
+- `toPayload(form): SizeGuide | null` — return `null` when `cols.length === 0 || rows.length === 0`; otherwise `{ unit: form.unit.trim() || "cm", cols, rows }`. Trim **before** the OR fallback — `z.string().trim().min(1)` upstream would otherwise reject a `"   "` value with a confusing 400.
 
 Initial state from `initial.sizeGuide` (new optional field on `ItemDrawerInitial`): pre-fill `unit`, join `cols` back into `colsRaw`, copy `rows` directly.
 
@@ -154,6 +161,7 @@ No new files, no migration, no PDP read-path change.
 - **Drizzle-kit migrations:** none. The column exists; no migration to apply via the Neon-MCP workaround.
 - **Backward compatibility:** existing static `lib/data.ts` guides keep rendering until those tenants are re-seeded against the DB — no regression.
 - **Audit-log noise:** PATCH-route no-op short-circuit already covers identical resaves; size-guide diff joins that envelope.
+- **Audit granularity (known gap):** `changedFields: ["sizeGuide"]` tells the reader the guide changed but not *what* changed (added a row, edited a cell, swapped units). Acceptable for v1; revisit if operators ask for it. Richer diff would need a before/after snapshot in the audit payload — defer until requested.
 
 ## 10. Verification
 
@@ -165,3 +173,5 @@ No new files, no migration, no PDP read-path change.
    - Remove all rows → Save → PDP no longer renders size-guide block.
    - Create a brand-new item with a guide → Save → PDP renders correctly.
 3. Audit-log spot-check: `audit_events` row with `action='catalog_item.updated'` includes `sizeGuide` in `payload.changedFields` after a guide-only edit.
+4. PATCH no-op short-circuit: open an item, save the drawer with no edits, save again. Verify **no new** `catalog_item.updated` audit row appears for either save. (Regression guard for the JSON.stringify diff — reference-inequality on jsonb would silently break this.)
+5. Drive-by: while in `db/schema.ts`, fix the stale comment on the `sizeGuide` column (`// array of {label, chest, waist, hip}` → `// { unit: string; cols: string[]; rows: string[][] } | null`).
