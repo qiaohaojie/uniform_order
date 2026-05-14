@@ -92,6 +92,13 @@
       "when": 1778603321296,
       "tag": "0012_catalog_variants_sizes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1747267200000,
+      "tag": "0013_tenant_timezone",
+      "breakpoints": true
     }
   ]
 }

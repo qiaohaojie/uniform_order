@@ -74,6 +74,7 @@ export const tenants = pgTable("tenants", {
   address: text("address"),
   shopHours: text("shop_hours"),
   shopEmail: text("shop_email"),
+  timezone: text("timezone").notNull().default("Australia/Sydney"),
   collectionInstructions: text("collection_instructions"),
   // Marketplace visibility
   isPubliclyListed: boolean("is_publicly_listed").notNull().default(false),
