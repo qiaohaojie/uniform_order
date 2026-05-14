@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
-import { getActiveCatalog, getTenant } from "@/db/queries";
+import { getCatalogPriceLookup, getTenant } from "@/db/queries";
 import {
   assertTotalsMatch,
   TotalsMismatchError,
-  priceLookupKey,
 } from "@/lib/order-totals";
 
 // TODO(refunds): When a refund route is added (e.g. POST /api/stripe/refund),
@@ -65,13 +64,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Build catalog price lookup and assert server-authoritative totals.
-    const catalog = await getActiveCatalog(tenantId);
-    const priceLookup = new Map<string, number>();
-    for (const item of catalog) {
-      for (const v of item.variants) {
-        priceLookup.set(priceLookupKey(item.id, v.label), v.price);
-      }
-    }
+    const priceLookup = await getCatalogPriceLookup(tenantId);
 
     let verified;
     try {

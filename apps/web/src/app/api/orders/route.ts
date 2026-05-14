@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines, tenants } from "@/db";
 import {
-  getActiveCatalog,
+  getCatalogPriceLookup,
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
   getTenant,
@@ -257,13 +257,7 @@ export async function POST(req: NextRequest) {
     // Per-line price snapshot: prefer the live catalog when the variant still
     // exists (keeps receipts in sync with the shop), fall back to the client
     // value otherwise. Either way the total is locked by Stripe above.
-    const catalog = await getActiveCatalog(tenantId);
-    const priceLookup = new Map<string, number>();
-    for (const item of catalog) {
-      for (const v of item.variants) {
-        priceLookup.set(priceLookupKey(item.id, v.label), v.price);
-      }
-    }
+    const priceLookup = await getCatalogPriceLookup(tenantId);
 
     let normalizedParentNote: string | null = null;
     if (typeof parentNote === "string") {

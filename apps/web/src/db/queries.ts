@@ -940,6 +940,36 @@ export const getActiveCatalog = cache(async (tenantId: string): Promise<CatalogI
 });
 
 /**
+ * Minimal price lookup for checkout validation.
+ * Returns Map<"itemId::variantLabel", priceAUD> — same key format as priceLookupKey().
+ * Used by /api/stripe/payment-intent and /api/orders instead of getActiveCatalog
+ * so those routes don't pay for the full 10-column CatalogItem projection.
+ */
+export const getCatalogPriceLookup = cache(async (tenantId: string): Promise<Map<string, number>> => {
+  const rows = await db
+    .select({
+      itemId: catalogItems.id,
+      varLabel: catalogVariants.label,
+      varPrice: catalogVariants.price,
+    })
+    .from(catalogItems)
+    .innerJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
+    .where(
+      and(
+        eq(catalogItems.tenantId, tenantId),
+        eq(catalogItems.active, true),
+        eq(catalogVariants.active, true),
+      ),
+    );
+
+  const lookup = new Map<string, number>();
+  for (const r of rows) {
+    lookup.set(`${r.itemId}::${r.varLabel}`, Number(r.varPrice));
+  }
+  return lookup;
+});
+
+/**
  * Single catalog item in the parent UI's `CatalogItem` shape, or null if
  * not found / inactive. Re-uses getActiveCatalog for request-scoped dedup.
  */

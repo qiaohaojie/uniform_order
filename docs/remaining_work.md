@@ -198,7 +198,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
 | 4.12 | Catalog search — chips remain highlighted during active query (visual disconnect) — issue #27 | §3.11 follow-up |
-| 4.13 | `getActiveCatalog` fetched twice per checkout (PI route + order route) — fine at ~60 SKUs; consider a small `SELECT itemId, label, price FROM catalog_variants WHERE tenantId = ?` price-only query, or `revalidateTag` caching, when catalog growth or latency makes it measurable | PR #29 review |
+| ~~4.13~~ | ~~`getActiveCatalog` fetched twice per checkout~~ — ✅ fixed: `getCatalogPriceLookup` (3-col query) replaces full catalog fetch in both routes | shipped 2026-05-15 |
 
 > Closed §4 IDs (preserved for cross-reference, no renumbering):
 > - §4.1 / §4.9 / §4.10 / §4.11 — shipped, see `completed.md` §4.6–§4.10.
