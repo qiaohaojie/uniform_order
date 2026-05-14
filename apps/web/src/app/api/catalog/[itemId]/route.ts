@@ -83,6 +83,11 @@ export async function PATCH(
         changedFields.push(f);
       }
     }
+    if (fields.sizeGuide !== undefined) {
+      const existingJson = JSON.stringify(item.sizeGuide ?? null);
+      const incomingJson = JSON.stringify(fields.sizeGuide ?? null);
+      if (existingJson !== incomingJson) changedFields.push("sizeGuide");
+    }
     if (variants !== undefined) {
       const existingVariantKey = item.variants
         .map((v) => `${v.id}|${v.label}|${String(v.price)}|${v.active}|${[...(v.sizes ?? [])].sort().join(";")}`)
