@@ -629,6 +629,24 @@ Migrated the auth UI from the bundled `@neondatabase/auth/react/ui` subpath to t
 
 **Files:** `apps/web/src/app/auth/[[...path]]/page-client.tsx`, `apps/web/package.json`, `pnpm-lock.yaml`.
 
+### 4.35 Admin size-guide editor ✅
+
+**Source:** `remaining_work.md` §3.12 (gap-analysis §5.12) — shipped 2026-05-14 on branch `feat/admin-size-guide-editor` (6 feature commits + 1 bugfix).
+
+Adds a collapsible "Size guide (optional)" section to the existing catalog item drawer, backed by the pre-existing `catalog_items.size_guide jsonb` column (no migration). Operators can set free-text unit, comma-separated column headers, and an editable row grid; saving writes through `POST /api/catalog` and `PATCH /api/catalog/[itemId]`. PDP read path unchanged.
+
+**Key implementation points:**
+- `sizeGuideSchema` (Zod, with `refine` row-width check) threaded into `catalogItemInputSchema` + `catalogItemPatchSchema`.
+- `addCatalogItem` / `updateCatalogItem` extended; `SizeGuide` type imported from `lib/data`.
+- PATCH diff uses `JSON.stringify` with **key-order normalization** (PostgreSQL jsonb alphabetizes keys; omitting the normalization caused every save to be a false positive — caught and fixed in smoke, commit `f81c1a4`).
+- `initialFromItem` in `catalog-table.tsx` surfaces `sizeGuide` for edit-mode pre-fill.
+- Audit log reuses `catalog_item.updated` with `changedFields: ["sizeGuide"]` — no new event type.
+
+**Files:** `lib/schemas/catalog.ts`, `db/queries.ts`, `db/schema.ts` (comment fix), `api/catalog/route.ts`, `api/catalog/[itemId]/route.ts`, `admin/[tenant]/catalog/item-drawer.tsx`, `admin/[tenant]/catalog/catalog-table.tsx`.
+
+Spec: `docs/superpowers/specs/2026-05-14-admin-size-guide-editor-design.md`.
+Plan: `docs/superpowers/plans/2026-05-14-admin-size-guide-editor.md`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
@@ -637,4 +655,4 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions, Apple Pay domain verification (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); admin drag-to-reorder + size-guide editor, catalog collections, magic-link login, account deletion/export (§3.12).
+- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); catalog collections, magic-link login, account deletion/export (§3.12).
