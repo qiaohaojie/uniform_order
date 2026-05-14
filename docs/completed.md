@@ -631,7 +631,7 @@ Migrated the auth UI from the bundled `@neondatabase/auth/react/ui` subpath to t
 
 ### 4.35 Admin size-guide editor ✅
 
-**Source:** `remaining_work.md` §3.12 (gap-analysis §5.12) — shipped 2026-05-14 on branch `feat/admin-size-guide-editor` (6 feature commits + 1 bugfix).
+**Source:** `remaining_work.md` §3.12 (gap-analysis §5.12) — shipped 2026-05-14 via PR #36 (squash `e7d5840`).
 
 Adds a collapsible "Size guide (optional)" section to the existing catalog item drawer, backed by the pre-existing `catalog_items.size_guide jsonb` column (no migration). Operators can set free-text unit, comma-separated column headers, and an editable row grid; saving writes through `POST /api/catalog` and `PATCH /api/catalog/[itemId]`. PDP read path unchanged.
 
@@ -655,4 +655,4 @@ The most material categories of open work, all tracked in `docs/remaining_work.m
 
 - **Production ops** — live Stripe keys, prod DB URL, Hostinger env, PostHog verification, Stripe webhook event subscriptions, Apple Pay domain verification (§2.8); UploadThing token + CSP + prod image smoke (§2.9); parent-account E2E on staging for both magic-link and Google (§2.11); prod NSBH catalog seed + RGSH catalog content (§2.12).
 - **Content** — refund-policy copy signed off per school (§3.2); GST report auditor sign-off (§3.6).
-- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog drag-to-reorder (§4.7); catalog collections, magic-link login, account deletion/export (§3.12).
+- **Post-launch** — bulk "Email parents" real send (§4.3); i18n scaffolding (§4.4); catalog collections, magic-link login, account deletion/export (§3.12).

@@ -177,13 +177,9 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 
 - [x] **PDP photo support — read `item.imageUrl` + UploadThing in admin drawer (gap-analysis §5.13).** ✅ shipped (PR #31, squash `10a50c0`). See `completed.md` §4.30.
 
-- [ ] **`catalog_collections` table + Year-7 starter curation (gap-analysis §5.14).** Both UO and the competition use a single-axis taxonomy. The single largest order moment of the year (Year-7 enrolment) goes through 8 separate add-to-carts.
-  - Phase 1 (this item): add `catalog_collections` (`id, tenantId, slug, name, kind: 'featured'|'year'|'sport'|'custom', sortOrder, isVisible`) + `catalog_item_collections` join table.
-  - Keep the existing `category` enum (`Summer/Winter/Sports/Formal/Bags/Stationery`) as the default browse axis for back-compat — don't dilute it.
-  - Render an optional "Featured" row above the category chips on `app/[tenant]/page.tsx` when the tenant has visible collections.
-  - Seed NSBH + RGSH with a "Year 7 starter" curated collection.
-  - Phase 2 (real bundles with single Add-all-to-cart via `catalog_bundles` table) tracked separately — large, defer until phase-1 ships and a school asks.
-  - ~2–3d.
+- [ ] **`catalog_collections` table + Year-7 starter curation (gap-analysis §5.14).** ⏸ **Deferred — backlog, not active.** Reasoning (2026-05-15): Phase 1 alone is just a curated row — it doesn't fix the "8 add-to-carts" pain (parents still tap each item, pick a size). The real conversion win is Phase 2 ("Add all to cart") which needs per-child size profiles and is much larger. Parents already arrive with a paper Year-7 list from the school enrolment pack; on a 25-item catalog with working search + category chips this isn't an active friction point. Admin maintenance burden is real and recurring — schools aren't Shopify merchants and a drifted collection is worse than no collection. The gap-analysis flagged this because the NSBH Shopify store has a "Most Frequently Bought" row (auto-generated from sales data, not a curated kit) — not because parents complained. **Revisit triggers:** a school explicitly asks for it; or post-launch PostHog data shows Year-7 sessions abandoning between categories; or we have appetite for Phase-2 bundles with size-profile UX.
+  - Original Phase 1 plan: add `catalog_collections` (`id, tenantId, slug, name, kind: 'featured'|'year'|'sport'|'custom', sortOrder, isVisible`) + `catalog_item_collections` join table. Render an optional "Featured" row above the category chips on `app/[tenant]/page.tsx`. Seed NSBH + RGSH with a "Year 7 starter" curated collection. ~2–3d.
+  - Phase 2 (real bundles with single Add-all-to-cart via `catalog_bundles` table) — large, deferred indefinitely.
 
 - [x] **Per-tenant homepage option (gap-analysis §5.17).** ✅ shipped (4 commits: cookie helper, `getPopularItems` query, `LandingScreen` component, `page.tsx` cookie branch). Cookie-gated landing on `/<tenant>` first visit — crest, motto, shop hours card, popular items grid (last 90 days), Browse Catalogue CTA (`router.refresh()`). 30-day `uo:visited:{slug}` cookie. Returning visitors go straight to catalogue unchanged.
 
@@ -191,7 +187,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 
 - [ ] **OTP / magic-link login option (gap-analysis §5.16).** Aligns with the stated auth direction (magic-link + Google sign-in). **Investigation complete (PR #35, 2026-05-14):** Magic Link is **not yet supported** in `@neondatabase/auth@0.3.0-beta` — `magicLinkClient` was explicitly removed from the supported plugin list and `NeonAuthUIProvider` hardcodes `magicLink: false`. Neon Auth roadmap lists it as 🔜 Coming Soon; the upstream fix is tracked at neondatabase/neon-js#58 (open). Revisit once both `@neondatabase/auth` and `@neondatabase/auth-ui` ship releases with magic-link support. Email OTP (`emailOTPClient`) IS in the supported plugin list and may be a viable interim option — not yet wired. ~½d once unblocked.
 
-- [ ] **Account deletion + data export — APP-12 compliance (gap-analysis §5.19).** Within 90 days of launch. Add `/account` page with a "Danger zone" card: confirm-typed-email modal calls a Neon Auth deletion endpoint, then anonymises `orders.parentEmail` / `parentName` to `redacted-{hash}@uniformorder.online` (orders must remain for tax + refund traceability). `parent_children` cascades via existing FK. Data export: email a JSON of the parent's `parent_children` + `orders` on request. ~1d.
+- [ ] **Account deletion + data export — APP-12 compliance (gap-analysis §5.19).** ⏸ **Deferred — backlog, not active.** Will not proceed until a school or legal review explicitly flags it. Within 90 days of launch if required. Add `/account` page with a "Danger zone" card: confirm-typed-email modal calls a Neon Auth deletion endpoint, then anonymises `orders.parentEmail` / `parentName` to `redacted-{hash}@uniformorder.online` (orders must remain for tax + refund traceability). `parent_children` cascades via existing FK. Data export: email a JSON of the parent's `parent_children` + `orders` on request. ~1d.
 
 ---
 
@@ -201,7 +197,6 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 |---|---|---|
 | 4.3 | Bulk operator "Email parents" with real send (currently `mailto:`) | Orders board |
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
-| 4.7 | Catalog sortable / drag-to-reorder | Prototype only |
 | 4.12 | Catalog search — chips remain highlighted during active query (visual disconnect) — issue #27 | §3.11 follow-up |
 | 4.13 | `getActiveCatalog` fetched twice per checkout (PI route + order route) — fine at ~60 SKUs; consider a small `SELECT itemId, label, price FROM catalog_variants WHERE tenantId = ?` price-only query, or `revalidateTag` caching, when catalog growth or latency makes it measurable | PR #29 review |
 
@@ -211,6 +206,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 > - §4.8 — Drizzle migrations were already file-tracked; original audit entry was incorrect.
 > - §4.5 — inventory stock counts dropped 2026-05-11 as not a product fit (school shops fulfil from a storeroom; oversells absorbed operationally). PDP §3.2 softened to match. Do not re-raise without an explicit school request.
 > - §4.2 — Dashboard "New product" now links to `/admin/[tenant]/catalog`; "Export" deleted as redundant with the Reports CSV exporter.
+> - §4.7 — Catalog drag-to-reorder shipped 2026-05-14, `completed.md` §4.33 (PR #34).
 
 ---
 
