@@ -43,15 +43,22 @@ Clicking the button opens a small popover positioned below it (absolutely positi
 3. A primary "Download" button (accent-coloured)
 
 On Download:
-- Calls the `exportOrdersCsv` server action
-- Builds a CSV blob client-side (RFC 4180 escaping)
-- Triggers a browser download
-- Closes the popover
+- Calls the `exportOrdersCsv` server action, which returns the **fully-serialized CSV string** (escape + BOM + timezone formatting all done server-side — single source of truth)
+- Client wraps the string in a `Blob` and triggers download
+- Closes the popover, returns focus to the trigger button
 
 The "Email parents" `mailto:` button is unchanged.
 
+### Accessibility
+
+Popover follows the standard dialog/disclosure pattern:
+- Trigger button: `aria-haspopup="dialog"`, `aria-expanded` toggles with state
+- On open: focus the status `<select>`
+- On close (click-outside, Escape, or Download completion): return focus to the trigger button
+- Focus is trapped inside the popover while open (Tab loops between select and Download)
+
 ### Filename
-`<tenant-slug>-orders-<status>-<YYYY-MM-DD>.csv` — e.g. `nsbh-orders-ready-2026-05-15.csv`. `all` is used for the "All statuses" case.
+`<tenant-slug>-orders-<status>-<YYYY-MM-DD>.csv` — e.g. `nsbh-orders-ready-2026-05-15.csv`. `all` is used for the "All statuses" case. Status enum values are already stored lowercase in the DB (`new`, `packing`, `ready`, `collected`, `partially_refunded`, `refunded`) — no transformation needed.
 
 ---
 
@@ -69,11 +76,23 @@ The "Email parents" `mailto:` button is unchanged.
 | Parent Mobile | `orders.parentMobile` | text |
 | Student Name | `orders.studentName` | text |
 | Student Year | `orders.studentYear` | text |
-| Total | `orders.total` | `$27.50` (dollar-formatted) |
-| Items | derived from `order_lines` | semicolon-joined: `School Shirt (Navy / S) ×2; Shorts (Grey / 10) ×1` |
+| Total | `orders.total` | `$27.50` — column is `numeric(10, 2)`, stored as dollars (e.g. `"27.50"`), no cents conversion |
+| Items | derived from `order_lines` | semicolon-joined per the items table below |
+
+### Date formatting
+Use `new Intl.DateTimeFormat("en-AU", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: tenant.timezone })`. Locale is pinned to `en-AU` so the format doesn't drift if the Node runtime's default locale changes on Hostinger.
 
 ### Items string assembly
-For each order, join its `order_lines` rows as `"{itemName} ({variantLabel}{ / size if present}) ×{qty}"` with `"; "` separator. Assembled in JS after the query — not in SQL.
+For each order, join its `order_lines` rows with `"; "` separator. Per-line format depends on which fields are populated:
+
+| `variantLabel` | `size` | Output |
+|---|---|---|
+| present | present | `{itemName} ({variantLabel} / {size}) ×{qty}` |
+| present | absent | `{itemName} ({variantLabel}) ×{qty}` |
+| absent / empty | present | `{itemName} ({size}) ×{qty}` |
+| absent / empty | absent | `{itemName} ×{qty}` |
+
+`absent / empty` means `null`, `undefined`, or empty string after trim. Assembled in JS after the query — not in SQL. Line order within an order follows the `order_lines.id` insertion order (stable across exports).
 
 ### Query strategy
 Two queries to avoid N+1:
@@ -104,9 +123,9 @@ The CSV export reads this column. The existing Sydney-hardcoded date utils (repo
 
 ### New files
 
-1. **`apps/web/src/app/admin/[tenant]/orders/actions.ts`** — server action `exportOrdersCsv(tenantId, status)`. Authorization: `requireSessionUser` + platform-admin-or-this-tenant's-operator email check (mirrors patterns in `app/platform/tenants/[id]/actions.ts`).
+1. **`apps/web/src/app/admin/[tenant]/orders/actions.ts`** — server action `exportOrdersCsv(tenantId, status): Promise<string>`. Returns the fully-serialized CSV string (escape + BOM + dates already applied). Authorization: `requireSessionUser` + an OR check of `isPlatformAdminEmail(user.email)` against the tenant's operator email — mirrors the exemplar in `apps/web/src/app/admin/[tenant]/layout.tsx`, which is the canonical tenant-scoped-access pattern. (The platform admin actions in `app/platform/tenants/[id]/actions.ts` are platform-only and the wrong exemplar here.)
 
-2. **`apps/web/src/components/export-orders-button.tsx`** — `"use client"`. Renders the button + popover. Owns the popover open/close state, the status select state, click-outside and Escape handling, the server-action call, and CSV blob construction.
+2. **`apps/web/src/components/export-orders-button.tsx`** — `"use client"`. Renders the button + popover. Owns the popover open/close state, the status select state, click-outside and Escape handling, focus management (see Accessibility), and the call to the server action. **Does not serialize CSV** — it receives a fully-formed string and wraps it in a `Blob`. This is intentionally not a refactor of the existing `components/export-csv-button.tsx`, which retains its current (looser) CSV format on the Reports page. Hardening that file is a separate optional follow-up.
 
 ### Modified files
 
@@ -116,18 +135,26 @@ The CSV export reads this column. The existing Sydney-hardcoded date utils (repo
 4. **`apps/web/src/db/queries.ts`** — `getTenant` already returns the full row, so `timezone` flows through automatically; verify `toTenantBrand` includes it (add if absent).
 
 ### Authorization
-The server action must reject:
+The server action derives the caller's identity from the session (`requireSessionUser`) and validates the `tenantId` parameter against that identity. The client-supplied `tenantId` is **never trusted blindly** — it is checked, not echoed.
+
+The action must reject:
 - Unauthenticated requests → throws / returns 401-equivalent error
 - Authenticated users who are not platform admin and not an operator of the requested `tenantId` → throws / returns 403-equivalent error
 
 Implementation reuses `isPlatformAdminEmail` and the tenant-operator check from `lib/auth/authorization.ts`.
 
-### CSV escaping (RFC 4180)
-Client-side serializer:
+### Response handling (privacy)
+Server action must set `Cache-Control: no-store` (or equivalent in the Next.js server-action response shape) so the CSV — which contains every parent's email, mobile, and child's name — is never cached by intermediaries or the browser disk cache.
+
+### CSV escaping (RFC 4180) — server-side
+Server-side serializer (single source of truth):
 - Each field wrapped in `"..."` if it contains `,`, `"`, `\n`, or `\r` — otherwise output bare
 - Embedded `"` doubled to `""`
 - Rows joined with `\r\n` (Excel-friendly)
 - UTF-8 BOM prepended so Excel opens it with correct encoding
+
+### Scale
+Designed for single-school exports of up to ~10,000 orders (covers ~3 years of typical NSBH/RGSH history). Two queries + JS assembly is fine in that range. Beyond ~10k rows, switch to a streaming response (read orders in pages, stream CSV chunks). Not in scope for this PR — flag in code as a comment near the assembly loop.
 
 ---
 
@@ -150,7 +177,7 @@ Client-side serializer:
 6. Log in as an RGSH operator → confirm only RGSH orders appear in their export, never NSBH
 
 ### Authorization test
-With NSBH operator credentials, call the server action with `tenantId: "rgsh"` (forge the parameter) → must throw / 403. Document in the smoke test or write a quick curl/devtools repro.
+With NSBH operator credentials, invoke the server action with a forged `tenantId: "rgsh"` parameter (e.g. via devtools console calling the server action directly) → must throw / 403. The action derives the caller's session and validates that the caller has access to the requested `tenantId`; a forged value must be rejected before any query runs.
 
 ### Edge cases
 - Zero orders for the selected status → empty CSV with just the header row, still downloadable
@@ -161,16 +188,21 @@ With NSBH operator credentials, call the server action with `tenantId: "rgsh"` (
 
 ## Rollout
 
-1. Apply migration via Neon MCP `run_sql_transaction`, insert `__drizzle_migrations` row.
-2. Update Drizzle schema, run `pnpm check-types:web`.
-3. Implement server action, component, and topbar insertion.
-4. Smoke test in dev.
-5. Open PR.
+1. Apply migration SQL via Neon MCP `run_sql_transaction`.
+2. Insert a `__drizzle_migrations` row matching the new migration file.
+3. **Update `apps/web/drizzle/meta/_journal.json`** to include the new migration entry, and **create the corresponding `apps/web/drizzle/meta/<n>_snapshot.json`** snapshot file. Without this, the next `drizzle-kit generate` will diff against an out-of-sync state and produce a phantom migration.
+4. Update Drizzle schema (`db/schema.ts`) — add `timezone` field to the `tenants` table.
+5. Run `pnpm check-types:web` and confirm clean.
+6. Implement server action, component, and topbar insertion.
+7. Smoke test in dev.
+8. Open PR.
 
 No new env vars. No third-party dependencies. No PostHog event (admin-internal action).
 
 ## Out of scope (tracked separately)
 
 - Refactoring `sydneyDateParts`, `sydneyLocalDateToUtc`, `addSydneyMonths` etc. to use `tenant.timezone` — the reports page and dashboard remain Sydney-only until that follow-up lands. Acceptable today since NSBH and RGSH are both NSW.
+- Hardening the existing `components/export-csv-button.tsx` (used by the Reports page) with RFC 4180 escaping and UTF-8 BOM — its format remains as-is. Optional follow-up.
 - Date range filter on the export (e.g. "orders placed in the last 30 days") — add later if requested.
 - Audit-log entry per export — admin-internal, low risk; can be wired into the existing operator audit log in a small follow-up if desired.
+- Streaming response for tenants with >10k orders — flag as a code comment near the assembly loop; revisit if any tenant approaches that threshold.
