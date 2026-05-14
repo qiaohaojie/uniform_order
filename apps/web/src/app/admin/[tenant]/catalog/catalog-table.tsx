@@ -75,6 +75,7 @@ export function CatalogTable({
     imageUrl: it.imageUrl ?? undefined,
     active: it.active,
     sortOrder: it.sortOrder,
+    sizeGuide: (it.sizeGuide as { unit: string; cols: string[]; rows: string[][] } | null) ?? null,
     variants: it.variants.map((v) => ({
       id: v.id,
       label: v.label,
