@@ -102,7 +102,7 @@ export const catalogItems = pgTable("catalog_items", {
   category: text("category").notNull(), // "Winter" | "Summer" | "Sports" | "Formal" | "Bags" | "Stationery"
   description: text("description"),
   imageUrl: text("image_url"),
-  sizeGuide: jsonb("size_guide"), // array of {label, chest, waist, hip}
+  sizeGuide: jsonb("size_guide"), // { unit: string; cols: string[]; rows: string[][] } | null
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
