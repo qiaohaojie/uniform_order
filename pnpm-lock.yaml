@@ -41,6 +41,9 @@ importers:
       '@neondatabase/auth':
         specifier: 0.3.0-beta
         version: 0.3.0-beta(a494993e2e77aa203ca2d7bf0abe3a62)
+      '@neondatabase/auth-ui':
+        specifier: 0.2.0-beta
+        version: 0.2.0-beta(33386455b16518fcd4055647d83c7d7a)
       '@neondatabase/serverless':
         specifier: ^1.1.0
         version: 1.1.0
@@ -87,7 +90,7 @@ importers:
         specifier: ^5.33.3
         version: 5.33.3
       react:
-        specifier: link:@neondatabase/auth/react
+        specifier: ^19.2.5
         version: 19.2.5
       react-aria-components:
         specifier: ^1.17.0
