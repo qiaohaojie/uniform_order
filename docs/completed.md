@@ -615,6 +615,20 @@ Dense renumber `0..N-1` on every drop — sparse spacing rejected as YAGNI at �
 Spec: `docs/superpowers/specs/2026-05-13-catalog-drag-reorder-design.md`.
 Plan: `docs/superpowers/plans/2026-05-14-catalog-drag-reorder.md`.
 
+### 4.34 Neon Auth UI migration — `@neondatabase/auth-ui` ✅
+
+**Source:** `remaining_work.md` §3.12 (OTP/magic-link investigation) + auth stack modernisation — shipped 2026-05-14 via PR #35 (squash `2e68584`).
+
+Migrated the auth UI from the bundled `@neondatabase/auth/react/ui` subpath to the standalone `@neondatabase/auth-ui@0.2.0-beta` package. Removes the `react: link:@neondatabase/auth/react` peer-dep shim and restores React to a standard `^19.2.5` direct dep.
+
+**Changes:**
+- `apps/web/src/app/auth/[[...path]]/page-client.tsx` rewritten: imports `NeonAuthUIProvider` + `AuthView` from `@neondatabase/auth-ui`; wires `useRouter().push/replace`, `next/link`, and `onSessionChange={router.refresh}` so auth navigation stays in-app (no full-page reloads). `clearActiveChildCookieClient` side-effect preserved via existing `useEffect`.
+- `apps/web/package.json`: `@neondatabase/auth-ui@0.2.0-beta` added; react link shim removed.
+
+**Magic Link investigation (definitive):** `NeonAuthUIProvider` hardcodes `magicLink: false` after the props spread regardless of the `magicLink` prop or client plugin registration. `@neondatabase/auth@0.3.0-beta` explicitly excludes `magicLinkClient` from its supported plugin list. Neon Auth roadmap lists Magic Link as 🔜 Coming Soon; upstream fix tracked at neondatabase/neon-js#58 (open as of 2026-05-14). Defer to `remaining_work.md` §3.12.
+
+**Files:** `apps/web/src/app/auth/[[...path]]/page-client.tsx`, `apps/web/package.json`, `pnpm-lock.yaml`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)
