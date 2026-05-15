@@ -21,7 +21,7 @@ function AdminIcon({ kind, size = 16, color = "currentColor" }: { kind: string; 
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "home" },
-  { id: "orders", label: "Orders", icon: "orders", badge: "7 new" },
+  { id: "orders", label: "Orders", icon: "orders" },
   { id: "catalog", label: "Catalog", icon: "catalog" },
   { id: "upload", label: "Bulk upload", icon: "upload" },
   { id: "reports", label: "Reports", icon: "chart" },
@@ -35,12 +35,14 @@ export function AdminShell({
   tenant,
   userName,
   userEmail,
+  newOrderCount,
   children,
 }: {
   tenantId: string;
   tenant: TenantBrand;
   userName?: string | null;
   userEmail: string;
+  newOrderCount?: number;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -119,6 +121,9 @@ export function AdminShell({
           {NAV_ITEMS.map((n) => {
             const on = n.id === activeId;
             const href = `/admin/${tenantId}/${n.id}`;
+            const badge = n.id === "orders" && (newOrderCount ?? 0) > 0
+              ? `${newOrderCount} new`
+              : undefined;
             return (
               <Link
                 key={n.id}
@@ -132,12 +137,12 @@ export function AdminShell({
               >
                 <AdminIcon kind={n.icon} size={16} color={on ? "#fff" : "#8997A8"} />
                 <span className="flex-1">{n.label}</span>
-                {"badge" in n && n.badge && (
+                {badge && (
                   <span
                     className="text-[10px] font-bold rounded-full px-1.5 py-0.5"
                     style={{ color: "var(--color-gold)", background: "rgba(176,138,62,0.15)" }}
                   >
-                    {n.badge}
+                    {badge}
                   </span>
                 )}
               </Link>

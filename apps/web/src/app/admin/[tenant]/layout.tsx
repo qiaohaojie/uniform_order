@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
-import { getTenant } from "@/db/queries";
+import { getTenant, countNewOrders } from "@/db/queries";
 import {
   getSessionUser,
   isPlatformAdminEmail,
@@ -21,6 +21,7 @@ export default async function AdminTenantLayout({
   }
 
   const user = await getSessionUser();
+
   if (!user) {
     redirect(`/auth/sign-in?callbackURL=${encodeURIComponent(`/admin/${tenant}`)}`);
   }
@@ -33,12 +34,15 @@ export default async function AdminTenantLayout({
     redirect(`/${tenant}`);
   }
 
+  const newOrderCount = await countNewOrders(tenant);
+
   return (
     <AdminShell
       tenantId={tenant}
       tenant={{ id: tenantRecord.id, name: tenantRecord.name, short: tenantRecord.short, accent: tenantRecord.accent }}
       userName={user.name}
       userEmail={user.email}
+      newOrderCount={newOrderCount}
     >
       {children}
     </AdminShell>

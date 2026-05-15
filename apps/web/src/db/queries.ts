@@ -1184,3 +1184,16 @@ export async function getPopularItems(
     return [];
   }
 }
+
+export async function countNewOrders(tenantId: string): Promise<number> {
+  try {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(and(eq(orders.tenantId, tenantId), eq(orders.status, "new")));
+    return result[0]?.count ?? 0;
+  } catch (err) {
+    console.error("countNewOrders failed", err);
+    return 0;
+  }
+}
