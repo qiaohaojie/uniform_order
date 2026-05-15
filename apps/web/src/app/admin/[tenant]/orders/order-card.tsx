@@ -129,6 +129,11 @@ function Actions({
   }
 
   const s = order.fulfilmentStatus;
+  // Shipping orders complete as `shipped` (parent has it sent to them);
+  // pickup orders complete as `collected` (parent walked in). Manual override
+  // is reserved for "Mark completed" on non-ready states (lost/forced close).
+  const readyCompletion: "collected" | "shipped" =
+    order.fulfilmentMethod === "shipping" ? "shipped" : "collected";
   return (
     <div className="mt-2 flex flex-wrap gap-1">
       {s === "to_prepare" && (
@@ -155,7 +160,7 @@ function Actions({
             className={BTN}
             disabled={pending}
             onClick={() =>
-              start(() => markCompleted(tenantId, order.id, "collected"))
+              start(() => markCompleted(tenantId, order.id, readyCompletion))
             }
           >
             Mark completed

@@ -153,7 +153,13 @@ function MobileRow({
               className={BTN}
               disabled={pending}
               onClick={() =>
-                start(() => markCompleted(tenantId, order.id, "collected"))
+                start(() =>
+                  markCompleted(
+                    tenantId,
+                    order.id,
+                    order.fulfilmentMethod === "shipping" ? "shipped" : "collected",
+                  ),
+                )
               }
             >
               Mark completed

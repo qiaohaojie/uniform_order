@@ -2,7 +2,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { posthog } from "@/lib/analytics/client";
-import type { FulfilmentStatus, WorkflowMode } from "@/db/queries";
+import type {
+  FulfilmentStatus,
+  FulfilmentMethod,
+  WorkflowMode,
+} from "@/db/queries";
 import {
   markReady,
   resolveIssue,
@@ -22,6 +26,7 @@ export function OrderDetailActions({
   orderId,
   tenantId,
   fulfilmentStatus,
+  fulfilmentMethod,
   paymentStatus,
   workflowMode,
   accent,
@@ -31,12 +36,15 @@ export function OrderDetailActions({
   orderId: string;
   tenantId: string;
   fulfilmentStatus: FulfilmentStatus;
+  fulfilmentMethod: FulfilmentMethod;
   paymentStatus: "pending" | "paid" | "partially_refunded" | "refunded";
   workflowMode: WorkflowMode;
   accent: string;
   total: number;
   refunded: number;
 }) {
+  const readyCompletion: "collected" | "shipped" =
+    fulfilmentMethod === "shipping" ? "shipped" : "collected";
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
@@ -136,7 +144,7 @@ export function OrderDetailActions({
           )}
           <button
             onClick={() =>
-              runAction(() => markCompleted(tenantId, orderId, "collected"))
+              runAction(() => markCompleted(tenantId, orderId, readyCompletion))
             }
             disabled={pending}
             className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white disabled:opacity-60"

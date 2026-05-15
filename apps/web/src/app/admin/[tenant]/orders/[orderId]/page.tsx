@@ -118,6 +118,7 @@ export default async function OrderDetailPage({
                 orderId={order.id}
                 tenantId={tid}
                 fulfilmentStatus={order.fulfilmentStatus}
+                fulfilmentMethod={order.fulfilmentMethod}
                 paymentStatus={order.paymentStatus}
                 workflowMode={settings.workflowMode}
                 accent={tenant.accent}

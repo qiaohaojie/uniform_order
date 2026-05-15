@@ -39,7 +39,7 @@ export async function listTenantsWithStats(): Promise<TenantStatsRow[]> {
         o.tenant_id,
         COUNT(DISTINCT COALESCE(o.user_id::text, lower(o.parent_email))) AS parents,
         COUNT(*) FILTER (
-          WHERE o.status != 'pending_payment'
+          WHERE o.payment_status != 'pending'
             AND o.created_at > now() - interval '30 days'
         ) AS orders30d,
         SUM(o.total) FILTER (WHERE o.created_at > now() - interval '30 days')
@@ -82,7 +82,7 @@ export async function getPlatformKpis(): Promise<PlatformKpis> {
 
   const priorRow = await db.execute(sql`
     SELECT COUNT(*) AS n FROM orders
-    WHERE status != 'pending_payment'
+    WHERE payment_status != 'pending'
       AND created_at > now() - interval '60 days'
       AND created_at <= now() - interval '30 days'
   `);

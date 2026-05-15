@@ -1276,11 +1276,23 @@ export async function updateTenantWorkflowSettings(
     });
   }
   if (eventRows.length === 0) return;
+  // INSERT … ON CONFLICT DO UPDATE so tenants created after the seed migration
+  // (or any tenant missing a settings row) materialise on first save instead of
+  // silently no-op'ing while the audit events still land.
   await db.batch([
     db
-      .update(tenantSettings)
-      .set({ ...patch, updatedAt: new Date(), updatedBy: actorId })
-      .where(eq(tenantSettings.tenantId, tenantId)),
+      .insert(tenantSettings)
+      .values({
+        tenantId,
+        workflowMode: patch.workflowMode ?? current.workflowMode,
+        pickupEnabled: patch.pickupEnabled ?? current.pickupEnabled,
+        shippingEnabled: patch.shippingEnabled ?? current.shippingEnabled,
+        updatedBy: actorId,
+      })
+      .onConflictDoUpdate({
+        target: tenantSettings.tenantId,
+        set: { ...patch, updatedAt: new Date(), updatedBy: actorId },
+      }),
     db.insert(tenantSettingEvents).values(eventRows),
   ]);
 }

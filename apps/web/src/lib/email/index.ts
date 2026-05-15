@@ -126,13 +126,17 @@ export async function sendOrderConfirmationEmail(orderId: string) {
 
 /**
  * Sends the order-ready email via the notification dispatcher.
- * Idempotency keys derive from the order_events row ID emitted by the
- * transition, so retries within the same transition yield the same key.
+ *
+ * Callers MUST pass a deterministic `idempotencyKey` so retries within a single
+ * transition collapse to one delivery. Keying on a freshly-inserted
+ * `order_events.id` (which differs per retry) silently bypasses the unique
+ * index on `order_notification_events.idempotency_key`, so the dispatcher
+ * accepts the caller's key verbatim.
  */
 export async function sendOrderReadyEmail(input: {
   orderId: string;
   tenantId: string;
-  orderEventId: string;
+  idempotencyKey: string;
   triggeredByUserId: string | null;
 }): Promise<EnqueueResult> {
   const data = await getOrderForEmail(input.orderId);
@@ -150,7 +154,7 @@ export async function sendOrderReadyEmail(input: {
     tenantId: input.tenantId,
     type: "ready",
     recipientEmail: order.parentEmail,
-    idempotencyKey: `ready:${input.orderId}:${input.orderEventId}`,
+    idempotencyKey: input.idempotencyKey,
     triggeredBy: "staff_action",
     triggeredByUserId: input.triggeredByUserId,
     subject: `Your order #${order.id} is ready for pickup!`,
@@ -175,7 +179,7 @@ export async function sendOrderHoldEmail(input: {
   tenantName: string;
   parentName: string;
   parentEmail: string;
-  orderEventId: string;
+  idempotencyKey: string;
   triggeredByUserId: string | null;
 }): Promise<EnqueueResult> {
   return enqueueNotification({
@@ -183,7 +187,7 @@ export async function sendOrderHoldEmail(input: {
     tenantId: input.tenantId,
     type: "hold",
     recipientEmail: input.parentEmail,
-    idempotencyKey: `hold:${input.orderId}:${input.orderEventId}`,
+    idempotencyKey: input.idempotencyKey,
     triggeredBy: "staff_action",
     triggeredByUserId: input.triggeredByUserId,
     subject: `Update on order ${input.orderId}`,

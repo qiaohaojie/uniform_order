@@ -258,6 +258,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // The PaymentIntent was created with fulfilmentMethod stamped in metadata.
+    // That's the only fulfilment value we trust here — otherwise a client
+    // could pay for a pickup order ($0 shipping) and then post the order with
+    // fulfilmentMethod='shipping', causing us to record subtotal = total - $9.50
+    // (a synthetic discount in the persisted breakdown).
+    const piFulfilmentMethod = stripePI.metadata?.fulfilmentMethod;
+    if (piFulfilmentMethod !== "pickup" && piFulfilmentMethod !== "shipping") {
+      return NextResponse.json(
+        { error: "stripe_pi_missing_fulfilment_method" },
+        { status: 400 },
+      );
+    }
+    if (piFulfilmentMethod !== fulfilmentMethod) {
+      return NextResponse.json(
+        {
+          error: "fulfilment_method_mismatch",
+          expected: piFulfilmentMethod,
+          received: fulfilmentMethod,
+        },
+        { status: 400 },
+      );
+    }
+
     const authoritativeTotal = stripePI.amount / 100;
     if (Math.abs(total - authoritativeTotal) > 0.01) {
       return NextResponse.json(
