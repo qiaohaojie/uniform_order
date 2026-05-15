@@ -1196,6 +1196,7 @@ export async function getOrdersForBoard(tenantId: string) {
       and(
         eq(orders.tenantId, tenantId),
         sql`${orders.paymentStatus} <> 'pending'`,
+        sql`(${orders.fulfilmentStatus} <> 'completed' OR ${orders.completedAt} > now() - interval '30 days')`,
       ),
     )
     .orderBy(desc(orders.createdAt));
