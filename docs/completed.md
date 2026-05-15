@@ -659,6 +659,20 @@ Plan: `docs/superpowers/plans/2026-05-14-admin-size-guide-editor.md`.
 
 Per-order CSV download from `/admin/<tenant>/orders` topbar. Status filter via accessible popover; ignores active search. Server-side RFC 4180 serialization with UTF-8 BOM and `\r\n` (Excel-friendly). New `tenants.timezone` column drives `Intl.DateTimeFormat`-based dates (default `Australia/Sydney`). Authorization mirrors `admin/[tenant]/layout.tsx` (platform admin OR tenant operator).
 
+### 4.38 Order fulfilment workflow refactor (2026-05-15) ✅
+
+Split the legacy single `orders.status` column into `fulfilment_status` (`to_prepare` / `ready` / `needs_attention` / `completed`), `payment_status` (`pending` / `paid` / `partially_refunded` / `refunded`), and `completion_type` (`collected` / `shipped` / `manual`). Replaced `delivery` with `fulfilment_method` (`pickup` / `shipping`). Introduced per-tenant `tenant_settings` (`workflow_mode`, `pickup_enabled`, `shipping_enabled`) backed by `tenant_setting_events` audit. Added `order_events` (status transitions, pick-slip prints, refunds) and `order_notification_events` (idempotent email pipeline keyed on `idempotency_key`).
+
+UI surfaces:
+- **Admin board** — mode-aware columns (Standard 4 / Simple 2), action buttons (mark ready, mark completed, resolve issue, report issue, reopen), badges for paid/printed/email-sent/refunded.
+- **Mobile pick mode** — filter-chip list view at `<1024px` with the same actions.
+- **Order detail** — reopen dialog (reason required), order-history view powered by `order_events` + `order_notification_events`, refund modal copy updated per spec §14.4.
+- **Platform** — `/platform/tenants/[id]/settings` lets platform admins toggle workflow_mode + pickup/shipping with a required reason; school settings page shows the live config read-only with a "Contact UniformOrder support" note.
+- **Checkout** — Ship/Pickup options gated on `tenant_settings`; client falls back to pickup when shipping is disabled.
+- **Pipeline** — `payment_intent.succeeded` flips `payment_status='paid'` and writes an `order_paid` event; `charge.refunded` (and the in-app refund route) update `payment_status`/`refunded_amount_cents` and emit refund emails through the idempotent dispatcher.
+
+CSV export columns now reflect the split: fulfilment_method / fulfilment_status / payment_status / completion_type / refunded_amount + ready_at / completed_at / pick_slip_printed_at timestamps. Sidebar badge counts `to_prepare` orders instead of legacy `new`. Migration `0014_fulfilment_workflow.sql`. Plan: `docs/superpowers/plans/2026-05-15-order-fulfilment-workflow.md`.
+
 ---
 
 ## Outstanding items (tracked in `docs/remaining_work.md`)

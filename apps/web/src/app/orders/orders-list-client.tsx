@@ -5,29 +5,29 @@ import { Crest, type CrestTenant } from "@/components/crest";
 import { Chip } from "@/components/chip";
 
 const STATUS_TONE: Record<string, "info" | "warn" | "success" | "neutral"> = {
-  new: "info",
-  packing: "warn",
+  to_prepare: "info",
   ready: "success",
-  collected: "neutral",
+  needs_attention: "warn",
+  completed: "neutral",
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  new: "New",
-  packing: "Packing",
+  to_prepare: "Order placed",
   ready: "Ready for pickup",
-  collected: "Collected",
+  needs_attention: "On hold",
+  completed: "Completed",
 };
 
 function StatusTrack({ accent, status }: { accent: string; status: string }) {
-  const steps = ["Placed", "Packed", "Ready", "Collected"] as const;
+  const steps = ["Placed", "Ready", "Completed"] as const;
   const statusToStep: Record<string, number> = {
-    new: 0,
-    packing: 1,
-    ready: 2,
-    collected: 3,
+    to_prepare: 0,
+    needs_attention: 0,
+    ready: 1,
+    completed: 2,
   };
   const cur = statusToStep[status] ?? 0;
-  const pct = ["5%", "38%", "68%", "100%"][cur];
+  const pct = ["5%", "55%", "100%"][cur];
 
   return (
     <div className="relative px-1 pt-1.5 pb-1">
@@ -83,10 +83,10 @@ export function OrdersListClient({ orders }: { orders: ParentOrderRow[] }) {
     );
   }
 
-  // Separate active (non-collected) from past (collected)
+  // Separate active (non-completed) from past (completed)
   // DB already orders newest-first; preserve that within each group
-  const active = orders.filter((o) => o.status !== "collected");
-  const past = orders.filter((o) => o.status === "collected");
+  const active = orders.filter((o) => o.fulfilmentStatus !== "completed");
+  const past = orders.filter((o) => o.fulfilmentStatus === "completed");
 
   return (
     <div className="px-[18px] pt-3.5 pb-6">
@@ -110,15 +110,15 @@ export function OrdersListClient({ orders }: { orders: ParentOrderRow[] }) {
                   Placed {o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "—"} · {o.id}
                 </div>
               </div>
-              <Chip tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status]}</Chip>
+              <Chip tone={STATUS_TONE[o.fulfilmentStatus]}>{STATUS_LABEL[o.fulfilmentStatus]}</Chip>
             </div>
-            <StatusTrack accent={o.tenantAccent} status={o.status} />
+            <StatusTrack accent={o.tenantAccent} status={o.fulfilmentStatus} />
             <div
               className="mt-2.5 p-2.5 rounded-md text-[11.5px] leading-[1.5]"
               style={{ background: "var(--color-parchment)", color: "var(--color-ink-dim)" }}
             >
               ${parseFloat(o.total).toFixed(2)} ·{" "}
-              {o.delivery === "pickup"
+              {o.fulfilmentMethod === "pickup"
                 ? `We'll email you when it's ready for pickup at the ${o.tenantShort} office.`
                 : "Shipping to your address."}
             </div>

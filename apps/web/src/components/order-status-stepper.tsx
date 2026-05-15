@@ -1,14 +1,13 @@
 import { CheckIcon } from "@/components/icons";
 
-const STEPS = ["Placed", "Packing", "Ready", "Collected"] as const;
+const STEPS = ["Placed", "Ready", "Completed"] as const;
 
-export type StepperStatus = "new" | "packing" | "ready" | "collected";
+export type StepperStatus = "to_prepare" | "ready" | "completed";
 
 const STATUS_TO_INDEX: Record<StepperStatus, number> = {
-  new: 0,
-  packing: 1,
-  ready: 2,
-  collected: 3,
+  to_prepare: 0,
+  ready: 1,
+  completed: 2,
 };
 
 export function OrderStatusStepper({

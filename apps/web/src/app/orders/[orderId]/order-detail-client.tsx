@@ -8,6 +8,10 @@ import { DoubleRule } from "@/components/double-rule";
 import { OrderStatusStepper, type StepperStatus } from "@/components/order-status-stepper";
 import type { Tenant } from "@/lib/data";
 
+type FulfilmentStatus = "to_prepare" | "ready" | "needs_attention" | "completed";
+type PaymentStatus = "pending" | "paid" | "partially_refunded" | "refunded";
+type FulfilmentMethod = "pickup" | "shipping";
+
 type OrderRow = {
   id: string;
   tenantId: string;
@@ -15,15 +19,9 @@ type OrderRow = {
   parentName: string;
   studentName: string;
   studentYear: string | null;
-  delivery: "pickup" | "ship";
-  status:
-    | "pending_payment"
-    | "new"
-    | "packing"
-    | "ready"
-    | "collected"
-    | "partially_refunded"
-    | "refunded";
+  fulfilmentMethod: FulfilmentMethod;
+  fulfilmentStatus: FulfilmentStatus;
+  paymentStatus: PaymentStatus;
   subtotal: string;
   total: string;
   parentNote: string | null;
@@ -56,25 +54,44 @@ type RefundRow = {
   createdAt: Date | null;
 };
 
-const STATUS_LABEL: Record<OrderRow["status"], string> = {
+type DisplayStatus =
+  | "pending_payment"
+  | "to_prepare"
+  | "ready"
+  | "needs_attention"
+  | "completed"
+  | "partially_refunded"
+  | "refunded";
+
+function displayStatus(
+  fulfilmentStatus: FulfilmentStatus,
+  paymentStatus: PaymentStatus,
+): DisplayStatus {
+  if (paymentStatus === "pending") return "pending_payment";
+  if (paymentStatus === "refunded") return "refunded";
+  if (paymentStatus === "partially_refunded") return "partially_refunded";
+  return fulfilmentStatus;
+}
+
+const STATUS_LABEL: Record<DisplayStatus, string> = {
   pending_payment: "Payment processing",
-  new: "Order placed",
-  packing: "Packing",
+  to_prepare: "Order placed",
   ready: "Ready for pickup",
-  collected: "Collected",
+  needs_attention: "On hold",
+  completed: "Completed",
   partially_refunded: "Partially refunded",
   refunded: "Refunded",
 };
 
 const STATUS_TONE: Record<
-  OrderRow["status"],
+  DisplayStatus,
   "neutral" | "navy" | "success" | "warn" | "info" | "danger" | "gold"
 > = {
   pending_payment: "warn",
-  new: "neutral",
-  packing: "info",
+  to_prepare: "info",
   ready: "success",
-  collected: "success",
+  needs_attention: "warn",
+  completed: "success",
   partially_refunded: "warn",
   refunded: "danger",
 };
@@ -101,13 +118,12 @@ export function OrderDetailClient({
   refunds: RefundRow[];
   totalRefunded: number;
 }) {
-  const isStepperStatus = (
-    s: OrderRow["status"]
-  ): s is StepperStatus =>
-    s === "new" || s === "packing" || s === "ready" || s === "collected";
+  const ds = displayStatus(order.fulfilmentStatus, order.paymentStatus);
+  const isStepperStatus = (s: DisplayStatus): s is StepperStatus =>
+    s === "to_prepare" || s === "ready" || s === "completed";
 
   const isRefundStatus =
-    order.status === "partially_refunded" || order.status === "refunded";
+    ds === "partially_refunded" || ds === "refunded";
 
   const subtotal = parseFloat(order.subtotal);
   const total = parseFloat(order.total);
@@ -123,7 +139,7 @@ export function OrderDetailClient({
             Order {order.id}
           </div>
         </div>
-        <Chip tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</Chip>
+        <Chip tone={STATUS_TONE[ds]}>{STATUS_LABEL[ds]}</Chip>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-6">
@@ -131,7 +147,7 @@ export function OrderDetailClient({
           className="bg-white rounded-xl border p-4 mb-4"
           style={{ borderColor: "var(--color-rule)" }}
         >
-          {order.status === "pending_payment" ? (
+          {ds === "pending_payment" ? (
             <div
               className="rounded-md p-3 text-[13px] leading-[1.5]"
               style={{
@@ -160,11 +176,11 @@ export function OrderDetailClient({
                 className="font-semibold mb-1"
                 style={{ color: "var(--color-ink)" }}
               >
-                {STATUS_LABEL[order.status]} — ${totalRefunded.toFixed(2)} returned
+                {STATUS_LABEL[ds]} — ${totalRefunded.toFixed(2)} returned
               </div>
               See refunds below for the breakdown.
             </div>
-          ) : isStepperStatus(order.status) ? (
+          ) : isStepperStatus(ds) ? (
             <>
               <div
                 className="text-[10.5px] text-center mb-2.5"
@@ -172,7 +188,7 @@ export function OrderDetailClient({
               >
                 Placed {formatDate(order.createdAt)}
               </div>
-              <OrderStatusStepper status={order.status} accent={accent} />
+              <OrderStatusStepper status={ds} accent={accent} />
               <div
                 className="text-[10.5px] text-center mt-3"
                 style={{ color: "var(--color-ink-dim)" }}
@@ -191,12 +207,12 @@ export function OrderDetailClient({
             className="text-[11px] tracking-[0.4px] uppercase font-bold mb-2"
             style={{ color: "var(--color-ink-dim)" }}
           >
-            {order.delivery === "pickup" ? "Pickup" : "Shipping"}
+            {order.fulfilmentMethod === "pickup" ? "Pickup" : "Shipping"}
           </div>
           <Row label="Student" value={order.studentName} />
           {order.studentYear && <Row label="Year" value={order.studentYear} />}
           <Row label="School" value={dbTenant.name} />
-          {order.delivery === "pickup" && (
+          {order.fulfilmentMethod === "pickup" && (
             <>
               {dbTenant.shopHours && (
                 <Row label="Shop hours" value={dbTenant.shopHours} />
