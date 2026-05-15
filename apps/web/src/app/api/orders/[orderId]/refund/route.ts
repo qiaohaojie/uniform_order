@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrderById, getTenant, addOrderRefund, getTotalRefunded, updateOrderStatus, money } from "@/db/queries";
-import { db, orderLines } from "@/db";
+import { getOrderById, getTenant, addOrderRefund, getTotalRefunded, money } from "@/db/queries";
+import { db, orderLines, orders } from "@/db";
+import { orderEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe";
+import { sendOrderRefundEmail } from "@/lib/email";
 import {
   ensureTenantAccess,
   isPlatformAdminEmail,
@@ -11,6 +13,10 @@ import {
 import { applyRateLimit } from "@/lib/rate-limit";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { logAuditEvent } from "@/lib/audit/log";
+
+function formatAud(amount: number): string {
+  return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount);
+}
 
 const STRIPE_REASONS = new Set(["duplicate", "fraudulent", "requested_by_customer"]);
 
@@ -65,11 +71,11 @@ export async function POST(
     );
     if (rateLimitResponse) return rateLimitResponse;
 
-    // Verify order is in a refundable state
-    // partially_refunded is allowed so operators can issue further partial refunds
-    if (order.status === "pending_payment" || order.status === "refunded") {
+    // Verify order is in a refundable payment state.
+    // partially_refunded is allowed so operators can issue further partial refunds.
+    if (order.paymentStatus === "pending" || order.paymentStatus === "refunded") {
       return NextResponse.json(
-        { error: `Order is ${order.status} and cannot be refunded` },
+        { error: `Order payment is ${order.paymentStatus} and cannot be refunded` },
         { status: 409 }
       );
     }
@@ -150,13 +156,69 @@ export async function POST(
 
     // Recompute total refunded from DB to avoid read-modify-write races.
     // If the DB insert above failed, the new amount won't be reflected until
-    // the webhook reconciles it — skip the status update in that case.
-    let newStatus: "refunded" | "partially_refunded" = "partially_refunded";
+    // the webhook reconciles it — skip the payment-status update in that case.
+    let newPaymentStatus: "refunded" | "partially_refunded" = "partially_refunded";
     if (dbRecorded) {
       const newTotalRefunded = await getTotalRefunded(orderId);
-      newStatus = money(newTotalRefunded) >= money(orderTotal) ? "refunded" : "partially_refunded";
-      if (newStatus !== order.status) {
-        await updateOrderStatus(orderId, newStatus);
+      newPaymentStatus =
+        money(newTotalRefunded) >= money(orderTotal) ? "refunded" : "partially_refunded";
+      const newRefundedCents = Math.round(newTotalRefunded * 100);
+      if (newPaymentStatus !== order.paymentStatus) {
+        await db.batch([
+          db
+            .update(orders)
+            .set({
+              paymentStatus: newPaymentStatus,
+              refundedAmountCents: newRefundedCents,
+              updatedAt: new Date(),
+            })
+            .where(eq(orders.id, orderId)),
+          db.insert(orderEvents).values({
+            orderId,
+            tenantId: order.tenantId,
+            eventType: "refund_created",
+            actorId: authResult.user.id,
+            reason: body.reason ?? null,
+            metadataJson: { amountCents, stripeRefundId: refund.id },
+          }),
+        ]);
+      } else {
+        // Status didn't change but refunded total did — update the cents column + event.
+        await db.batch([
+          db
+            .update(orders)
+            .set({
+              refundedAmountCents: newRefundedCents,
+              updatedAt: new Date(),
+            })
+            .where(eq(orders.id, orderId)),
+          db.insert(orderEvents).values({
+            orderId,
+            tenantId: order.tenantId,
+            eventType: "refund_created",
+            actorId: authResult.user.id,
+            reason: body.reason ?? null,
+            metadataJson: { amountCents, stripeRefundId: refund.id },
+          }),
+        ]);
+      }
+
+      // Notify parent (idempotent on stripe_refund_id via dispatcher).
+      try {
+        await sendOrderRefundEmail({
+          orderId,
+          tenantId: order.tenantId,
+          tenantName: tenant.name,
+          parentName: order.parentName,
+          parentEmail: order.parentEmail,
+          stripeRefundId: refund.id,
+          amountAud: formatAud(money(body.amount)),
+          isFullRefund: newPaymentStatus === "refunded",
+          triggeredBy: "staff_action",
+          triggeredByUserId: authResult.user.id,
+        });
+      } catch (emailErr) {
+        console.error("Refund email failed (will reconcile via webhook)", emailErr);
       }
     }
 
@@ -166,7 +228,7 @@ export async function POST(
       refund_id: refund.id,
       amount: money(body.amount),
       reason: body.reason,
-      new_status: newStatus,
+      new_payment_status: newPaymentStatus,
       reconcile_pending: reconcilePending,
     });
 
@@ -195,7 +257,7 @@ export async function POST(
         payload: {
           refundAmountCents: amountCents,
           stripeRefundId: refund.id,
-          newStatus,
+          newPaymentStatus,
           lineItems: refundedLineItems.map((li) => ({
             id: li.id,
             name: li.itemName,
@@ -210,7 +272,7 @@ export async function POST(
       ok: true,
       refundId: refund.id,
       amount: money(body.amount),
-      newStatus,
+      newPaymentStatus,
       reconcilePending,
     });
   } catch (err) {
