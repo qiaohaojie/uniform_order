@@ -73,19 +73,6 @@ export function OrdersPageClient({
               tenantShort={tenant.short}
               accent={tenant.accent}
             />
-            <button
-              onClick={() => {
-                // Open email client to email all parents with ready orders
-                window.open("mailto:?subject=Your uniform order is ready&body=Please collect your order during shop hours.");
-              }}
-              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white flex items-center gap-1.5"
-              style={{ background: tenant.accent }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round">
-                <rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 7 L12 13 L21 7" />
-              </svg>
-              Email parents
-            </button>
           </div>
         }
       />
