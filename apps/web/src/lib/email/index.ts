@@ -4,6 +4,9 @@ import { eq, sql } from "drizzle-orm";
 import { sendEmail } from "./client";
 import { OrderConfirmationEmail } from "./templates/OrderConfirmation";
 import { OrderReadyEmail } from "./templates/OrderReady";
+import { OrderHold } from "./templates/OrderHold";
+import { OrderRefund } from "./templates/OrderRefund";
+import { enqueueNotification, type EnqueueResult } from "./dispatch";
 import React from "react";
 
 type EmailStamp = { sentAt: string; messageId: string };
@@ -122,67 +125,103 @@ export async function sendOrderConfirmationEmail(orderId: string) {
 }
 
 /**
- * Sends an order ready email to the parent.
- * Uses "Stamp on Success" logic to prevent duplicate emails.
+ * Sends the order-ready email via the notification dispatcher.
+ * Idempotency keys derive from the order_events row ID emitted by the
+ * transition, so retries within the same transition yield the same key.
  */
-export async function sendOrderReadyEmail(orderId: string) {
-  const data = await getOrderForEmail(orderId);
+export async function sendOrderReadyEmail(input: {
+  orderId: string;
+  tenantId: string;
+  orderEventId: string;
+  triggeredByUserId: string | null;
+}): Promise<EnqueueResult> {
+  const data = await getOrderForEmail(input.orderId);
   if (!data) {
-    console.error(`[email] Order ${orderId} not found for ready email`);
-    return;
+    console.error(`[email] Order ${input.orderId} not found for ready email`);
+    return { eventId: "", status: "failed" };
   }
-
   const { order, tenant } = data;
-
-  // Check if already sent (Idempotency)
-  const emailsSent = (order.emailsSent as EmailsSent) ?? {};
-  if (emailsSent.ready) {
-    return;
-  }
-
   const refundPolicyUrl = tenant.currentLegalVersionId
     ? `${requireAppUrl()}/${tenant.id}/refund-policy`
     : null;
 
-  const props = {
-    tenantName: tenant.name,
-    tenantAccent: tenant.accent,
-    orderId: order.id,
-    studentName: order.studentName,
-    collectionInstructions:
-      tenant.collectionInstructions || "Please collect from the school office.",
-    shopHours: tenant.shopHours || "Mon-Fri, 8:30am - 4:00pm",
-    orderUrl: `${requireAppUrl()}/orders/${order.id}`,
-    shopEmail: tenant.shopEmail,
-    refundPolicyUrl,
-  };
-
-  const html = await render(React.createElement(OrderReadyEmail, props));
-  const text = await render(React.createElement(OrderReadyEmail, props), {
-    plainText: true,
-  });
-
-  const result = await sendEmail({
-    to: order.parentEmail,
+  return enqueueNotification({
+    orderId: input.orderId,
+    tenantId: input.tenantId,
+    type: "ready",
+    recipientEmail: order.parentEmail,
+    idempotencyKey: `ready:${input.orderId}:${input.orderEventId}`,
+    triggeredBy: "staff_action",
+    triggeredByUserId: input.triggeredByUserId,
     subject: `Your order #${order.id} is ready for pickup!`,
-    html,
-    text,
+    reactBody: React.createElement(OrderReadyEmail, {
+      tenantName: tenant.name,
+      tenantAccent: tenant.accent,
+      orderId: order.id,
+      studentName: order.studentName,
+      collectionInstructions:
+        tenant.collectionInstructions || "Please collect from the school office.",
+      shopHours: tenant.shopHours || "Mon-Fri, 8:30am - 4:00pm",
+      orderUrl: `${requireAppUrl()}/orders/${order.id}`,
+      shopEmail: tenant.shopEmail,
+      refundPolicyUrl,
+    }),
   });
+}
 
-  if (result?.id) {
-    const stamp = {
-      sentAt: new Date().toISOString(),
-      messageId: result.id,
-    };
+export async function sendOrderHoldEmail(input: {
+  orderId: string;
+  tenantId: string;
+  tenantName: string;
+  parentName: string;
+  parentEmail: string;
+  orderEventId: string;
+  triggeredByUserId: string | null;
+}): Promise<EnqueueResult> {
+  return enqueueNotification({
+    orderId: input.orderId,
+    tenantId: input.tenantId,
+    type: "hold",
+    recipientEmail: input.parentEmail,
+    idempotencyKey: `hold:${input.orderId}:${input.orderEventId}`,
+    triggeredBy: "staff_action",
+    triggeredByUserId: input.triggeredByUserId,
+    subject: `Update on order ${input.orderId}`,
+    reactBody: React.createElement(OrderHold, {
+      tenantName: input.tenantName,
+      parentName: input.parentName,
+      orderId: input.orderId,
+    }),
+  });
+}
 
-    await db
-      .update(orders)
-      .set({
-        emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{ready}', ${JSON.stringify(
-          stamp
-        )}::jsonb)`,
-        updatedAt: new Date(),
-      })
-      .where(eq(orders.id, orderId));
-  }
+export async function sendOrderRefundEmail(input: {
+  orderId: string;
+  tenantId: string;
+  tenantName: string;
+  parentName: string;
+  parentEmail: string;
+  stripeRefundId: string;
+  amountAud: string;
+  isFullRefund: boolean;
+  triggeredBy: "staff_action" | "webhook";
+  triggeredByUserId: string | null;
+}): Promise<EnqueueResult> {
+  return enqueueNotification({
+    orderId: input.orderId,
+    tenantId: input.tenantId,
+    type: "refund",
+    recipientEmail: input.parentEmail,
+    idempotencyKey: `refund:${input.stripeRefundId}`,
+    triggeredBy: input.triggeredBy,
+    triggeredByUserId: input.triggeredByUserId,
+    subject: `Refund processed for order ${input.orderId}`,
+    reactBody: React.createElement(OrderRefund, {
+      tenantName: input.tenantName,
+      parentName: input.parentName,
+      orderId: input.orderId,
+      amountAud: input.amountAud,
+      isFullRefund: input.isFullRefund,
+    }),
+  });
 }
