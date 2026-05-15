@@ -5,6 +5,7 @@ import {
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
   getTenant,
+  getTenantSettings,
 } from "@/db/queries";
 import { eq, inArray } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
@@ -78,7 +79,9 @@ export async function GET(req: NextRequest) {
       // Only the "new" bucket needs lines (it's the batch-print picking queue).
       // Skipping historical statuses keeps the payload proportional to the
       // active queue rather than total order count.
-      const newIds = rows.filter((r) => r.status === "new").map((r) => r.id);
+      const newIds = rows
+        .filter((r) => r.fulfilmentStatus === "to_prepare")
+        .map((r) => r.id);
       const lines = newIds.length > 0
         ? await db.select().from(orderLines).where(inArray(orderLines.orderId, newIds))
         : [];
@@ -121,6 +124,7 @@ export async function POST(req: NextRequest) {
       studentYear,
       studentRoll,
       delivery,
+      fulfilmentMethod: bodyFulfilmentMethod,
       subtotal,
       gst,
       total,
@@ -129,6 +133,12 @@ export async function POST(req: NextRequest) {
       parentNote,
       lines,
     } = body;
+
+    // Accept either the new fulfilmentMethod enum or the legacy delivery field.
+    const fulfilmentMethod: "pickup" | "shipping" =
+      bodyFulfilmentMethod === "shipping" || delivery === "ship"
+        ? "shipping"
+        : "pickup";
 
     const normalizedStripePaymentIntentId =
       typeof stripePaymentIntentId === "string" ? stripePaymentIntentId.trim() : "";
@@ -155,6 +165,20 @@ export async function POST(req: NextRequest) {
     const normalizedParentEmail = parentEmail.trim().toLowerCase();
     if (normalizedParentEmail !== authResult.user.email) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const tenantSettings = await getTenantSettings(tenantId);
+    if (fulfilmentMethod === "shipping" && !tenantSettings.shippingEnabled) {
+      return NextResponse.json(
+        { error: "Shipping is not enabled for this school" },
+        { status: 400 },
+      );
+    }
+    if (fulfilmentMethod === "pickup" && !tenantSettings.pickupEnabled) {
+      return NextResponse.json(
+        { error: "Pickup is not enabled for this school" },
+        { status: 400 },
+      );
     }
 
     // ─── Server-authoritative totals (post-payment) ───────────────────────
@@ -246,7 +270,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const shipping = delivery === "ship" ? SHIP_FEE_AUD : 0;
+    const shipping = fulfilmentMethod === "shipping" ? SHIP_FEE_AUD : 0;
     const verifiedTotals = {
       subtotal: round2(authoritativeTotal - shipping),
       shipping,
@@ -297,7 +321,7 @@ export async function POST(req: NextRequest) {
         studentName,
         studentYear,
         studentRoll,
-        delivery: delivery ?? "pickup",
+        fulfilmentMethod,
         deliveryFee: String(verifiedTotals.shipping),
         subtotal: String(verifiedTotals.subtotal),
         gst: String(verifiedTotals.gst),
@@ -378,7 +402,8 @@ export async function POST(req: NextRequest) {
     await serverCapture(authResult.user.id, "order_placed", {
       order_id: createdOrderId,
       tenant_id: tenantId,
-      delivery: delivery ?? "pickup",
+      delivery: fulfilmentMethod === "shipping" ? "ship" : "pickup",
+      fulfilment_method: fulfilmentMethod,
       total,
       subtotal,
       item_count: lines.length,
