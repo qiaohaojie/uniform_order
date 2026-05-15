@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
-import { getTenant, countNewOrders } from "@/db/queries";
+import { getTenant, countToPrepare } from "@/db/queries";
 import {
   getSessionUser,
   isPlatformAdminEmail,
@@ -34,7 +34,7 @@ export default async function AdminTenantLayout({
     redirect(`/${tenant}`);
   }
 
-  const newOrderCount = await countNewOrders(tenant);
+  const newOrderCount = await countToPrepare(tenant);
 
   return (
     <AdminShell
