@@ -1,16 +1,24 @@
 import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRefunds, parentChildren, tenantLegalVersions } from "./index";
+import { tenantSettings, tenantSettingEvents, orderEvents, orderNotificationEvents } from "./schema";
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { cache } from "react";
 import type { CatalogItem, SizeGuide, Tenant } from "@/lib/data";
 
-export type LiveOrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
+export type FulfilmentStatus =
+  | "to_prepare" | "ready" | "needs_attention" | "completed";
+export type PaymentStatus =
+  | "pending" | "paid" | "partially_refunded" | "refunded";
+export type CompletionType = "collected" | "shipped" | "manual";
+export type FulfilmentMethod = "pickup" | "shipping";
+export type WorkflowMode = "standard" | "simple";
 
 export type LiveRecentOrder = {
   id: string;
   tenantId: string;
-  status: LiveOrderStatus;
-  delivery: "pickup" | "ship";
+  fulfilmentStatus: FulfilmentStatus;
+  paymentStatus: PaymentStatus;
+  fulfilmentMethod: FulfilmentMethod;
   kid: string;
   year: string;
   rollClass: string;
@@ -237,14 +245,17 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
   const orderCount = last30Orders.length;
   const avgOrder = orderCount > 0 ? money(revenue / orderCount) : 0;
   const awaitingPickup = orderRows.filter((order) => {
-    return order.delivery === "pickup" && order.status === "ready";
+    return (
+      order.paymentStatus !== "pending" &&
+      (order.fulfilmentStatus === "to_prepare" ||
+        order.fulfilmentStatus === "needs_attention")
+    );
   }).length;
   const readyOverSevenDays = orderRows.filter((order) => {
     return (
-      order.delivery === "pickup" &&
-      order.status === "ready" &&
-      order.createdAt !== null &&
-      order.createdAt < sevenDaysAgo
+      order.fulfilmentStatus === "ready" &&
+      order.readyAt !== null &&
+      order.readyAt < sevenDaysAgo
     );
   }).length;
 
@@ -267,8 +278,9 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
   const recentOrders: LiveRecentOrder[] = [...datedRecentRows, ...nullDatedRows].slice(0, 5).map((order) => ({
     id: order.id,
     tenantId: order.tenantId,
-    status: order.status,
-    delivery: order.delivery,
+    fulfilmentStatus: order.fulfilmentStatus,
+    paymentStatus: order.paymentStatus,
+    fulfilmentMethod: order.fulfilmentMethod,
     kid: order.studentName,
     year: order.studentYear,
     rollClass: order.studentRoll,
@@ -427,17 +439,6 @@ export async function getOrdersByParentEmail(email: string) {
     .from(orders)
     .where(sql`lower(${orders.parentEmail}) = lower(${email})`)
     .orderBy(desc(orders.createdAt));
-}
-
-export async function updateOrderStatus(
-  orderId: string,
-  status: "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded"
-) {
-  return db
-    .update(orders)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(orders.id, orderId))
-    .returning({ id: orders.id });
 }
 
 export async function getOrderRefunds(orderId: string) {
@@ -873,7 +874,7 @@ export async function getOrderForReceipt(orderId: string) {
       studentName: orders.studentName,
       studentYear: orders.studentYear,
       total: orders.total,
-      delivery: orders.delivery,
+      fulfilmentMethod: orders.fulfilmentMethod,
       parentNote: orders.parentNote,
     })
     .from(orders)
@@ -1066,9 +1067,10 @@ export function toTenantBrand(row: typeof tenants.$inferSelect): Tenant {
 export type ParentOrderRow = {
   id: string;
   tenantId: string;
-  status: string;
+  fulfilmentStatus: FulfilmentStatus;
+  paymentStatus: PaymentStatus;
   total: string;
-  delivery: "pickup" | "ship";
+  fulfilmentMethod: FulfilmentMethod;
   createdAt: Date | null;
   studentName: string;
   parentEmail: string;
@@ -1096,12 +1098,13 @@ export async function listOrdersForParent(args: {
     .select({
       id: orders.id,
       tenantId: orders.tenantId,
-      status: orders.status,
+      fulfilmentStatus: orders.fulfilmentStatus,
+      paymentStatus: orders.paymentStatus,
       total: orders.total,
       createdAt: orders.createdAt,
       studentName: orders.studentName,
       parentEmail: orders.parentEmail,
-      delivery: orders.delivery,
+      fulfilmentMethod: orders.fulfilmentMethod,
       tenantName: tenants.name,
       tenantShort: tenants.short,
       tenantAccent: tenants.accent,
@@ -1156,7 +1159,7 @@ export async function getPopularItems(
         JOIN orders o ON o.id = ol.order_id
         WHERE o.tenant_id = ${tenantSlug}
           AND o.created_at >= NOW() - make_interval(days => ${days})
-          AND o.status NOT IN ('pending_payment', 'refunded')
+          AND o.payment_status NOT IN ('pending', 'refunded')
         GROUP BY ol.item_id
         ORDER BY total_qty DESC
         LIMIT ${limit}
@@ -1185,15 +1188,117 @@ export async function getPopularItems(
   }
 }
 
-export async function countNewOrders(tenantId: string): Promise<number> {
+export async function getOrdersForBoard(tenantId: string) {
+  return db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.tenantId, tenantId),
+        sql`${orders.paymentStatus} <> 'pending'`,
+      ),
+    )
+    .orderBy(desc(orders.createdAt));
+}
+
+// Inferred row shape — single source of truth for board cards across desktop + mobile.
+export type BoardOrder = Awaited<ReturnType<typeof getOrdersForBoard>>[number];
+
+export async function countToPrepare(tenantId: string): Promise<number> {
   try {
-    const result = await db
-      .select({ count: sql<number>`count(*)::int` })
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
       .from(orders)
-      .where(and(eq(orders.tenantId, tenantId), eq(orders.status, "new")));
-    return result[0]?.count ?? 0;
+      .where(
+        and(
+          eq(orders.tenantId, tenantId),
+          eq(orders.fulfilmentStatus, "to_prepare"),
+          sql`${orders.paymentStatus} <> 'pending'`,
+        ),
+      );
+    return row?.n ?? 0;
   } catch (err) {
-    console.error("countNewOrders failed", err);
+    console.error("countToPrepare failed", err);
     return 0;
   }
+}
+
+// ─── Tenant settings ─────────────────────────────────────────────────────────
+
+export async function getTenantSettings(tenantId: string): Promise<{
+  workflowMode: WorkflowMode;
+  pickupEnabled: boolean;
+  shippingEnabled: boolean;
+}> {
+  const [row] = await db
+    .select()
+    .from(tenantSettings)
+    .where(eq(tenantSettings.tenantId, tenantId))
+    .limit(1);
+  if (!row) {
+    return { workflowMode: "standard", pickupEnabled: true, shippingEnabled: false };
+  }
+  return {
+    workflowMode: row.workflowMode,
+    pickupEnabled: row.pickupEnabled,
+    shippingEnabled: row.shippingEnabled,
+  };
+}
+
+type SettingPatch = Partial<{
+  workflowMode: WorkflowMode;
+  pickupEnabled: boolean;
+  shippingEnabled: boolean;
+}>;
+
+export async function updateTenantWorkflowSettings(
+  tenantId: string,
+  patch: SettingPatch,
+  actorId: string | null,
+  reason: string,
+): Promise<void> {
+  const current = await getTenantSettings(tenantId);
+  const eventRows: Array<typeof tenantSettingEvents.$inferInsert> = [];
+  for (const [key, newValue] of Object.entries(patch) as Array<
+    [keyof SettingPatch, SettingPatch[keyof SettingPatch]]
+  >) {
+    if (newValue === undefined) continue;
+    const oldValue = String(current[key]);
+    const newStr = String(newValue);
+    if (oldValue === newStr) continue;
+    eventRows.push({
+      tenantId,
+      settingKey: key,
+      oldValue,
+      newValue: newStr,
+      changedBy: actorId,
+      reason,
+    });
+  }
+  if (eventRows.length === 0) return;
+  await db.batch([
+    db
+      .update(tenantSettings)
+      .set({ ...patch, updatedAt: new Date(), updatedBy: actorId })
+      .where(eq(tenantSettings.tenantId, tenantId)),
+    db.insert(tenantSettingEvents).values(eventRows),
+  ]);
+}
+
+// ─── Order history (audit) ───────────────────────────────────────────────────
+
+export async function listOrderEvents(orderId: string) {
+  return db
+    .select()
+    .from(orderEvents)
+    .where(eq(orderEvents.orderId, orderId))
+    .orderBy(desc(orderEvents.createdAt));
+}
+
+export async function listOrderNotificationEvents(orderId: string) {
+  return db
+    .select()
+    .from(orderNotificationEvents)
+    .where(eq(orderNotificationEvents.orderId, orderId))
+    .orderBy(desc(orderNotificationEvents.createdAt));
 }
