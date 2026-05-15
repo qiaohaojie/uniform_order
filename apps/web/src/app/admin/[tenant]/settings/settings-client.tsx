@@ -2,6 +2,9 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Tenant } from "@/lib/data";
+import type { getTenantSettings } from "@/db/queries";
+
+type WorkflowSettings = Awaited<ReturnType<typeof getTenantSettings>>;
 
 interface StripeStatus {
   connected: boolean;
@@ -20,9 +23,11 @@ interface NotifToggle {
 export function SettingsClient({
   tenantId,
   tenant,
+  workflowSettings,
 }: {
   tenantId: string;
   tenant: Tenant;
+  workflowSettings: WorkflowSettings;
 }) {
   const searchParams = useSearchParams();
   const stripeResult = searchParams.get("stripe"); // "success" | "refresh" | null
@@ -365,6 +370,29 @@ export function SettingsClient({
               </button>
             </div>
           ))}
+        </section>
+
+        <section
+          className="bg-white rounded-[10px] border p-5"
+          style={{ borderColor: "var(--color-rule)" }}
+        >
+          <div className="text-[14px] font-semibold mb-3" style={{ color: "var(--color-ink)" }}>
+            Workflow configuration
+          </div>
+          <dl
+            className="text-[12.5px] grid grid-cols-2 gap-x-4 gap-y-2"
+            style={{ color: "var(--color-ink)" }}
+          >
+            <dt style={{ color: "var(--color-ink-dim)" }}>Workflow mode</dt>
+            <dd className="capitalize">{workflowSettings.workflowMode}</dd>
+            <dt style={{ color: "var(--color-ink-dim)" }}>Pickup</dt>
+            <dd>{workflowSettings.pickupEnabled ? "Enabled" : "Disabled"}</dd>
+            <dt style={{ color: "var(--color-ink-dim)" }}>Shipping</dt>
+            <dd>{workflowSettings.shippingEnabled ? "Enabled" : "Disabled"}</dd>
+          </dl>
+          <p className="text-[11.5px] mt-3" style={{ color: "var(--color-ink-dim)" }}>
+            Contact UniformOrder support to change these settings.
+          </p>
         </section>
 
       </div>

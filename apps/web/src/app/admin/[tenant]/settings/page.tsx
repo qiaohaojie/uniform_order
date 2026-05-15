@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getTenant, toTenantBrand } from "@/db/queries";
+import { getTenant, getTenantSettings, toTenantBrand } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { SettingsClient } from "./settings-client";
 
@@ -8,6 +8,7 @@ export default async function AdminSettingsPage({ params }: { params: Promise<{ 
   const tenantRecord = await getTenant(tid);
   if (!tenantRecord) notFound();
   const tenant = toTenantBrand(tenantRecord);
+  const workflowSettings = await getTenantSettings(tenantRecord.id);
 
   return (
     <>
@@ -15,7 +16,11 @@ export default async function AdminSettingsPage({ params }: { params: Promise<{ 
         kicker={`${tenant.short} · Operator`}
         title="Settings"
       />
-      <SettingsClient tenantId={tid} tenant={tenant} />
+      <SettingsClient
+        tenantId={tid}
+        tenant={tenant}
+        workflowSettings={workflowSettings}
+      />
     </>
   );
 }
