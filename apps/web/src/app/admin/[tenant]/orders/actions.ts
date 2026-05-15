@@ -1,8 +1,8 @@
 "use server";
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { db, orders, orderLines, tenants } from "@/db";
+import { db, orders, tenants } from "@/db";
 import { orderEvents } from "@/db/schema";
 import {
   getSessionUser,
@@ -27,8 +27,9 @@ import {
   CSV_HEADERS,
   EXPORT_STATUS_OPTIONS,
   formatExportDate,
+  formatExportDateTime,
   formatExportTotal,
-  formatItemsSummary,
+  formatRefundedCents,
   serializeCsv,
   type ExportStatusFilter,
 } from "./csv";
@@ -74,14 +75,22 @@ export async function exportOrdersCsv(
   const orderRows = await db
     .select({
       id: orders.id,
-      fulfilmentStatus: orders.fulfilmentStatus,
+      createdAt: orders.createdAt,
       parentName: orders.parentName,
       parentEmail: orders.parentEmail,
-      parentMobile: orders.parentMobile,
       studentName: orders.studentName,
       studentYear: orders.studentYear,
+      fulfilmentMethod: orders.fulfilmentMethod,
+      fulfilmentStatus: orders.fulfilmentStatus,
+      paymentStatus: orders.paymentStatus,
+      completionType: orders.completionType,
+      subtotal: orders.subtotal,
+      gst: orders.gst,
       total: orders.total,
-      createdAt: orders.createdAt,
+      refundedAmountCents: orders.refundedAmountCents,
+      readyAt: orders.readyAt,
+      completedAt: orders.completedAt,
+      pickSlipPrintedAt: orders.pickSlipPrintedAt,
     })
     .from(orders)
     .where(
@@ -91,40 +100,25 @@ export async function exportOrdersCsv(
     )
     .orderBy(desc(orders.createdAt));
 
-  const orderIds = orderRows.map((o) => o.id);
-  const lineRows = orderIds.length
-    ? await db
-        .select({
-          orderId: orderLines.orderId,
-          itemName: orderLines.itemName,
-          variantLabel: orderLines.variantLabel,
-          size: orderLines.size,
-          qty: orderLines.qty,
-        })
-        .from(orderLines)
-        .where(inArray(orderLines.orderId, orderIds))
-        .orderBy(asc(orderLines.itemName), asc(orderLines.variantLabel), asc(orderLines.size))
-    : [];
-
-  const linesByOrder = new Map<string, typeof lineRows>();
-  for (const line of lineRows) {
-    const bucket = linesByOrder.get(line.orderId) ?? [];
-    bucket.push(line);
-    linesByOrder.set(line.orderId, bucket);
-  }
-
   const tz = tenant.timezone ?? "Australia/Sydney";
   const dataRows: string[][] = orderRows.map((o) => [
     o.id,
     o.createdAt ? formatExportDate(o.createdAt, tz) : "",
-    o.fulfilmentStatus,
     o.parentName,
     o.parentEmail,
-    o.parentMobile,
     o.studentName,
     o.studentYear,
+    o.fulfilmentMethod,
+    o.fulfilmentStatus,
+    o.paymentStatus,
+    o.completionType ?? "",
+    formatExportTotal(o.subtotal),
+    formatExportTotal(o.gst),
     formatExportTotal(o.total),
-    formatItemsSummary(linesByOrder.get(o.id) ?? []),
+    formatRefundedCents(o.refundedAmountCents),
+    formatExportDateTime(o.readyAt, tz),
+    formatExportDateTime(o.completedAt, tz),
+    formatExportDateTime(o.pickSlipPrintedAt, tz),
   ]);
 
   const csv = serializeCsv(CSV_HEADERS, dataRows);
