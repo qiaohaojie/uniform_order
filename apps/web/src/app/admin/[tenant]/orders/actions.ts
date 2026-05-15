@@ -182,37 +182,79 @@ async function loadContext(tenantId: string, orderId: string) {
   return { user, order, tenant, settings };
 }
 
-export async function markReady(tenantId: string, orderId: string) {
-  const { user, order, settings } = await loadContext(tenantId, orderId);
-  assertAllowed(settings.workflowMode, order.fulfilmentStatus, "ready");
-  const fromStatus = order.fulfilmentStatus;
-  const now = new Date();
+type OrderRow = typeof orders.$inferSelect;
+type TenantRow = typeof tenants.$inferSelect;
 
-  // Atomic update with optimistic-concurrency guard: only flip the row if the
-  // status hasn't moved since loadContext. Two operators clicking simultaneously
-  // see exactly one win the CAS, the other gets `flipped.length === 0` and
-  // bails before sending a duplicate email.
+// Owns auth + workflow assert + atomic CAS update + event insert for every
+// fulfilment transition. Side effects (emails, analytics, revalidation) stay
+// at the caller — they need fromStatus from the return value for deterministic
+// idempotency keys.
+async function executeTransition(args: {
+  tenantId: string;
+  orderId: string;
+  to: FulfilmentStatus;
+  eventType: "status_changed" | "order_reopened";
+  reason?: string;
+  setFields?: Partial<typeof orders.$inferInsert>;
+  metadataJson?: Record<string, unknown>;
+  expectedFrom?: FulfilmentStatus;
+}): Promise<{
+  user: SessionUser;
+  order: OrderRow;
+  tenant: TenantRow;
+  fromStatus: FulfilmentStatus;
+}> {
+  const { user, order, tenant, settings } = await loadContext(args.tenantId, args.orderId);
+  const fromStatus = order.fulfilmentStatus;
+
+  if (args.expectedFrom && fromStatus !== args.expectedFrom) {
+    throw new Error(`Only ${args.expectedFrom} orders can transition to ${args.to}`);
+  }
+  assertAllowed(settings.workflowMode, fromStatus, args.to);
+
+  const now = new Date();
+  // Optimistic-concurrency guard: only flip if the status hasn't moved since
+  // loadContext. Two operators clicking simultaneously see exactly one win
+  // the CAS; the loser bails before any side effects fire.
   const flipped = await db
     .update(orders)
-    .set({ fulfilmentStatus: "ready", readyAt: now, updatedAt: now })
-    .where(and(eq(orders.id, orderId), eq(orders.fulfilmentStatus, fromStatus)))
+    .set({
+      ...(args.setFields ?? {}),
+      fulfilmentStatus: args.to,
+      updatedAt: now,
+    })
+    .where(and(eq(orders.id, args.orderId), eq(orders.fulfilmentStatus, fromStatus)))
     .returning({ id: orders.id });
   if (flipped.length === 0) {
     throw new Error("Order status changed concurrently — please refresh");
   }
 
   await db.insert(orderEvents).values({
-    orderId,
-    tenantId,
-    eventType: "status_changed",
+    orderId: args.orderId,
+    tenantId: args.tenantId,
+    eventType: args.eventType,
     fromStatus,
-    toStatus: "ready",
+    toStatus: args.to,
     actorId: user.id,
+    ...(args.reason !== undefined ? { reason: args.reason } : {}),
+    ...(args.metadataJson !== undefined ? { metadataJson: args.metadataJson } : {}),
   });
 
-  // Idempotency key is deterministic across retries — derived from the
-  // transition itself rather than a per-call event id — so the unique index on
-  // order_notification_events.idempotency_key actually dedupes a retry.
+  return { user, order, tenant, fromStatus };
+}
+
+export async function markReady(tenantId: string, orderId: string) {
+  const { user, fromStatus } = await executeTransition({
+    tenantId,
+    orderId,
+    to: "ready",
+    eventType: "status_changed",
+    setFields: { readyAt: new Date() },
+  });
+
+  // Deterministic idempotency key — the unique index on
+  // order_notification_events.idempotency_key dedupes retries of the same
+  // transition path.
   await sendOrderReadyEmail({
     orderId,
     tenantId,
@@ -235,30 +277,14 @@ export async function reportIssue(
   options: { notifyParent: boolean },
 ) {
   if (!reason.trim()) throw new Error("Reason is required");
-  const { user, order, tenant, settings } = await loadContext(tenantId, orderId);
-  assertAllowed(settings.workflowMode, order.fulfilmentStatus, "needs_attention");
-  const fromStatus = order.fulfilmentStatus;
-  const wasReady = fromStatus === "ready";
-  const now = new Date();
-
-  const flipped = await db
-    .update(orders)
-    .set({ fulfilmentStatus: "needs_attention", updatedAt: now })
-    .where(and(eq(orders.id, orderId), eq(orders.fulfilmentStatus, fromStatus)))
-    .returning({ id: orders.id });
-  if (flipped.length === 0) {
-    throw new Error("Order status changed concurrently — please refresh");
-  }
-
-  await db.insert(orderEvents).values({
-    orderId,
+  const { user, order, tenant, fromStatus } = await executeTransition({
     tenantId,
+    orderId,
+    to: "needs_attention",
     eventType: "status_changed",
-    fromStatus,
-    toStatus: "needs_attention",
-    actorId: user.id,
     reason,
   });
+  const wasReady = fromStatus === "ready";
 
   if (wasReady || options.notifyParent) {
     await sendOrderHoldEmail({
@@ -282,31 +308,16 @@ export async function reportIssue(
 }
 
 export async function resolveIssue(tenantId: string, orderId: string) {
-  const { user, order, settings } = await loadContext(tenantId, orderId);
-  assertAllowed(settings.workflowMode, order.fulfilmentStatus, "ready");
-  const fromStatus = order.fulfilmentStatus;
-  const now = new Date();
-
-  const flipped = await db
-    .update(orders)
-    .set({ fulfilmentStatus: "ready", readyAt: now, updatedAt: now })
-    .where(and(eq(orders.id, orderId), eq(orders.fulfilmentStatus, fromStatus)))
-    .returning({ id: orders.id });
-  if (flipped.length === 0) {
-    throw new Error("Order status changed concurrently — please refresh");
-  }
-
-  await db.insert(orderEvents).values({
-    orderId,
+  const { user, fromStatus } = await executeTransition({
     tenantId,
+    orderId,
+    to: "ready",
     eventType: "status_changed",
-    fromStatus,
-    toStatus: "ready",
-    actorId: user.id,
+    setFields: { readyAt: new Date() },
   });
 
-  // Distinct idempotency key vs markReady so resolveIssue-after-markReady-after-revert
-  // doesn't collide (different fromStatus path).
+  // Distinct fromStatus path (needs_attention->ready) keeps this key from
+  // colliding with markReady's (to_prepare->ready).
   await sendOrderReadyEmail({
     orderId,
     tenantId,
@@ -321,29 +332,14 @@ export async function markCompleted(
   orderId: string,
   completionType: CompletionType,
 ) {
-  const { user, order, settings } = await loadContext(tenantId, orderId);
-  assertAllowed(settings.workflowMode, order.fulfilmentStatus, "completed");
-  const now = new Date();
-  await db.batch([
-    db
-      .update(orders)
-      .set({
-        fulfilmentStatus: "completed",
-        completionType,
-        completedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(orders.id, orderId)),
-    db.insert(orderEvents).values({
-      orderId,
-      tenantId,
-      eventType: "status_changed",
-      fromStatus: order.fulfilmentStatus,
-      toStatus: "completed",
-      actorId: user.id,
-      metadataJson: { completionType },
-    }),
-  ]);
+  await executeTransition({
+    tenantId,
+    orderId,
+    to: "completed",
+    eventType: "status_changed",
+    setFields: { completionType, completedAt: new Date() },
+    metadataJson: { completionType },
+  });
   revalidatePath(`/admin/${tenantId}/orders`);
 }
 
@@ -353,32 +349,15 @@ export async function reopenOrder(
   reason: string,
 ) {
   if (!reason.trim()) throw new Error("Reason is required");
-  const { user, order, settings } = await loadContext(tenantId, orderId);
-  if (order.fulfilmentStatus !== "completed") {
-    throw new Error("Only completed orders can be reopened");
-  }
-  assertAllowed(settings.workflowMode, "completed", "to_prepare");
-  const now = new Date();
-  await db.batch([
-    db
-      .update(orders)
-      .set({
-        fulfilmentStatus: "to_prepare",
-        completionType: null,
-        completedAt: null,
-        updatedAt: now,
-      })
-      .where(eq(orders.id, orderId)),
-    db.insert(orderEvents).values({
-      orderId,
-      tenantId,
-      eventType: "order_reopened",
-      fromStatus: "completed",
-      toStatus: "to_prepare",
-      actorId: user.id,
-      reason,
-    }),
-  ]);
+  await executeTransition({
+    tenantId,
+    orderId,
+    to: "to_prepare",
+    eventType: "order_reopened",
+    reason,
+    expectedFrom: "completed",
+    setFields: { completionType: null, completedAt: null },
+  });
   revalidatePath(`/admin/${tenantId}/orders`);
 }
 
