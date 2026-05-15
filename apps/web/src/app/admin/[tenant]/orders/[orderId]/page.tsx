@@ -1,9 +1,19 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getOrderById, getOrderRefunds, getTotalRefunded, getTenant, toTenantBrand } from "@/db/queries";
+import {
+  getOrderById,
+  getOrderRefunds,
+  getTotalRefunded,
+  getTenant,
+  getTenantSettings,
+  listOrderEvents,
+  listOrderNotificationEvents,
+  toTenantBrand,
+} from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { DoubleRule } from "@/components/double-rule";
 import { OrderDetailActions } from "./order-detail-actions";
+import { OrderHistory } from "./order-history";
 import { PrintButton } from "@/components/print-button";
 import { loadOrderActivity } from "@/lib/audit/load-order-activity";
 import { OrderActivityStrip } from "@/components/admin/order-activity-strip";
@@ -20,15 +30,21 @@ export default async function OrderDetailPage({
   const order = await getOrderById(orderId);
   if (!order || order.tenantId !== tid) notFound();
 
-  const refunds = await getOrderRefunds(orderId);
-  const refundedTotal = await getTotalRefunded(orderId);
-  const activityRows = await loadOrderActivity(orderId);
+  const [refunds, refundedTotal, activityRows, settings, events, notifications] =
+    await Promise.all([
+      getOrderRefunds(orderId),
+      getTotalRefunded(orderId),
+      loadOrderActivity(orderId),
+      getTenantSettings(tenantRecord.id),
+      listOrderEvents(orderId),
+      listOrderNotificationEvents(orderId),
+    ]);
 
   const total = parseFloat(order.total);
 
   const slipOrder: PickSlipOrder = {
     id: order.id,
-    status: order.status,
+    status: order.fulfilmentStatus,
     parentName: order.parentName,
     parentEmail: order.parentEmail,
     parentMobile: order.parentMobile,
@@ -36,7 +52,7 @@ export default async function OrderDetailPage({
     studentName: order.studentName,
     studentYear: order.studentYear,
     studentRoll: order.studentRoll,
-    delivery: order.delivery,
+    delivery: order.fulfilmentMethod === "shipping" ? "ship" : "pickup",
     total: order.total,
     gst: order.gst,
     stripeRef: order.stripeRef,
@@ -101,11 +117,11 @@ export default async function OrderDetailPage({
               <OrderDetailActions
                 orderId={order.id}
                 tenantId={tid}
-                currentStatus={order.status}
+                fulfilmentStatus={order.fulfilmentStatus}
+                fulfilmentMethod={order.fulfilmentMethod}
+                paymentStatus={order.paymentStatus}
+                workflowMode={settings.workflowMode}
                 accent={tenant.accent}
-                parentEmail={order.parentEmail}
-                parentName={order.parentName}
-                studentName={order.studentName}
                 total={total}
                 refunded={refundedTotal}
               />
@@ -117,6 +133,7 @@ export default async function OrderDetailPage({
         <div className="max-w-3xl mx-auto">
           <PickSlip order={slipOrder} tenant={tenant} lines={slipLines} refundsSlot={refundsBlock} />
           <OrderActivityStrip rows={activityRows} />
+          <OrderHistory events={events} notifications={notifications} />
         </div>
       </div>
     </>

@@ -105,12 +105,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Pin fulfilmentMethod into the PaymentIntent at creation time so the
+    // /api/orders writer can trust it as authoritative — preventing a client
+    // from flipping pickup→shipping (or vice versa) after payment and skewing
+    // the recorded subtotal/GST/shipping breakdown.
+    const fulfilmentMethod = delivery === "ship" ? "shipping" : "pickup";
+
     const intentParams: Stripe.PaymentIntentCreateParams = {
       amount: amountInCents,
       currency,
       metadata: {
         tenantId,
         stripeAccountId: tenant.stripeAccountId,
+        fulfilmentMethod,
         ...metadata,
       },
       automatic_payment_methods: { enabled: true },

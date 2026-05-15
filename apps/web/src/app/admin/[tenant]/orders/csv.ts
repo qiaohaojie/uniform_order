@@ -1,37 +1,61 @@
 export type ExportOrderStatus =
-  | "pending_payment"
-  | "new"
-  | "packing"
+  | "to_prepare"
   | "ready"
-  | "collected"
-  | "partially_refunded"
-  | "refunded";
+  | "needs_attention"
+  | "completed";
 
 export type ExportStatusFilter = ExportOrderStatus | "all";
 
 export const EXPORT_STATUS_OPTIONS: ExportStatusFilter[] = [
   "all",
-  "pending_payment",
-  "new",
-  "packing",
+  "to_prepare",
   "ready",
-  "collected",
-  "partially_refunded",
-  "refunded",
+  "needs_attention",
+  "completed",
 ];
 
 export const CSV_HEADERS = [
   "Order ID",
-  "Date",
-  "Status",
-  "Parent Name",
-  "Parent Email",
-  "Parent Mobile",
-  "Student Name",
-  "Student Year",
+  "Created at (tenant tz)",
+  "Parent name",
+  "Parent email",
+  "Student name",
+  "Student year",
+  "Fulfilment method",
+  "Fulfilment status",
+  "Payment status",
+  "Completion type",
+  "Subtotal",
+  "GST",
   "Total",
-  "Items",
+  "Refunded amount",
+  "Ready at (tenant tz)",
+  "Completed at (tenant tz)",
+  "Pick slip printed at (tenant tz)",
 ] as const;
+
+// Refunded amount: always 2dp from cents to avoid 45.5 / 45.50 drift.
+export function formatRefundedCents(cents: number | null | undefined): string {
+  const n = typeof cents === "number" ? cents : 0;
+  return `$${(n / 100).toFixed(2)}`;
+}
+
+// Format a Date+time in tenant tz, or empty string when null.
+export function formatExportDateTime(
+  date: Date | null,
+  timezone: string,
+): string {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: timezone,
+  }).format(date);
+}
 
 // RFC 4180: wrap in quotes if the field contains comma, quote, CR, or LF.
 // Embedded double-quotes are doubled.

@@ -122,7 +122,7 @@ export function AdminShell({
             const on = n.id === activeId;
             const href = `/admin/${tenantId}/${n.id}`;
             const badge = n.id === "orders" && (newOrderCount ?? 0) > 0
-              ? `${newOrderCount} new`
+              ? `${newOrderCount} to prepare`
               : undefined;
             return (
               <Link

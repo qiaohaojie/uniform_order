@@ -1,21 +1,34 @@
 "use client";
 import Link from "next/link";
 import type { Tenant } from "@/lib/data";
-import type { LiveDashboardData, LiveOrderStatus } from "@/db/queries";
+import type {
+  LiveDashboardData,
+  FulfilmentStatus,
+  PaymentStatus,
+} from "@/db/queries";
 import { Chip } from "@/components/chip";
 import { Spark } from "@/components/spark";
 
-function StatusBadge({ status }: { status: LiveOrderStatus }) {
-  const map: Record<LiveOrderStatus, { tone: "warn" | "info" | "success" | "neutral"; label: string }> = {
-    pending_payment: { tone: "neutral", label: "Pending Payment" },
-    new: { tone: "info", label: "New" },
-    packing: { tone: "warn", label: "Packing" },
+function StatusBadge({
+  fulfilmentStatus,
+  paymentStatus,
+}: {
+  fulfilmentStatus: FulfilmentStatus;
+  paymentStatus: PaymentStatus;
+}) {
+  if (paymentStatus === "refunded") {
+    return <Chip tone="neutral">Refunded</Chip>;
+  }
+  if (paymentStatus === "partially_refunded") {
+    return <Chip tone="warn">Partially Refunded</Chip>;
+  }
+  const map: Record<FulfilmentStatus, { tone: "warn" | "info" | "success" | "neutral"; label: string }> = {
+    to_prepare: { tone: "info", label: "To prepare" },
     ready: { tone: "success", label: "Ready" },
-    collected: { tone: "neutral", label: "Collected" },
-    partially_refunded: { tone: "warn", label: "Partially Refunded" },
-    refunded: { tone: "neutral", label: "Refunded" },
+    needs_attention: { tone: "warn", label: "Needs attention" },
+    completed: { tone: "neutral", label: "Completed" },
   };
-  const { tone, label } = map[status];
+  const { tone, label } = map[fulfilmentStatus];
   return <Chip tone={tone}>{label}</Chip>;
 }
 
@@ -263,7 +276,7 @@ export function AdminDashboardClient({
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <StatusBadge status={o.status} />
+                    <StatusBadge fulfilmentStatus={o.fulfilmentStatus} paymentStatus={o.paymentStatus} />
                     <div className="text-[11px] tnum font-semibold" style={{ color: "var(--color-ink)" }}>
                       ${o.total.toFixed(0)}
                     </div>

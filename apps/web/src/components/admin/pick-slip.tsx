@@ -29,13 +29,19 @@ export interface PickSlipLine {
 }
 
 const STATUS_MAP: Record<string, { tone: "info" | "warn" | "success" | "neutral" | "danger"; label: string }> = {
+  // New fulfilment_status enum (current schema)
+  to_prepare: { tone: "info", label: "To prepare" },
+  ready: { tone: "success", label: "Ready for pickup" },
+  needs_attention: { tone: "warn", label: "Needs attention" },
+  completed: { tone: "neutral", label: "Completed" },
+  // Payment derived states still flow through here
+  partially_refunded: { tone: "danger", label: "Partially refunded" },
+  refunded: { tone: "danger", label: "Refunded" },
+  // Legacy keys kept for any cached page state during the migration window
   pending_payment: { tone: "neutral", label: "Pending payment" },
   new: { tone: "info", label: "New" },
   packing: { tone: "warn", label: "Packing" },
-  ready: { tone: "success", label: "Ready for pickup" },
   collected: { tone: "neutral", label: "Collected" },
-  partially_refunded: { tone: "danger", label: "Partially refunded" },
-  refunded: { tone: "danger", label: "Refunded" },
 };
 
 function PickSlipBarcode({ orderId }: { orderId: string }) {
