@@ -1,23 +1,17 @@
 export type ExportOrderStatus =
-  | "pending_payment"
-  | "new"
-  | "packing"
+  | "to_prepare"
   | "ready"
-  | "collected"
-  | "partially_refunded"
-  | "refunded";
+  | "needs_attention"
+  | "completed";
 
 export type ExportStatusFilter = ExportOrderStatus | "all";
 
 export const EXPORT_STATUS_OPTIONS: ExportStatusFilter[] = [
   "all",
-  "pending_payment",
-  "new",
-  "packing",
+  "to_prepare",
   "ready",
-  "collected",
-  "partially_refunded",
-  "refunded",
+  "needs_attention",
+  "completed",
 ];
 
 export const CSV_HEADERS = [
