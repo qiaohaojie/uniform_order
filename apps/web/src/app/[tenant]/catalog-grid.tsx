@@ -85,7 +85,7 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
         style={{ opacity: q.length > 0 ? 0.5 : 1 }}
       >
         {CATEGORIES.map((c) => {
-          const on = c === activeCat;
+          const on = !query && c === activeCat;
           return (
             <button
               key={c}

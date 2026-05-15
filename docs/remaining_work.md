@@ -199,7 +199,7 @@ Sourced from `my_doc/NSBH/gap-analysis.md` §5 — items not bug-class (those li
 
 > Note (2026-05-15): admin orders CSV export shipped (see `completed.md` §4.37); operators can now pull a status-filtered list of parent emails for manual sends, reducing pressure on §4.3.
 | 4.4 | i18n scaffolding for future non-NSW expansion (PDP §7 Phase 3) | PDP roadmap |
-| 4.12 | Catalog search — chips remain highlighted during active query (visual disconnect) — issue #27 | §3.11 follow-up |
+| ~~4.12~~ | ~~Catalog search — chips remain highlighted during active query~~ — ✅ fixed: `on = !query && c === activeCat` suspends chip selection while search is active | §3.11 follow-up |
 | ~~4.13~~ | ~~`getActiveCatalog` fetched twice per checkout~~ — ✅ fixed: `getCatalogPriceLookup` (3-col query) replaces full catalog fetch in both routes | shipped 2026-05-15 |
 
 > Closed §4 IDs (preserved for cross-reference, no renumbering):
