@@ -1,103 +1,74 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { posthog } from "@/lib/analytics/client";
-
-type OrderStatus = "pending_payment" | "new" | "packing" | "ready" | "collected" | "partially_refunded" | "refunded";
-
-const nextStatus: Record<OrderStatus, OrderStatus | null> = {
-  pending_payment: null,
-  new: "packing",
-  packing: "ready",
-  ready: "collected",
-  collected: null,
-  partially_refunded: null,
-  refunded: null,
-};
-const nextLabel: Record<OrderStatus, string> = {
-  pending_payment: "",
-  new: "Start packing",
-  packing: "Mark ready",
-  ready: "Mark collected",
-  collected: "",
-  partially_refunded: "",
-  refunded: "",
-};
+import type {
+  FulfilmentStatus,
+  FulfilmentMethod,
+  WorkflowMode,
+} from "@/db/queries";
+import {
+  markReady,
+  resolveIssue,
+  markCompleted,
+  reopenOrder,
+} from "../actions";
+import { ReportIssueSheet } from "../report-issue-sheet";
 
 function money(n: number) {
   return n.toFixed(2);
 }
 
+const BTN_OUTLINE =
+  "h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5";
+
 export function OrderDetailActions({
   orderId,
   tenantId,
-  currentStatus,
+  fulfilmentStatus,
+  fulfilmentMethod,
+  paymentStatus,
+  workflowMode,
   accent,
-  parentEmail,
-  parentName,
-  studentName,
   total,
   refunded,
 }: {
   orderId: string;
   tenantId: string;
-  currentStatus: OrderStatus;
+  fulfilmentStatus: FulfilmentStatus;
+  fulfilmentMethod: FulfilmentMethod;
+  paymentStatus: "pending" | "paid" | "partially_refunded" | "refunded";
+  workflowMode: WorkflowMode;
   accent: string;
-  parentEmail: string;
-  parentName: string;
-  studentName: string;
   total: number;
   refunded: number;
 }) {
+  const readyCompletion: "collected" | "shipped" =
+    fulfilmentMethod === "shipping" ? "shipped" : "collected";
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [showRefund, setShowRefund] = useState(false);
+  const [showReopen, setShowReopen] = useState(false);
+  const [showIssue, setShowIssue] = useState(false);
   const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
-  const next = nextStatus[currentStatus];
-  const refundable = currentStatus !== "pending_payment" && currentStatus !== "refunded";
+
+  const refundable =
+    paymentStatus === "paid" || paymentStatus === "partially_refunded";
   const remaining = Math.max(0, total - refunded);
+  const isCompleted = fulfilmentStatus === "completed";
 
-  const handleAdvance = async () => {
-    if (!next) return;
-    setLoading(true);
+  const runAction = (fn: () => Promise<unknown>) => {
     setError("");
-    try {
-      const res = await fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next, tenantId }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Failed to advance status.");
+    start(async () => {
+      try {
+        await fn();
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Action failed.");
       }
-      posthog.capture("order_status_advanced", {
-        order_id: orderId,
-        tenant_id: tenantId,
-        from_status: currentStatus,
-        to_status: next,
-      });
-      router.refresh();
-    } catch (err) {
-      console.error("Failed to advance status:", err);
-      setError(err instanceof Error ? err.message : "Failed to advance status.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNotify = () => {
-    posthog.capture("order_ready_notification_sent", {
-      order_id: orderId,
-      tenant_id: tenantId,
     });
-    const subject = encodeURIComponent(`Your uniform order ${orderId} is ready`);
-    const body = encodeURIComponent(
-      `Hi ${parentName},\n\nYour uniform order ${orderId} for ${studentName} is ready for collection.\n\nPlease collect during shop hours.\n\nThank you.`
-    );
-    window.open(`mailto:${parentEmail}?subject=${subject}&body=${body}`);
   };
 
   const handleRefund = async () => {
@@ -106,28 +77,27 @@ export function OrderDetailActions({
       setError("Invalid refund amount.");
       return;
     }
-    setLoading(true);
     setError("");
-    try {
-      const res = await fetch(`/api/orders/${orderId}/refund`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, reason: refundReason }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Refund failed.");
+    start(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/refund`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount, reason: refundReason }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error ?? "Refund failed.");
+        }
+        setShowRefund(false);
+        setRefundAmount("");
+        setRefundReason("");
+        router.refresh();
+      } catch (err) {
+        console.error("Refund failed:", err);
+        setError(err instanceof Error ? err.message : "Refund failed.");
       }
-      setShowRefund(false);
-      setRefundAmount("");
-      setRefundReason("");
-      router.refresh();
-    } catch (err) {
-      console.error("Refund failed:", err);
-      setError(err instanceof Error ? err.message : "Refund failed.");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
@@ -137,42 +107,99 @@ export function OrderDetailActions({
           {error}
         </span>
       )}
-      {currentStatus === "ready" && (
+
+      {!isCompleted && workflowMode === "standard" && (
+        <>
+          {fulfilmentStatus === "to_prepare" && (
+            <button
+              onClick={() => {
+                posthog.capture("order_mark_ready_clicked", { order_id: orderId });
+                runAction(() => markReady(tenantId, orderId));
+              }}
+              disabled={pending}
+              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white disabled:opacity-60"
+              style={{ background: accent }}
+            >
+              {pending ? "Saving…" : "Mark ready"}
+            </button>
+          )}
+          {fulfilmentStatus === "needs_attention" && (
+            <button
+              onClick={() => runAction(() => resolveIssue(tenantId, orderId))}
+              disabled={pending}
+              className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white disabled:opacity-60"
+              style={{ background: accent }}
+            >
+              Resolve to ready
+            </button>
+          )}
+          {fulfilmentStatus !== "needs_attention" && (
+            <button
+              onClick={() => setShowIssue(true)}
+              className={BTN_OUTLINE}
+              style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+            >
+              Report issue
+            </button>
+          )}
+          <button
+            onClick={() =>
+              runAction(() => markCompleted(tenantId, orderId, readyCompletion))
+            }
+            disabled={pending}
+            className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white disabled:opacity-60"
+            style={{ background: "var(--color-success, #10B981)" }}
+          >
+            Mark completed
+          </button>
+        </>
+      )}
+
+      {!isCompleted && workflowMode === "simple" && (
         <button
-          onClick={handleNotify}
-          className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
-          style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+          onClick={() =>
+            runAction(() => markCompleted(tenantId, orderId, "manual"))
+          }
+          disabled={pending}
+          className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white disabled:opacity-60"
+          style={{ background: accent }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-            <rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 7 L12 13 L21 7" />
-          </svg>
-          Notify parent
+          Mark completed
         </button>
       )}
+
+      {isCompleted && (
+        <button
+          onClick={() => setShowReopen(true)}
+          className={BTN_OUTLINE}
+          style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
+        >
+          Reopen order
+        </button>
+      )}
+
       {refundable && (
         <>
           <button
             onClick={() => setShowRefund((s) => !s)}
-            className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md border flex items-center gap-1.5"
+            className={BTN_OUTLINE}
             style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)" }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
             Refund
           </button>
           {showRefund && (
             <div
-              className="absolute right-0 top-[42px] z-20 bg-white rounded-lg border shadow-lg p-4 w-[280px]"
+              className="absolute right-0 top-[42px] z-20 bg-white rounded-lg border shadow-lg p-4 w-[320px]"
               style={{ borderColor: "var(--color-rule)" }}
             >
-              <div className="text-[12px] font-semibold mb-2" style={{ color: "var(--color-ink)" }}>
+              <div className="text-[12px] font-semibold mb-1" style={{ color: "var(--color-ink)" }}>
                 Refund order
               </div>
-              <div className="text-[11px] mb-2" style={{ color: "var(--color-ink-dim)" }}>
-                Remaining: ${money(remaining)}
-              </div>
+              <p className="text-[11px] mb-2" style={{ color: "var(--color-ink-dim)" }}>
+                Refund ${money(remaining)} to parent? This will return money to the
+                parent&apos;s card and cannot be undone from this order. To charge again,
+                the parent will need to place a new order.
+              </p>
               <input
                 type="number"
                 step="0.01"
@@ -202,27 +229,105 @@ export function OrderDetailActions({
                 </button>
                 <button
                   onClick={handleRefund}
-                  disabled={loading}
+                  disabled={pending}
                   className="flex-1 h-8 rounded text-[12px] font-semibold text-white disabled:opacity-60"
                   style={{ background: "#B23A2A" }}
                 >
-                  {loading ? "Processing…" : "Confirm"}
+                  {pending ? "Processing…" : "Confirm"}
                 </button>
               </div>
             </div>
           )}
         </>
       )}
-      {next && (
-        <button
-          onClick={handleAdvance}
-          disabled={loading}
-          className="h-9 px-3.5 text-[12.5px] font-semibold rounded-md text-white flex items-center gap-1.5 disabled:opacity-60"
-          style={{ background: accent }}
-        >
-          {loading ? "Saving…" : nextLabel[currentStatus]}
-        </button>
+
+      {showIssue && (
+        <ReportIssueSheet
+          order={{ id: orderId, fulfilmentStatus }}
+          tenantId={tenantId}
+          onClose={() => setShowIssue(false)}
+        />
+      )}
+      {showReopen && (
+        <ReopenDialog
+          orderId={orderId}
+          tenantId={tenantId}
+          onClose={() => setShowReopen(false)}
+          onDone={() => router.refresh()}
+        />
       )}
     </>
+  );
+}
+
+function ReopenDialog({
+  orderId,
+  tenantId,
+  onClose,
+  onDone,
+}: {
+  orderId: string;
+  tenantId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="bg-paper rounded-lg border border-rule p-4 max-w-md w-full flex flex-col gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="font-serif text-lg">Reopen order {orderId}?</h2>
+        <p className="text-sm text-foreground/80">
+          This will move the order back to &quot;To prepare&quot;. The parent will{" "}
+          <strong>not</strong> be automatically notified.
+        </p>
+        <textarea
+          className="w-full border border-rule rounded p-2 text-sm"
+          rows={3}
+          placeholder="Reason (required)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        {error && <p className="text-xs text-red-700">{error}</p>}
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onClose}
+            className="text-sm px-3 py-1.5 rounded border border-rule"
+            disabled={pending}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              const trimmed = reason.trim();
+              if (!trimmed) return;
+              setError(null);
+              start(async () => {
+                try {
+                  await reopenOrder(tenantId, orderId, trimmed);
+                  onDone();
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to reopen");
+                }
+              });
+            }}
+            disabled={!reason.trim() || pending}
+            className="text-sm px-3 py-1.5 rounded bg-navy-deep text-white disabled:opacity-50"
+          >
+            {pending ? "Reopening…" : "Reopen"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

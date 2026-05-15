@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notFound, redirect } from "next/navigation";
 import { getAuth } from "./server";
 
 export type SessionUser = {
@@ -70,6 +71,16 @@ export function ensureTenantAccess(user: SessionUser, tenantOperatorEmail: strin
     return null;
   }
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+
+// For RSC pages and server actions: redirect unauthenticated users to sign-in,
+// and 404 unauthorised users (matches the rest of the app's pattern — throwing
+// from an RSC produces a generic 500, which we want to avoid).
+export async function requirePlatformAdmin(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) redirect("/handler/sign-in");
+  if (!isPlatformAdminEmail(user.email)) notFound();
+  return user;
 }
 
 export function ensureParentEmailAccess(user: SessionUser, parentEmail: string) {

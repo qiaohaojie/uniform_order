@@ -9,13 +9,10 @@ import {
 
 const STATUS_LABELS: Record<ExportStatusFilter, string> = {
   all: "All statuses",
-  pending_payment: "Pending payment",
-  new: "New",
-  packing: "Packing",
+  to_prepare: "To prepare",
   ready: "Ready",
-  collected: "Collected",
-  partially_refunded: "Partially refunded",
-  refunded: "Refunded",
+  needs_attention: "Needs attention",
+  completed: "Completed",
 };
 
 export function ExportOrdersButton({

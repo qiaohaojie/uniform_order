@@ -31,10 +31,27 @@ async function readApiError(res: Response, fallback: string) {
   }
 }
 
-export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: Prefill }) {
+export function CheckoutScreen({
+  tenant,
+  prefill,
+  shippingEnabled,
+  pickupEnabled,
+}: {
+  tenant: Tenant;
+  prefill: Prefill;
+  shippingEnabled: boolean;
+  pickupEnabled: boolean;
+}) {
   const router = useRouter();
   const { lines, clearCart } = useCart();
-  const [delivery, setDelivery] = useState<Delivery>("pickup");
+  const [delivery, setDelivery] = useState<Delivery>(
+    shippingEnabled && !pickupEnabled ? "ship" : "pickup",
+  );
+
+  // If shipping gets disabled while ship is selected, fall back to pickup.
+  useEffect(() => {
+    if (!shippingEnabled && delivery === "ship") setDelivery("pickup");
+  }, [shippingEnabled, delivery]);
   const [paying, setPaying] = useState(false);
   const [paymentReady, setPaymentReady] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -291,7 +308,7 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
         studentName: student.studentName,
         studentYear: student.year,
         studentRoll: student.rollClass,
-        delivery,
+        fulfilmentMethod: delivery === "ship" ? "shipping" : "pickup",
         deliveryFee: delivery === "ship" ? SHIP_FEE_AUD : 0,
         subtotal,
         gst,
@@ -435,28 +452,32 @@ export function CheckoutScreen({ tenant, prefill }: { tenant: Tenant; prefill: P
 
         <SectionLabel>Delivery method</SectionLabel>
         <div className="flex flex-col gap-2 mb-4">
-          <DeliveryOption
-            tenant={tenant}
-            on={delivery === "pickup"}
-            onSelect={() => {
-              setDelivery("pickup");
-              posthog.capture("delivery_method_selected", { method: "pickup", tenant_id: tenant.id });
-            }}
-            icon={<PickupIcon size={18} />}
-            title="Pickup at school office"
-            sub={tenant.shopHours ? `Free · ${tenant.shopHours}` : "Free · Ready in 1–2 school days"}
-          />
-          <DeliveryOption
-            tenant={tenant}
-            on={delivery === "ship"}
-            onSelect={() => {
-              setDelivery("ship");
-              posthog.capture("delivery_method_selected", { method: "ship", tenant_id: tenant.id });
-            }}
-            icon={<ShipIcon size={18} />}
-            title="Ship to home"
-            sub="$9.50 · 3–5 business days"
-          />
+          {pickupEnabled && (
+            <DeliveryOption
+              tenant={tenant}
+              on={delivery === "pickup"}
+              onSelect={() => {
+                setDelivery("pickup");
+                posthog.capture("delivery_method_selected", { method: "pickup", tenant_id: tenant.id });
+              }}
+              icon={<PickupIcon size={18} />}
+              title="Pickup at school office"
+              sub={tenant.shopHours ? `Free · ${tenant.shopHours}` : "Free · Ready in 1–2 school days"}
+            />
+          )}
+          {shippingEnabled && (
+            <DeliveryOption
+              tenant={tenant}
+              on={delivery === "ship"}
+              onSelect={() => {
+                setDelivery("ship");
+                posthog.capture("delivery_method_selected", { method: "ship", tenant_id: tenant.id });
+              }}
+              icon={<ShipIcon size={18} />}
+              title="Ship to home"
+              sub="$9.50 · 3–5 business days"
+            />
+          )}
         </div>
 
         <SectionLabel>Payment</SectionLabel>

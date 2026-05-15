@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { orders, tenants, orderRefunds, auditEvents } from "@/db/schema";
-import { sendOrderConfirmationEmail } from "@/lib/email";
+import { orders, tenants, orderRefunds, auditEvents, orderEvents } from "@/db/schema";
+import { sendOrderConfirmationEmail, sendOrderRefundEmail } from "@/lib/email";
+
+function formatAud(amount: number): string {
+  return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount);
+}
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { getStripe } from "@/lib/stripe";
 import { revalidateTag } from "next/cache";
@@ -59,15 +63,20 @@ export async function POST(req: NextRequest) {
   if (event.type === "payment_intent.succeeded") {
     const pi = event.data.object as Stripe.PaymentIntent;
 
-    // Atomic transition; .returning() gives us orderId only when we actually flipped the row
-    // IMPORTANT: Only transition from 'pending_payment' to 'new'
+    // Atomic transition: only flip payment_status from 'pending' to 'paid'.
     const flipped = await db
       .update(orders)
-      .set({ status: "new" })
-      .where(and(eq(orders.stripePaymentIntentId, pi.id), eq(orders.status, "pending_payment")))
-      .returning({ id: orders.id });
+      .set({ paymentStatus: "paid", updatedAt: new Date() })
+      .where(and(eq(orders.stripePaymentIntentId, pi.id), eq(orders.paymentStatus, "pending")))
+      .returning({ id: orders.id, tenantId: orders.tenantId });
 
     if (flipped.length === 1) {
+      await db.insert(orderEvents).values({
+        orderId: flipped[0].id,
+        tenantId: flipped[0].tenantId,
+        eventType: "order_paid",
+        metadataJson: { paymentIntentId: pi.id },
+      });
       await serverCapture("stripe-webhook", "order_confirmed", {
         order_id: flipped[0].id,
         stripe_payment_intent_id: pi.id,
@@ -81,7 +90,7 @@ export async function POST(req: NextRequest) {
         await serverCaptureException("stripe-webhook", err instanceof Error ? err : new Error(String(err)), { step: "confirmation-email", orderId: flipped[0].id });
       }
     } else {
-      console.info("stripe webhook: no pending_payment order matched", pi.id);
+      console.info("stripe webhook: no pending-payment order matched", pi.id);
     }
 
     return NextResponse.json({ received: true });
@@ -185,7 +194,14 @@ export async function POST(req: NextRequest) {
     if (refunds.length > 0 && charge.payment_intent) {
       const piId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent.id;
       const [orderRow] = await db
-        .select({ id: orders.id, total: orders.total, status: orders.status, tenantId: orders.tenantId })
+        .select({
+          id: orders.id,
+          total: orders.total,
+          paymentStatus: orders.paymentStatus,
+          tenantId: orders.tenantId,
+          parentName: orders.parentName,
+          parentEmail: orders.parentEmail,
+        })
         .from(orders)
         .where(eq(orders.stripePaymentIntentId, piId))
         .limit(1);
@@ -208,20 +224,68 @@ export async function POST(req: NextRequest) {
             .onConflictDoNothing({ target: orderRefunds.stripeRefundId });
         }
 
-        // Recompute total refunded from DB and update status
-        const [sumRow] = await db
-          .select({ total: sql<number>`coalesce(sum(${orderRefunds.amount}), 0)` })
-          .from(orderRefunds)
-          .where(eq(orderRefunds.orderId, orderRow.id));
+        // Look up tenant name for the refund email (best-effort).
+        const [tenantRow] = await db
+          .select({ name: tenants.name })
+          .from(tenants)
+          .where(eq(tenants.id, orderRow.tenantId))
+          .limit(1);
 
-        const refundedSum = money(sumRow?.total ?? 0);
-        const orderTotal = money(orderRow.total);
-        const newStatus = refundedSum >= orderTotal ? "refunded" : "partially_refunded";
-        if (newStatus !== orderRow.status) {
+        // Compute totals from the webhook payload (authoritative for Stripe state).
+        const newRefundedCents = refunds.reduce((s, r) => s + (r.amount ?? 0), 0);
+        const orderTotalCents = Math.round(money(orderRow.total) * 100);
+        const newPaymentStatus =
+          newRefundedCents >= orderTotalCents ? "refunded" : "partially_refunded";
+        const isFullRefund = newPaymentStatus === "refunded";
+
+        if (
+          newPaymentStatus !== orderRow.paymentStatus ||
+          newRefundedCents > 0
+        ) {
           await db
             .update(orders)
-            .set({ status: newStatus, updatedAt: new Date() })
+            .set({
+              paymentStatus: newPaymentStatus,
+              refundedAmountCents: newRefundedCents,
+              updatedAt: new Date(),
+            })
             .where(eq(orders.id, orderRow.id));
+        }
+
+        // Email parent (idempotent on stripe_refund_id). Only audit when actually sent —
+        // webhook replays would otherwise create duplicate refund_email_sent rows.
+        if (tenantRow) {
+          for (const refund of refunds) {
+            if (!refund.id) continue;
+            try {
+              const result = await sendOrderRefundEmail({
+                orderId: orderRow.id,
+                tenantId: orderRow.tenantId,
+                tenantName: tenantRow.name,
+                parentName: orderRow.parentName,
+                parentEmail: orderRow.parentEmail,
+                stripeRefundId: refund.id,
+                amountAud: formatAud((refund.amount ?? 0) / 100),
+                isFullRefund,
+                triggeredBy: "webhook",
+                triggeredByUserId: null,
+              });
+              if (result.status === "sent") {
+                await db.insert(orderEvents).values({
+                  orderId: orderRow.id,
+                  tenantId: orderRow.tenantId,
+                  eventType: "refund_email_sent",
+                  metadataJson: {
+                    source: "webhook",
+                    chargeId: charge.id,
+                    stripeRefundId: refund.id,
+                  },
+                });
+              }
+            } catch (emailErr) {
+              console.error("Refund email failed for webhook refund", refund.id, emailErr);
+            }
+          }
         }
 
         const totalRefundedCents = refunds.reduce(

@@ -47,9 +47,17 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
             <span className="font-mono">{tenant.id}.uniformorder.online</span> · Status: <strong>{STATUS_LABEL[status]}</strong>
           </div>
         </div>
-        <Link href={`/${tenant.id}`} className="text-sm font-semibold text-navy-deep underline">
-          Open parent shop ↗
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/platform/tenants/${tenant.id}/settings`}
+            className="text-sm font-semibold text-navy-deep underline"
+          >
+            Workflow settings →
+          </Link>
+          <Link href={`/${tenant.id}`} className="text-sm font-semibold text-navy-deep underline">
+            Open parent shop ↗
+          </Link>
+        </div>
       </header>
 
       <div className="flex-1 px-7 py-6 overflow-auto space-y-4 max-w-4xl">
