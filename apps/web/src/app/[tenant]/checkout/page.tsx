@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getTenant, toTenantBrand } from "@/db/queries";
+import { getTenant, getTenantSettings, toTenantBrand } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
 import { TenantFooter } from "@/components/tenant-footer";
 import { CheckoutScreen } from "./checkout-screen";
@@ -11,7 +11,11 @@ export default async function CheckoutPage({ params }: PageProps<"/[tenant]/chec
   const tenantRecord = await getTenant(slug);
   if (!tenantRecord) notFound();
 
-  const [user, active] = await Promise.all([getSessionUser(), getActiveChild()]);
+  const [user, active, settings] = await Promise.all([
+    getSessionUser(),
+    getActiveChild(),
+    getTenantSettings(tenantRecord.id),
+  ]);
   if (!user) {
     redirect(`/auth/sign-in?callbackURL=${encodeURIComponent(`/${slug}/checkout`)}`);
   }
@@ -29,7 +33,12 @@ export default async function CheckoutPage({ params }: PageProps<"/[tenant]/chec
 
   return (
     <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
-      <CheckoutScreen tenant={tenant} prefill={prefill} />
+      <CheckoutScreen
+        tenant={tenant}
+        prefill={prefill}
+        shippingEnabled={settings.shippingEnabled}
+        pickupEnabled={settings.pickupEnabled}
+      />
       <TenantFooter tenant={tenantRecord} />
     </MobileShell>
   );
