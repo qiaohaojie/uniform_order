@@ -4,6 +4,7 @@ import type { Tenant } from "@/lib/data";
 import type { BoardOrder, WorkflowMode } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { OrdersBoard } from "./orders-board";
+import { OrdersMobileList } from "./orders-mobile-list";
 import { ExportOrdersButton } from "@/components/export-orders-button";
 import { PickSlip, type PickSlipOrder, type PickSlipLine } from "@/components/admin/pick-slip";
 import { recordPickSlipPrinted } from "./actions";
@@ -119,6 +120,12 @@ export function OrdersPageClient({
         }
       />
       <OrdersBoard
+        tenantId={tenantId}
+        orders={filtered}
+        workflowMode={workflowMode}
+        accent={tenant.accent}
+      />
+      <OrdersMobileList
         tenantId={tenantId}
         orders={filtered}
         workflowMode={workflowMode}
