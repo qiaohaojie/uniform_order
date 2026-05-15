@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { BoardOrder, WorkflowMode } from "@/db/queries";
 import { markReady, markCompleted, resolveIssue } from "./actions";
+import { ReportIssueSheet } from "./report-issue-sheet";
 
 const BTN =
   "text-xs px-2 py-1 rounded border border-rule hover:bg-rule/40 disabled:opacity-50";
@@ -110,6 +111,7 @@ function Actions({
   mode: WorkflowMode;
 }) {
   const [pending, start] = useTransition();
+  const [showIssue, setShowIssue] = useState(false);
   if (order.fulfilmentStatus === "completed") return null;
 
   if (mode === "simple") {
@@ -130,24 +132,42 @@ function Actions({
   return (
     <div className="mt-2 flex flex-wrap gap-1">
       {s === "to_prepare" && (
-        <button
-          className={BTN}
-          disabled={pending}
-          onClick={() => start(() => markReady(tenantId, order.id))}
-        >
-          Mark ready
-        </button>
+        <>
+          <button
+            className={BTN}
+            disabled={pending}
+            onClick={() => start(() => markReady(tenantId, order.id))}
+          >
+            Mark ready
+          </button>
+          <button
+            className={BTN}
+            disabled={pending}
+            onClick={() => setShowIssue(true)}
+          >
+            Report issue
+          </button>
+        </>
       )}
       {s === "ready" && (
-        <button
-          className={BTN}
-          disabled={pending}
-          onClick={() =>
-            start(() => markCompleted(tenantId, order.id, "collected"))
-          }
-        >
-          Mark completed
-        </button>
+        <>
+          <button
+            className={BTN}
+            disabled={pending}
+            onClick={() =>
+              start(() => markCompleted(tenantId, order.id, "collected"))
+            }
+          >
+            Mark completed
+          </button>
+          <button
+            className={BTN}
+            disabled={pending}
+            onClick={() => setShowIssue(true)}
+          >
+            Report issue
+          </button>
+        </>
       )}
       {s === "needs_attention" && (
         <>
@@ -168,6 +188,13 @@ function Actions({
             Mark completed
           </button>
         </>
+      )}
+      {showIssue && (
+        <ReportIssueSheet
+          order={order}
+          tenantId={tenantId}
+          onClose={() => setShowIssue(false)}
+        />
       )}
     </div>
   );

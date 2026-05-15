@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { BoardOrder, FulfilmentStatus, WorkflowMode } from "@/db/queries";
 import { markReady, markCompleted, resolveIssue } from "./actions";
+import { ReportIssueSheet } from "./report-issue-sheet";
 
 const BTN =
   "text-sm px-3 py-1.5 rounded border border-rule hover:bg-rule/40 disabled:opacity-50";
@@ -34,6 +35,7 @@ export function OrdersMobileList({
   accent: string;
 }) {
   const [filter, setFilter] = useState<"all" | FulfilmentStatus>("all");
+  const [issueTarget, setIssueTarget] = useState<BoardOrder | null>(null);
   const filters = workflowMode === "simple" ? SIMPLE_FILTERS : STANDARD_FILTERS;
 
   const filtered = orders.filter((o) => {
@@ -74,9 +76,17 @@ export function OrdersMobileList({
             tenantId={tenantId}
             mode={workflowMode}
             accent={accent}
+            onReportIssue={() => setIssueTarget(o)}
           />
         ))}
       </ul>
+      {issueTarget && (
+        <ReportIssueSheet
+          order={issueTarget}
+          tenantId={tenantId}
+          onClose={() => setIssueTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -86,11 +96,13 @@ function MobileRow({
   tenantId,
   mode,
   accent,
+  onReportIssue,
 }: {
   order: BoardOrder;
   tenantId: string;
   mode: WorkflowMode;
   accent: string;
+  onReportIssue: () => void;
 }) {
   const [pending, start] = useTransition();
   const s = order.fulfilmentStatus;
@@ -122,24 +134,34 @@ function MobileRow({
           </button>
         )}
         {mode === "standard" && s === "to_prepare" && (
-          <button
-            className={BTN}
-            disabled={pending}
-            onClick={() => start(() => markReady(tenantId, order.id))}
-          >
-            Mark ready
-          </button>
+          <>
+            <button
+              className={BTN}
+              disabled={pending}
+              onClick={() => start(() => markReady(tenantId, order.id))}
+            >
+              Mark ready
+            </button>
+            <button className={BTN} disabled={pending} onClick={onReportIssue}>
+              Report issue
+            </button>
+          </>
         )}
         {mode === "standard" && s === "ready" && (
-          <button
-            className={BTN}
-            disabled={pending}
-            onClick={() =>
-              start(() => markCompleted(tenantId, order.id, "collected"))
-            }
-          >
-            Mark completed
-          </button>
+          <>
+            <button
+              className={BTN}
+              disabled={pending}
+              onClick={() =>
+                start(() => markCompleted(tenantId, order.id, "collected"))
+              }
+            >
+              Mark completed
+            </button>
+            <button className={BTN} disabled={pending} onClick={onReportIssue}>
+              Report issue
+            </button>
+          </>
         )}
         {mode === "standard" && s === "needs_attention" && (
           <>
