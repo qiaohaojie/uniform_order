@@ -265,10 +265,33 @@ async function seedTenant(db: Db, t: FixtureTenant, flags: Flags) {
 
   await seedCatalog(db, t);
   if (t.orders.length > 0) {
-    // Order seeding added in Task 7
+    await seedOrders(db, t);
   }
   void flags;
 }
+
+function lookupPrice(t: FixtureTenant, itemId: string, variantLabel: string): number {
+  const item = t.catalog.find((i) => i.id === itemId);
+  if (!item) throw new Error(`Fixture refers to unknown item ${itemId} in tenant ${t.id}`);
+  const variant = item.variants.find((v) => v.label === variantLabel);
+  if (!variant) throw new Error(`Fixture refers to unknown variant '${variantLabel}' on ${itemId}`);
+  return Number(variant.price);
+}
+
+function itemName(t: FixtureTenant, itemId: string): string {
+  const item = t.catalog.find((i) => i.id === itemId);
+  return item?.name ?? itemId;
+}
+
+function pad(n: number, width: number): string {
+  return n.toString().padStart(width, "0");
+}
+
+function money(n: number): string {
+  return n.toFixed(2);
+}
+
+const GST_DIVISOR = 11;
 
 async function seedCatalog(db: Db, t: FixtureTenant) {
   let sortOrder = 0;
@@ -311,6 +334,219 @@ async function seedCatalog(db: Db, t: FixtureTenant) {
     }
   }
   console.log(`  ✓ catalog (${t.catalog.length} items)`);
+}
+
+async function seedOrders(db: Db, t: FixtureTenant) {
+  // Delete existing demo orders for this tenant (cascade clears lines/events/notifications/refunds)
+  const existing = await db
+    .select({ id: schema.orders.id })
+    .from(schema.orders)
+    .where(eq(schema.orders.tenantId, t.id));
+  if (existing.length > 0) {
+    await db.delete(schema.orders).where(eq(schema.orders.tenantId, t.id));
+  }
+
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  for (const o of t.orders) {
+    const orderId = `${t.orderIdPrefix}-${pad(o.n, 5)}`;
+    const createdAt = new Date(now - o.daysAgo * oneDay);
+
+    // Compute totals
+    let subtotal = 0;
+    const lineRows = o.lines.map(([itemId, variantLabel, size, qty]) => {
+      const unit = lookupPrice(t, itemId, variantLabel);
+      const lineTotal = unit * qty;
+      subtotal += lineTotal;
+      return {
+        orderId,
+        itemId,
+        itemName: itemName(t, itemId),
+        variantLabel,
+        size,
+        qty,
+        unitPrice: money(unit),
+        lineTotal: money(lineTotal),
+      };
+    });
+    const total = subtotal; // GST-inclusive convention
+    const gst = subtotal / GST_DIVISOR;
+
+    // Build order row
+    const refundedCents = o.refund ? Math.round(Number(o.refund.amount) * 100) : 0;
+
+    const readyAt =
+      o.fulfilment === "ready" || o.fulfilment === "completed"
+        ? new Date(createdAt.getTime() + 1 * oneDay)
+        : null;
+    const completedAt =
+      o.fulfilment === "completed"
+        ? new Date(createdAt.getTime() + 2 * oneDay)
+        : null;
+
+    await db.insert(schema.orders).values({
+      id: orderId,
+      tenantId: t.id,
+      parentName: o.parent,
+      parentEmail: "parent@demo.uniformorder.online",
+      parentMobile: "+61400000000",
+      studentName: o.student,
+      studentYear: o.year,
+      studentRoll: o.roll,
+      fulfilmentMethod: "pickup",
+      fulfilmentStatus: o.fulfilment,
+      completionType: o.fulfilment === "completed" ? "collected" : null,
+      deliveryFee: "0",
+      subtotal: money(subtotal),
+      gst: money(gst),
+      total: money(total),
+      refundedAmountCents: refundedCents,
+      stripePaymentIntentId: `pi_demo_${orderId}`,
+      stripeRef: `ch_demo_${orderId}`,
+      paymentStatus: o.payment,
+      refundPolicyAcceptedAt: createdAt,
+      readyAt,
+      completedAt,
+      createdAt,
+      updatedAt: completedAt ?? readyAt ?? createdAt,
+    });
+
+    // Lines — capture IDs in insertion order so refund linking is deterministic
+    let insertedLineIds: string[] = [];
+    if (lineRows.length > 0) {
+      const inserted = await db
+        .insert(schema.orderLines)
+        .values(lineRows)
+        .returning({ id: schema.orderLines.id });
+      insertedLineIds = inserted.map((r) => r.id);
+    }
+
+    // Events
+    const events: Array<typeof schema.orderEvents.$inferInsert> = [];
+    if (o.payment === "paid" || o.payment === "partially_refunded" || o.payment === "refunded") {
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "order_paid",
+        createdAt,
+      });
+    }
+    if (o.fulfilment === "ready" || o.fulfilment === "completed") {
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "status_changed",
+        fromStatus: "to_prepare",
+        toStatus: "ready",
+        createdAt: readyAt!,
+      });
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "ready_email_sent",
+        createdAt: readyAt!,
+      });
+    }
+    if (o.fulfilment === "completed") {
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "status_changed",
+        fromStatus: "ready",
+        toStatus: "completed",
+        createdAt: completedAt!,
+      });
+    }
+    if (o.fulfilment === "needs_attention") {
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "status_changed",
+        fromStatus: "to_prepare",
+        toStatus: "needs_attention",
+        reason: o.holdReason ?? null,
+        createdAt: new Date(createdAt.getTime() + oneDay),
+      });
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "hold_email_sent",
+        createdAt: new Date(createdAt.getTime() + oneDay),
+      });
+    }
+    if (o.refund) {
+      events.push({
+        orderId,
+        tenantId: t.id,
+        eventType: "refund_created",
+        reason: o.refund.reason,
+        createdAt: new Date((completedAt ?? createdAt).getTime() + oneDay),
+      });
+    }
+    if (events.length > 0) {
+      await db.insert(schema.orderEvents).values(events);
+    }
+
+    // Notification events
+    const notifs: Array<typeof schema.orderNotificationEvents.$inferInsert> = [];
+    if (o.fulfilment === "ready" || o.fulfilment === "completed") {
+      notifs.push({
+        orderId,
+        tenantId: t.id,
+        type: "ready",
+        status: "sent",
+        recipientEmail: "parent@demo.uniformorder.online",
+        providerMessageId: `msg_demo_${orderId}_ready`,
+        idempotencyKey: `demo_${orderId}_ready`,
+        triggeredBy: "system",
+        sentAt: readyAt,
+      });
+    }
+    if (o.fulfilment === "needs_attention") {
+      notifs.push({
+        orderId,
+        tenantId: t.id,
+        type: "hold",
+        status: "sent",
+        recipientEmail: "parent@demo.uniformorder.online",
+        providerMessageId: `msg_demo_${orderId}_hold`,
+        idempotencyKey: `demo_${orderId}_hold`,
+        triggeredBy: "system",
+        sentAt: new Date(createdAt.getTime() + oneDay),
+      });
+    }
+    if (o.refund) {
+      notifs.push({
+        orderId,
+        tenantId: t.id,
+        type: "refund",
+        status: "sent",
+        recipientEmail: "parent@demo.uniformorder.online",
+        providerMessageId: `msg_demo_${orderId}_refund`,
+        idempotencyKey: `demo_${orderId}_refund`,
+        triggeredBy: "system",
+        sentAt: new Date((completedAt ?? createdAt).getTime() + oneDay),
+      });
+    }
+    if (notifs.length > 0) {
+      await db.insert(schema.orderNotificationEvents).values(notifs);
+    }
+
+    // Refunds — link to the captured line ID at the fixture-specified index
+    if (o.refund) {
+      const targetLineId = insertedLineIds[o.refund.lineIndex] ?? null;
+      await db.insert(schema.orderRefunds).values({
+        orderId,
+        lineId: targetLineId,
+        amount: o.refund.amount,
+        reason: o.refund.reason,
+        stripeRefundId: `re_demo_${orderId}_001`,
+        createdAt: new Date((completedAt ?? createdAt).getTime() + oneDay),
+      });
+    }
+  }
+  console.log(`  ✓ orders (${t.orders.length})`);
 }
 
 async function main() {
