@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "check-types": "tsc --noEmit",
-    "print-qa": "node tests/print/print-qa.mjs"
+    "print-qa": "node tests/print/print-qa.mjs",
+    "demo:seed:dry": "tsx --env-file=../../GTM/demo_data/.env.demo ../../GTM/demo_data/seed-demo.ts --dry-run",
+    "demo:seed": "tsx --env-file=../../GTM/demo_data/.env.demo ../../GTM/demo_data/seed-demo.ts",
+    "demo:cleanup": "tsx --env-file=../../GTM/demo_data/.env.demo ../../GTM/demo_data/cleanup-demo.ts",
+    "demo:cleanup:confirm": "tsx --env-file=../../GTM/demo_data/.env.demo ../../GTM/demo_data/cleanup-demo.ts --confirm"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

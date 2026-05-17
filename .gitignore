@@ -51,3 +51,9 @@ docs/superpowers/audits/2026-05-11-a11y/auth-storage.json
 # §3.7 print QA — local storage state + generated PDFs/screenshots
 apps/web/tests/print/.storage.json
 apps/web/tests/print/output/
+
+# GTM demo assets — generated artifacts and secrets
+GTM/product_demo/recordings/output/
+GTM/demo_data/.env.demo
+*.webm
+*.mp4
