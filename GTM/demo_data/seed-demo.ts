@@ -263,8 +263,54 @@ async function seedTenant(db: Db, t: FixtureTenant, flags: Flags) {
     .where(eq(schema.tenants.id, t.id));
   console.log(`  ✓ legal version (id ${legalVersionId.slice(0, 8)}…)`);
 
-  // Catalog/orders deferred to Task 6/7
+  await seedCatalog(db, t);
+  if (t.orders.length > 0) {
+    // Order seeding added in Task 7
+  }
   void flags;
+}
+
+async function seedCatalog(db: Db, t: FixtureTenant) {
+  let sortOrder = 0;
+  for (const item of t.catalog) {
+    await db
+      .insert(schema.catalogItems)
+      .values({
+        id: item.id,
+        tenantId: t.id,
+        name: item.name,
+        category: item.category,
+        description: item.description ?? null,
+        active: true,
+        sortOrder: sortOrder++,
+      })
+      .onConflictDoUpdate({
+        target: schema.catalogItems.id,
+        set: {
+          name: item.name,
+          category: item.category,
+          description: item.description ?? null,
+          active: true,
+          sortOrder: sortOrder - 1,
+          updatedAt: new Date(),
+        },
+      });
+
+    // Variants: delete-then-insert (no natural key)
+    await db.delete(schema.catalogVariants).where(eq(schema.catalogVariants.itemId, item.id));
+    if (item.variants.length > 0) {
+      await db.insert(schema.catalogVariants).values(
+        item.variants.map((v) => ({
+          itemId: item.id,
+          label: v.label,
+          price: v.price,
+          sizes: v.sizes,
+          active: true,
+        }))
+      );
+    }
+  }
+  console.log(`  ✓ catalog (${t.catalog.length} items)`);
 }
 
 async function main() {
