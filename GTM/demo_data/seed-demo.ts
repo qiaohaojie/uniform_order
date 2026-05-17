@@ -53,6 +53,72 @@ function parseFlags(): Flags {
 
 const PROD_HOST_PATTERNS = ["prod", "production", "super-cell-03401356"];
 
+// ─── Fixture types ───────────────────────────────────────────────────────────
+type FixtureVariant = { label: string; price: string; sizes: string[] };
+type FixtureCatalogItem = {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+  variants: FixtureVariant[];
+};
+type FixtureLegal = {
+  policyMode: "text" | "url";
+  policyText?: string;
+  policyUrl?: string;
+  aclAcknowledged: boolean;
+  sellerOfRecordAcknowledged: boolean;
+  declarantName: string;
+  declarantRole: string;
+};
+type FixtureSettings = {
+  workflowMode: "standard" | "simple";
+  pickupEnabled: boolean;
+  shippingEnabled: boolean;
+};
+type FixtureOrder = {
+  n: number;
+  fulfilment: "to_prepare" | "ready" | "needs_attention" | "completed";
+  payment: "pending" | "paid" | "partially_refunded" | "refunded";
+  daysAgo: number;
+  parent: string;
+  student: string;
+  year: string;
+  roll: string;
+  lines: Array<[string, string, string, number]>;
+  holdReason?: string;
+  refund?: { amount: string; reason: string; lineIndex: number };
+};
+type FixtureTenant = {
+  id: DemoTenantId;
+  name: string;
+  short: string;
+  accent: string;
+  motto: string;
+  address: string;
+  shopHours: string;
+  shopEmail: string;
+  timezone: string;
+  isPubliclyListed: boolean;
+  stripeAccountId: string;
+  stripeChargesEnabled: boolean;
+  stripePayoutsEnabled: boolean;
+  platformApprovalStatus: string;
+  orderIdPrefix: string;
+  settings: FixtureSettings;
+  legal: FixtureLegal;
+  catalog: FixtureCatalogItem[];
+  orders: FixtureOrder[];
+};
+type Fixture = { tenants: FixtureTenant[] };
+
+function loadFixture(): Fixture {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const path = resolve(__dirname, "fixtures/demo-scenarios.json");
+  return JSON.parse(readFileSync(path, "utf8")) as Fixture;
+}
+
 function abortWithGuard(reason: string, remediation: string): never {
   console.error(`\n✗ SAFETY GUARD TRIPPED: ${reason}`);
   console.error(`  Remediation: ${remediation}`);
@@ -95,6 +161,112 @@ function checkSafety(databaseUrl: string, flags: Flags) {
   }
 }
 
+type Db = ReturnType<typeof drizzle<typeof schema>>;
+
+async function seedTenant(db: Db, t: FixtureTenant, flags: Flags) {
+  // Tenant upsert
+  await db
+    .insert(schema.tenants)
+    .values({
+      id: t.id,
+      name: t.name,
+      short: t.short,
+      accent: t.accent,
+      motto: t.motto,
+      address: t.address,
+      shopHours: t.shopHours,
+      shopEmail: t.shopEmail,
+      timezone: t.timezone,
+      isPubliclyListed: t.isPubliclyListed,
+      stripeAccountId: t.stripeAccountId,
+      stripeChargesEnabled: t.stripeChargesEnabled,
+      stripePayoutsEnabled: t.stripePayoutsEnabled,
+      platformApprovalStatus: t.platformApprovalStatus,
+      platformApprovedAt: new Date(),
+      platformApprovedBy: "demo-seed",
+    })
+    .onConflictDoUpdate({
+      target: schema.tenants.id,
+      set: {
+        name: t.name,
+        short: t.short,
+        accent: t.accent,
+        motto: t.motto,
+        address: t.address,
+        shopHours: t.shopHours,
+        shopEmail: t.shopEmail,
+        timezone: t.timezone,
+        isPubliclyListed: t.isPubliclyListed,
+        stripeAccountId: t.stripeAccountId,
+        stripeChargesEnabled: t.stripeChargesEnabled,
+        stripePayoutsEnabled: t.stripePayoutsEnabled,
+        platformApprovalStatus: t.platformApprovalStatus,
+        updatedAt: new Date(),
+      },
+    });
+  console.log(`  ✓ tenant row`);
+
+  // Settings upsert
+  await db
+    .insert(schema.tenantSettings)
+    .values({
+      tenantId: t.id,
+      workflowMode: t.settings.workflowMode,
+      pickupEnabled: t.settings.pickupEnabled,
+      shippingEnabled: t.settings.shippingEnabled,
+    })
+    .onConflictDoUpdate({
+      target: schema.tenantSettings.tenantId,
+      set: {
+        workflowMode: t.settings.workflowMode,
+        pickupEnabled: t.settings.pickupEnabled,
+        shippingEnabled: t.settings.shippingEnabled,
+        updatedAt: new Date(),
+      },
+    });
+  console.log(`  ✓ tenant settings`);
+
+  // Legal version: insert if not exists for (tenantId, version=1)
+  const existing = await db
+    .select({ id: schema.tenantLegalVersions.id })
+    .from(schema.tenantLegalVersions)
+    .where(eq(schema.tenantLegalVersions.tenantId, t.id))
+    .limit(1);
+
+  let legalVersionId: string;
+  if (existing.length > 0) {
+    legalVersionId = existing[0].id;
+  } else {
+    const [inserted] = await db
+      .insert(schema.tenantLegalVersions)
+      .values({
+        tenantId: t.id,
+        version: 1,
+        policyMode: t.legal.policyMode,
+        policyText: t.legal.policyText ?? null,
+        policyUrl: t.legal.policyUrl ?? null,
+        aclAcknowledged: t.legal.aclAcknowledged,
+        sellerOfRecordAcknowledged: t.legal.sellerOfRecordAcknowledged,
+        declarantName: t.legal.declarantName,
+        declarantRole: t.legal.declarantRole,
+        enteredByUserId: "00000000-0000-0000-0000-000000000000",
+        enteredByEmail: "demo-seed@uniformorder.online",
+      })
+      .returning({ id: schema.tenantLegalVersions.id });
+    legalVersionId = inserted.id;
+  }
+
+  // Link tenant → current legal version
+  await db
+    .update(schema.tenants)
+    .set({ currentLegalVersionId: legalVersionId })
+    .where(eq(schema.tenants.id, t.id));
+  console.log(`  ✓ legal version (id ${legalVersionId.slice(0, 8)}…)`);
+
+  // Catalog/orders deferred to Task 6/7
+  void flags;
+}
+
 async function main() {
   const flags = parseFlags();
   console.log("─".repeat(60));
@@ -113,9 +285,34 @@ async function main() {
     );
   }
   checkSafety(databaseUrl, flags);
-
   console.log("✓ Safety guards passed.");
-  console.log(`  (Stopping early — DB write logic added in Task 5+.)`);
+
+  const fixture = loadFixture();
+  const wantedTenants = fixture.tenants.filter((t) => {
+    if (!flags.only) return true;
+    if (flags.only === "blank") return t.id === "demo-blank";
+    if (flags.only === "academy") return t.id === "demo-academy";
+    return t.id === flags.only;
+  });
+
+  if (flags.dryRun) {
+    console.log("\n[DRY RUN] Would seed:");
+    for (const t of wantedTenants) {
+      console.log(`  tenant ${t.id} — ${t.catalog.length} items, ${t.orders.length} orders`);
+    }
+    console.log("\n[DRY RUN] No DB connection opened.");
+    return;
+  }
+
+  const sqlClient = neon(databaseUrl);
+  const db = drizzle(sqlClient, { schema });
+
+  for (const t of wantedTenants) {
+    console.log(`\n→ Seeding tenant ${t.id} (${t.name})`);
+    await seedTenant(db, t, flags);
+  }
+
+  console.log("\n✓ Seed complete.");
 }
 
 main().catch((err) => {
