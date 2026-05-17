@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
 
@@ -25,9 +26,10 @@ export type ProfileClientProps = {
     email: string;
     image: string | null;
   };
+  childrenCount: number;
 };
 
-export function ProfileClient({ user }: ProfileClientProps) {
+export function ProfileClient({ user, childrenCount }: ProfileClientProps) {
   const displayName = user.name?.trim() || user.email;
   const initials = getInitials(user.name ?? "", user.email);
 
@@ -76,6 +78,25 @@ export function ProfileClient({ user }: ProfileClientProps) {
             </div>
           </div>
         </div>
+
+        <Link
+          href="/"
+          className="block rounded-[14px] border bg-white p-4 mb-3"
+          style={{
+            borderColor: "var(--color-rule)",
+            boxShadow: "0 1px 0 rgba(15,30,50,0.04), 0 8px 24px -16px rgba(15,30,50,0.10)",
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[13.5px] font-medium" style={{ color: "var(--color-ink)" }}>
+              My children
+            </span>
+            <span className="text-[12px] flex items-center gap-1.5" style={{ color: "var(--color-ink-dim)" }}>
+              {childrenCount === 0 ? "0 saved" : `${childrenCount} saved`}
+              <span style={{ color: "var(--color-rule)" }}>›</span>
+            </span>
+          </div>
+        </Link>
       </div>
 
       <BottomNav active="profile" />
