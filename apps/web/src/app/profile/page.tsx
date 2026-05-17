@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/authorization";
-import { getChildrenForParent } from "@/db/queries";
+import { getChildrenForParent, getTenantsByIds } from "@/db/queries";
 import { ProfileClient } from "./profile-client";
 
 export default async function ProfilePage() {
@@ -9,6 +9,13 @@ export default async function ProfilePage() {
     redirect("/auth/sign-in?callbackURL=%2Fprofile");
   }
   const children = await getChildrenForParent(user.id);
+
+  const uniqueTenantIds = Array.from(new Set(children.map((c) => c.tenantId)));
+  const fullTenants = await getTenantsByIds(uniqueTenantIds);
+  const tenants = fullTenants
+    .map((t) => ({ id: t.id, short: t.short, shopEmail: t.shopEmail }))
+    .sort((a, b) => a.short.localeCompare(b.short));
+
   return (
     <ProfileClient
       user={{
@@ -17,6 +24,7 @@ export default async function ProfilePage() {
         image: null,
       }}
       childrenCount={children.length}
+      tenants={tenants}
     />
   );
 }
