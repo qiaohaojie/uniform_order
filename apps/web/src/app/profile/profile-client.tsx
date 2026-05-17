@@ -3,7 +3,34 @@
 import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
 
-export function ProfileClient() {
+function getInitials(displayName: string, email: string): string {
+  const source = displayName.trim() || email;
+  // If we used the email, take just the first letter of the local part.
+  if (!displayName.trim()) {
+    return (email[0] ?? "U").toUpperCase();
+  }
+  return (
+    source
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U"
+  );
+}
+
+export type ProfileClientProps = {
+  user: {
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
+};
+
+export function ProfileClient({ user }: ProfileClientProps) {
+  const displayName = user.name?.trim() || user.email;
+  const initials = getInitials(user.name ?? "", user.email);
+
   return (
     <MobileShell bg="var(--color-paper)">
       <div className="px-4 pt-3 pb-3 flex items-center flex-shrink-0">
@@ -13,7 +40,42 @@ export function ProfileClient() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-6">
-        {/* Sections added in later tasks */}
+        <div
+          className="rounded-[14px] border bg-white p-4 mb-3 flex items-center gap-3"
+          style={{
+            borderColor: "var(--color-rule)",
+            boxShadow: "0 1px 0 rgba(15,30,50,0.04), 0 8px 24px -16px rgba(15,30,50,0.10)",
+          }}
+        >
+          {user.image ? (
+            <img
+              alt=""
+              src={user.image}
+              className="w-[52px] h-[52px] rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <div
+              className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-white font-serif text-[20px] font-medium flex-shrink-0"
+              style={{ background: "var(--color-navy-deep)" }}
+            >
+              {initials}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div
+              className="font-serif text-[17px] font-semibold leading-[1.15] truncate"
+              style={{ color: "var(--color-ink)" }}
+            >
+              {displayName}
+            </div>
+            <div
+              className="text-[12px] mt-0.5 truncate"
+              style={{ color: "var(--color-ink-dim)" }}
+            >
+              {user.email}
+            </div>
+          </div>
+        </div>
       </div>
 
       <BottomNav active="profile" />
