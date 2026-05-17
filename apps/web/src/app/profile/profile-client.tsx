@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
+import { authClient } from "@/lib/auth/client";
+import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 
 function getInitials(displayName: string, email: string): string {
   const source = displayName.trim() || email;
@@ -39,6 +43,25 @@ export type ProfileClientProps = {
 export function ProfileClient({ user, childrenCount, tenants }: ProfileClientProps) {
   const displayName = user.name?.trim() || user.email;
   const initials = getInitials(user.name ?? "", user.email);
+
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  const handleSignOut = async () => {
+    setSignOutError(null);
+    setSigningOut(true);
+    try {
+      await authClient.signOut();
+      clearActiveChildCookieClient();
+      router.replace("/");
+      router.refresh();
+    } catch {
+      setSignOutError("Couldn't sign out. Try again.");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   return (
     <MobileShell bg="var(--color-paper)">
@@ -175,6 +198,30 @@ export function ProfileClient({ user, childrenCount, tenants }: ProfileClientPro
             <span className="text-[13.5px] font-medium">Terms of service</span>
             <span style={{ color: "var(--color-rule)" }}>›</span>
           </Link>
+        </div>
+
+        <div className="mt-2">
+          {signOutError && (
+            <div
+              className="text-[12px] font-semibold text-center mb-2 py-2 px-3 rounded-[10px]"
+              style={{ color: "#B23A2A", background: "rgba(178,58,42,0.06)" }}
+            >
+              {signOutError}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="w-full py-3.5 rounded-[14px] border bg-white text-[13px] font-semibold disabled:opacity-60"
+            style={{
+              borderColor: "var(--color-rule)",
+              color: "#B23A2A",
+              boxShadow: "0 1px 0 rgba(15,30,50,0.04), 0 8px 24px -16px rgba(15,30,50,0.10)",
+            }}
+          >
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
         </div>
       </div>
 
