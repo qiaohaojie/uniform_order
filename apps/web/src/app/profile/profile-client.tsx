@@ -20,6 +20,12 @@ function getInitials(displayName: string, email: string): string {
   );
 }
 
+export type ProfileTenant = {
+  id: string;
+  short: string;
+  shopEmail: string | null;
+};
+
 export type ProfileClientProps = {
   user: {
     name: string | null;
@@ -27,9 +33,10 @@ export type ProfileClientProps = {
     image: string | null;
   };
   childrenCount: number;
+  tenants: ProfileTenant[]; // unique tenants of the parent's children, sorted by short
 };
 
-export function ProfileClient({ user, childrenCount }: ProfileClientProps) {
+export function ProfileClient({ user, childrenCount, tenants }: ProfileClientProps) {
   const displayName = user.name?.trim() || user.email;
   const initials = getInitials(user.name ?? "", user.email);
 
@@ -97,6 +104,33 @@ export function ProfileClient({ user, childrenCount }: ProfileClientProps) {
             </span>
           </div>
         </Link>
+
+        {tenants.some((t) => t.shopEmail) && (
+          <div
+            className="rounded-[14px] border bg-white mb-3 overflow-hidden"
+            style={{
+              borderColor: "var(--color-rule)",
+              boxShadow: "0 1px 0 rgba(15,30,50,0.04), 0 8px 24px -16px rgba(15,30,50,0.10)",
+            }}
+          >
+            {tenants
+              .filter((t) => t.shopEmail)
+              .map((t, i) => (
+                <a
+                  key={t.id}
+                  href={`mailto:${t.shopEmail}`}
+                  className="block px-4 py-3 flex items-center justify-between"
+                  style={{
+                    color: "var(--color-ink)",
+                    borderTop: i === 0 ? undefined : "1px solid var(--color-rule)",
+                  }}
+                >
+                  <span className="text-[13.5px] font-medium">Email {t.short}</span>
+                  <span style={{ color: "var(--color-rule)" }}>›</span>
+                </a>
+              ))}
+          </div>
+        )}
       </div>
 
       <BottomNav active="profile" />
