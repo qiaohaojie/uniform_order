@@ -2,24 +2,45 @@
 
 **Domain:** `uniformorder.online`  
 **Host:** Hostinger Cloud Startup (Node.js)  
-**DB:** Neon project `cool-wind-76972110` (ap-southeast-2)
+**DB:** Neon project in **AWS ap-southeast-2 (Sydney)** — must be created manually (see Step 1)
 
 Legend: 🤖 Claude can do this · 🖥️ run in your terminal · 🌐 manual dashboard step
 
 ---
 
-## 1. Neon — run pending migrations
+## 1. Neon — create the production project (manual, then handoff to Claude)
 
-🤖 **Tell Claude:** "Run production migrations on Neon project cool-wind-76972110"
+The Neon MCP `create_project` tool has **no region parameter** — it always lands in `us-east-1`. Because Hostinger hosts in AU, the production project must be created by hand in the Console so the region is Sydney.
 
-Claude applies all 15 SQL files (`0000` → `0014`) via `mcp__Neon__run_sql_transaction` and inserts the corresponding rows into `__drizzle_migrations`. If you want to do it yourself:
+### 1a. 🌐 Create the project (you)
 
-```
-Neon Console → cool-wind-76972110 → SQL Editor
-```
-Paste each file in `apps/web/drizzle/` in numeric order; then insert into `__drizzle_migrations` manually (see memory note on drizzle-kit websocket blocker).
+[Neon Console → New Project](https://console.neon.tech/app/projects/new)
 
-> The Neon DB is shared between dev and prod. Migrations are idempotent (all use `IF NOT EXISTS` / `DO UPDATE`). Running them again is safe.
+- **Name:** `uniformorder-prod` (or similar)
+- **Region:** **AWS ap-southeast-2 (Sydney)** ← do not accept the default
+- **Postgres version:** match dev (currently 16)
+
+Copy the **project ID** (looks like `super-cell-XXXXXXXX`) and the **pooled `DATABASE_URL`** from the Connection Details panel.
+
+### 1b. 🤖 Provision schema + seed (Claude)
+
+Tell Claude:
+
+> "Provision production Neon project `<project-id>` — apply schema, insert all `__drizzle_migrations` rows, seed `nsbh` + `rgsh` tenants and their `tenant_settings`."
+
+Claude will, via Neon MCP `run_sql_transaction`:
+- Apply the final schema DDL (all 13 tables) in one shot — skipping incremental migration replay, which is unsafe on neon-http (see `project_drizzle_kit_websocket_blocker` in memory).
+- Insert all 15 rows into `drizzle.__drizzle_migrations` with hashes matching the dev project, so future `drizzle-kit generate` runs diff correctly.
+- Insert both tenants (`nsbh`, `rgsh`) with `is_publicly_listed = true` and `platform_approval_status = 'approved'`.
+- Insert `tenant_settings` rows for both tenants.
+
+Once complete, paste the pooled `DATABASE_URL` into Hostinger env vars (Step 6).
+
+### 1c. ⚠️ Old us-east-1 project
+
+If a prior us-east-1 project exists from earlier provisioning attempts (e.g. `super-cell-03401356`), ask Claude to delete it after the Sydney project is live and verified:
+
+> "Delete Neon project `<old-project-id>`."
 
 ---
 
@@ -96,7 +117,7 @@ Set every variable below, then click **Restart**:
 
 | Variable | Where to get it |
 |---|---|
-| `DATABASE_URL` | 🤖 Ask Claude: "Get the Neon connection string for cool-wind-76972110" |
+| `DATABASE_URL` | Pooled connection string from the Sydney project (Step 1) |
 | `NEON_AUTH_BASE_URL` | Neon Console → Auth → copy the base URL |
 | `NEON_AUTH_COOKIE_SECRET` | Neon Console → Auth → copy the cookie secret |
 | `STRIPE_SECRET_KEY` | Step 2a |
@@ -141,7 +162,7 @@ cd apps/web
 DATABASE_URL="<prod-url>" node scripts/seed.mjs
 ```
 
-🤖 **Or tell Claude:** "Run the NSBH seed against Neon project cool-wind-76972110" — Claude can insert catalog rows directly via `mcp__Neon__run_sql_transaction`.
+🤖 **Or tell Claude:** "Run the NSBH seed against Neon project `<sydney-project-id>`" — Claude inserts catalog rows directly via `mcp__Neon__run_sql_transaction`.
 
 ---
 
@@ -162,7 +183,9 @@ Run through this sequence on `https://uniformorder.online`:
 
 ## 10. Verify `is_publicly_listed`
 
-🤖 **Tell Claude:** "Run: UPDATE tenants SET is_publicly_listed = true WHERE id IN ('nsbh','rgsh') on Neon project cool-wind-76972110"
+Both tenants are seeded with `is_publicly_listed = true` in Step 1b. After deploy, confirm via:
+
+🤖 Tell Claude: "Show `slug, is_publicly_listed, platform_approval_status` for all rows in `tenants` on Neon project `<sydney-project-id>`."
 
 ---
 
