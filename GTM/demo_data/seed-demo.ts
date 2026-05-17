@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import * as schema from "../../apps/web/src/db/schema";
 
@@ -237,6 +237,19 @@ async function seedTenant(db: Db, t: FixtureTenant, flags: Flags) {
   if (existing.length > 0) {
     legalVersionId = existing[0].id;
   } else {
+    // entered_by_user_id has a SQL-level FK to neon_auth."user"(id). Pick
+    // any real auth user to satisfy it — the value is only display metadata
+    // for demo data and is not surfaced in the parent/operator UI.
+    const userLookup = await db.execute<{ id: string }>(
+      sql`SELECT id FROM neon_auth."user" LIMIT 1`,
+    );
+    const seedUserId = userLookup.rows[0]?.id;
+    if (!seedUserId) {
+      throw new Error(
+        "neon_auth.\"user\" is empty — create at least one auth user " +
+          "(e.g. sign up via /auth/sign-up) before seeding demo data.",
+      );
+    }
     const [inserted] = await db
       .insert(schema.tenantLegalVersions)
       .values({
@@ -249,7 +262,7 @@ async function seedTenant(db: Db, t: FixtureTenant, flags: Flags) {
         sellerOfRecordAcknowledged: t.legal.sellerOfRecordAcknowledged,
         declarantName: t.legal.declarantName,
         declarantRole: t.legal.declarantRole,
-        enteredByUserId: "00000000-0000-0000-0000-000000000000",
+        enteredByUserId: seedUserId,
         enteredByEmail: "demo-seed@uniformorder.online",
       })
       .returning({ id: schema.tenantLegalVersions.id });
