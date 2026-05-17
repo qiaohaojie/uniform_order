@@ -18,7 +18,7 @@ export function BottomNav({
     { id: "shop", label: "Shop", href: shopHref, icon: ShopIcon },
     { id: "orders", label: "Orders", href: "/orders", icon: OrdersIcon },
     { id: "kids", label: "Kids", href: "/?action=add-child", icon: KidsIcon },
-    { id: "profile", label: "Profile", href: "#", icon: ProfileIcon },
+    { id: "profile", label: "Profile", href: "/profile", icon: ProfileIcon },
   ];
 
   return (
