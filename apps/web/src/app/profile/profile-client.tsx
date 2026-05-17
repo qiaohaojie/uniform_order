@@ -131,6 +131,51 @@ export function ProfileClient({ user, childrenCount, tenants }: ProfileClientPro
               ))}
           </div>
         )}
+
+        <div
+          className="rounded-[14px] border bg-white mb-3 overflow-hidden"
+          style={{
+            borderColor: "var(--color-rule)",
+            boxShadow: "0 1px 0 rgba(15,30,50,0.04), 0 8px 24px -16px rgba(15,30,50,0.10)",
+          }}
+        >
+          {tenants.map((t, i) => (
+            <Link
+              key={`refund-${t.id}`}
+              href={`/${t.id}/refund-policy`}
+              className="block px-4 py-3 flex items-center justify-between"
+              style={{
+                color: "var(--color-ink)",
+                borderTop: i === 0 ? undefined : "1px solid var(--color-rule)",
+              }}
+            >
+              <span className="text-[13.5px] font-medium">Refund policy · {t.short}</span>
+              <span style={{ color: "var(--color-rule)" }}>›</span>
+            </Link>
+          ))}
+          <Link
+            href="/privacy"
+            className="block px-4 py-3 flex items-center justify-between"
+            style={{
+              color: "var(--color-ink)",
+              borderTop: tenants.length === 0 ? undefined : "1px solid var(--color-rule)",
+            }}
+          >
+            <span className="text-[13.5px] font-medium">Privacy</span>
+            <span style={{ color: "var(--color-rule)" }}>›</span>
+          </Link>
+          <Link
+            href="/terms"
+            className="block px-4 py-3 flex items-center justify-between"
+            style={{
+              color: "var(--color-ink)",
+              borderTop: "1px solid var(--color-rule)",
+            }}
+          >
+            <span className="text-[13.5px] font-medium">Terms of service</span>
+            <span style={{ color: "var(--color-rule)" }}>›</span>
+          </Link>
+        </div>
       </div>
 
       <BottomNav active="profile" />
