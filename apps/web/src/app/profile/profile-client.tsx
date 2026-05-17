@@ -7,6 +7,7 @@ import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
 import { authClient } from "@/lib/auth/client";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
+import pkg from "../../../package.json";
 
 function getInitials(displayName: string, email: string): string {
   const source = displayName.trim() || email;
@@ -222,6 +223,13 @@ export function ProfileClient({ user, childrenCount, tenants }: ProfileClientPro
           >
             {signingOut ? "Signing out…" : "Sign out"}
           </button>
+        </div>
+
+        <div
+          className="text-center text-[10px] mt-4 tracking-[0.4px]"
+          style={{ color: "var(--color-ink-dim)", opacity: 0.6 }}
+        >
+          UniformOrder · v{pkg.version}
         </div>
       </div>
 
