@@ -56,7 +56,9 @@ export async function listTenantsWithStats(): Promise<TenantStatsRow[]> {
     name: r.name as string,
     short: r.short as string,
     accent: r.accent as string,
-    createdAt: r.created_at as Date | null,
+    // neon-http returns timestamps as ISO strings, not Date objects — wrap so the
+    // declared TenantStatsRow.createdAt type is honest at runtime.
+    createdAt: r.created_at ? new Date(r.created_at as string | Date) : null,
     status: deriveStatus({
       platformApprovalStatus: r.platform_approval_status as string,
       stripeChargesEnabled: r.stripe_charges_enabled as boolean | null,
