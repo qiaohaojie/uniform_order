@@ -7,5 +7,13 @@ export default async function ProfilePage() {
   if (!user) {
     redirect("/auth/sign-in?callbackURL=%2Fprofile");
   }
-  return <ProfileClient />;
+  return (
+    <ProfileClient
+      user={{
+        name: user.name,
+        email: user.email,
+        image: null,
+      }}
+    />
+  );
 }
