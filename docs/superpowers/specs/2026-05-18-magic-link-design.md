@@ -1,9 +1,15 @@
 # Magic Link Sign-In — Design
 
-**Status:** Draft → review
+**Status:** Parked — blocked on upstream `@neondatabase/auth-ui` release (see [neondatabase/neon-js#146](https://github.com/neondatabase/neon-js/issues/146))
 **Date:** 2026-05-18
-**Supersedes:** `remaining_work.md §3.12` ("OTP / magic-link login option — blocked on neon-js#58")
-**Related:** `docs/superpowers/specs/2026-05-13-neon-auth-ui-migration-design.md`, `remaining_work.md §2.14` (auth direction)
+**Supersedes:** `docs/remaining_work.md §3.12` ("OTP / magic-link login option — blocked on neon-js#58")
+**Related:** `docs/superpowers/specs/2026-05-13-neon-auth-ui-migration-design.md`, `docs/remaining_work.md §2.14` (auth direction)
+
+## Blocker (2026-05-18)
+
+Neon's May 15 changelog announces magic link is enabled via `<NeonAuthUIProvider magicLink>`, but the published `@neondatabase/auth-ui@0.2.0-beta` (last released 2026-04-29) still hardcodes `magicLink: false` after the `...props` spread, overriding the prop. Filed [neondatabase/neon-js#146](https://github.com/neondatabase/neon-js/issues/146). Resume implementation once a new `auth-ui` release ships with the override removed.
+
+When unblocked, also incorporate review-feedback items still pending: webhook divergence from `orderNotificationEvents` (note rationale), dev-mode `console.log(url)` fallback when `EMAILIT_API_KEY` unset, `NEON_AUTH_WEBHOOK_SECRET` rotation note, `link_type`-missing default to sign-in subject, PostHog event naming taxonomy check, `/auth/complete` route added to file-changes table, `.env.example` formatting to match `STRIPE_WEBHOOK_SECRET` style, `email_domain` extraction handling `+` aliases, and adding `newUserCallbackURL` / `errorCallbackURL` (from upstream Better Auth API). Also: token consumption is atomic on first attempt per [GHSA-hc7v-rggr-4hvx](https://github.com/better-auth/better-auth/security/advisories/GHSA-hc7v-rggr-4hvx) — email-scanner prefetch will trigger `?error=INVALID_TOKEN`; surface a friendly "couldn't use this link" page with one-click resend via `errorCallbackURL`.
 
 ## Goal
 
