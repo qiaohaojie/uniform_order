@@ -1,0 +1,46 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Lines below are suggestions — uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+# --- From .gitignore (uncomment to exclude) ---
+
+.pnpm-store/
+*.tsbuildinfo
+next-env.d.ts
+.env
+.env.local
+.env.*.local
+.DS_Store
+my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
+.worktrees/
+.claude/worktrees/
+.claire/
+.superpowers/
+.claude/skills/
+.claude/scheduled_tasks.lock
+repomix-output.xml
+.playwright-cli/
+apps/web/tests/print/.storage.json
+apps/web/tests/print/output/
+
+
+.agents/
+
+# Non-source directories
+.remember/
+.venv/
+my_doc/
+GTM/
+docs/
+output/
+AGENTS.md
+
+# --- Test file patterns (uncomment to exclude) ---
+
+*.test.*
+*.spec.*
+*.snap
