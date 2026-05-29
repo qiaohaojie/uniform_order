@@ -57,3 +57,4 @@ GTM/product_demo/recordings/output/
 GTM/demo_data/.env.demo
 *.webm
 *.mp4
+.understand-anything/tmp
