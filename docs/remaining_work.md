@@ -116,6 +116,21 @@ These were classified as "Should" in the gap analysis but are genuine bugs / har
   - PDP read path in `app/[tenant]/item/[itemId]/interactive.tsx` already consumes the same shape — no client change.
   - **Bump before school #3 onboards.** ~½d.
 
+### 2.15 Auth route hardening (`/auth/[[...path]]`) — ✅ shipped (PR #38)
+
+Security review of the auth catch-all, shipped to `main` via PR #38 (squash-merge `a1d309c`, 2026-05-30):
+
+- [x] **S1 — GET-logout CSRF.** `/auth/sign-out` ran `authClient.signOut()` from a mount effect, so a bare cross-site GET (`<img>`, prefetched link) logged the user out with no POST/CSRF token. Now `notFound()`-gated server-side in `page.tsx`. Logout still works via the explicit `authClient.signOut()` controls (profile, admin shell) — nothing was ever routed through the URL.
+- [x] **S3 — unknown view returned HTTP 200.** Any unknown segment (`/auth/foo`, `/auth/Sign-In`) fell back to the sign-in view with a 200. Now validated server-side against the library's own matcher (`authViewPaths` + `getViewByPath` from `@neondatabase/auth-ui/server`) and `notFound()` on unknown-or-sign-out.
+- [x] **Open redirect via `?redirectTo=`.** The auth UI resolves its post-auth target from the raw `?redirectTo=` query param ahead of the sanitized provider prop (verified in library source). `page.tsx` now strips an unsafe `?redirectTo=` server-side before the client AuthView mounts; legitimate same-origin values (e.g. the OAuth callback's own internal redirectTo) are preserved. Validator extracted to `lib/auth/safe-redirect.ts` (`safeInternalPath`), shared by server + client. Two clean Codex review passes.
+- [x] **Privacy "account settings" link.** Repointed `/auth/account` (never a valid AuthView — it silently rendered sign-in) → `/profile`.
+
+Remaining follow-ups (labels from the auth-route review):
+
+- [ ] **C5 — move the already-signed-in redirect server-side.** `page-client.tsx` still bounces an already-authenticated visitor via a mount effect using the validated target, causing a brief client flash. Optional cleanup: read the session in `page.tsx` and `redirect()` before render. Not a security item — the open-redirect risk in this path is already closed by the server-side `?redirectTo=` strip.
+- [ ] **C7 — finish the shared-helper extraction.** Done: `safeInternalPath` is now shared by server + client. Remaining: extract a `signInUrl(callbackURL)` builder and adopt it in the ~7 callers that hand-build `/auth/sign-in?callbackURL=...`.
+- C11 (`force-dynamic`) — resolved, no action: `page.tsx` now legitimately requires dynamic rendering (reads `searchParams`, calls `redirect()`/`notFound()`), so the existing `export const dynamic = "force-dynamic"` is appropriate.
+
 ---
 
 ## 3. 🟡 Medium — required by PDP/prototype, tolerable for soft launch
