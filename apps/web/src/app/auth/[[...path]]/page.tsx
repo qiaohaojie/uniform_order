@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { authViewPaths, getViewByPath } from "@neondatabase/auth-ui/server";
+import { safeInternalPath } from "@/lib/auth/safe-redirect";
 import { AuthPageClient } from "./page-client";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export default async function AuthPage({
   searchParams,
 }: {
   params: Promise<{ path?: string[] }>;
-  searchParams: Promise<{ callbackURL?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { path = [] } = await params;
   const sp = await searchParams;
@@ -31,6 +32,29 @@ export default async function AuthPage({
   const view = getViewByPath(authViewPaths, authPath);
   if (!view || view === "SIGN_OUT") {
     notFound();
+  }
+
+  // Neutralise an unsafe `?redirectTo=` BEFORE the client AuthView mounts. The
+  // library resolves its post-auth target from `getSearchParam("redirectTo")`
+  // (raw, unvalidated) and that wins over our sanitized prop in some flows — most
+  // notably the already-signed-in redirect, which is literally
+  // `getSearchParam("redirectTo") || redirectTo` — so passing a clean prop alone
+  // does NOT close the open redirect. Stripping it here, before any client code
+  // reads `window.location.search`, guarantees no `getSearchParam("redirectTo")`
+  // ever returns an attacker value (`?redirectTo=https://evil.example`). A
+  // legitimate same-origin value — e.g. the OAuth callback's own internal
+  // redirectTo — passes `safeInternalPath` and is preserved untouched.
+  const rawRedirect = Array.isArray(sp.redirectTo) ? sp.redirectTo[0] : sp.redirectTo;
+  if (rawRedirect !== undefined && safeInternalPath(rawRedirect) === null) {
+    const kept = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) {
+      if (key === "redirectTo") continue;
+      if (Array.isArray(value)) value.forEach((v) => kept.append(key, v));
+      else if (value !== undefined) kept.append(key, value);
+    }
+    const basePath = path.length ? `/auth/${path.join("/")}` : "/auth";
+    const qs = kept.toString();
+    redirect(qs ? `${basePath}?${qs}` : basePath);
   }
 
   return <AuthPageClient path={authPath} callbackURL={rawCallback ?? null} />;

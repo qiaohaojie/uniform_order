@@ -7,24 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient, useSession } from "@/lib/auth/client";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
-
-// Only allow same-origin, non-auth paths. We resolve `raw` against a sentinel
-// origin and reject anything that escapes it — this defends against the whole
-// open-redirect family (`//evil.com`, `/\evil.com`, embedded-tab tricks) that a
-// `startsWith("//")` string check misses, since the URL parser normalises
-// backslashes/control chars to `//host`. Also blocks /auth → sign-in loops.
-function safeCallbackPath(raw: string | null): string | null {
-  if (!raw || !raw.startsWith("/")) return null;
-  let url: URL;
-  try {
-    url = new URL(raw, "https://uo.invalid");
-  } catch {
-    return null;
-  }
-  if (url.origin !== "https://uo.invalid") return null;
-  if (url.pathname === "/auth" || url.pathname.startsWith("/auth/")) return null;
-  return url.pathname + url.search + url.hash;
-}
+import { safeInternalPath } from "@/lib/auth/safe-redirect";
 
 export function AuthPageClient({
   path,
@@ -35,7 +18,7 @@ export function AuthPageClient({
 }) {
   const router = useRouter();
   const session = useSession();
-  const target = safeCallbackPath(callbackURL);
+  const target = safeInternalPath(callbackURL);
   const sessionData = session?.data;
   const isPending = session?.isPending ?? false;
   const redirected = useRef<boolean>(false);
@@ -66,15 +49,19 @@ export function AuthPageClient({
           authClient={authClient}
           navigate={router.push}
           replace={router.replace}
-          // Pass the validated target as the library's own post-auth redirect.
-          // An explicit prop takes precedence over the unguarded `?redirectTo=`
-          // query param the library would otherwise read, closing that
-          // open-redirect path; falls back to "/" when there is no callbackURL.
+          // Post-auth redirect target = the validated callbackURL (`/` default).
+          // The open redirect is closed primarily server-side (page.tsx strips an
+          // unsafe `?redirectTo=` before this mounts), so `getSearchParam(
+          // "redirectTo")` can never return an attacker value. We still pass the
+          // sanitized target on both the provider (context fallback) and <AuthView>
+          // (form-level `redirectToProp`, first in the library's
+          // `redirectToProp || getSearchParam("redirectTo") || contextRedirectTo`
+          // chain) as defense in depth.
           redirectTo={target ?? "/"}
           onSessionChange={router.refresh}
           Link={Link}
         >
-          <AuthView path={path} />
+          <AuthView path={path} redirectTo={target ?? "/"} />
         </NeonAuthUIProvider>
       </div>
     </main>
