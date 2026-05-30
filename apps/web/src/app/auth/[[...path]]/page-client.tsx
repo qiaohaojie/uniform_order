@@ -8,13 +8,22 @@ import Link from "next/link";
 import { authClient, useSession } from "@/lib/auth/client";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 
-// Only allow same-origin, non-auth, relative paths — avoids open-redirect
-// (//evil.com) and sign-in → sign-in loops.
+// Only allow same-origin, non-auth paths. We resolve `raw` against a sentinel
+// origin and reject anything that escapes it — this defends against the whole
+// open-redirect family (`//evil.com`, `/\evil.com`, embedded-tab tricks) that a
+// `startsWith("//")` string check misses, since the URL parser normalises
+// backslashes/control chars to `//host`. Also blocks /auth → sign-in loops.
 function safeCallbackPath(raw: string | null): string | null {
-  if (!raw) return null;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
-  if (raw.startsWith("/auth/") || raw === "/auth") return null;
-  return raw;
+  if (!raw || !raw.startsWith("/")) return null;
+  let url: URL;
+  try {
+    url = new URL(raw, "https://uo.invalid");
+  } catch {
+    return null;
+  }
+  if (url.origin !== "https://uo.invalid") return null;
+  if (url.pathname === "/auth" || url.pathname.startsWith("/auth/")) return null;
+  return url.pathname + url.search + url.hash;
 }
 
 export function AuthPageClient({
@@ -27,38 +36,25 @@ export function AuthPageClient({
   const router = useRouter();
   const session = useSession();
   const target = safeCallbackPath(callbackURL);
-  const previousSignedIn = useRef<boolean>(false);
+  const sessionData = session?.data;
+  const isPending = session?.isPending ?? false;
   const redirected = useRef<boolean>(false);
 
   useEffect(() => {
-    const data = session?.data;
-    if (data === null) {
+    // Clear the active-child cookie only once the session has resolved to
+    // signed-out. `data` is null while `isPending`, so an authenticated parent
+    // landing here mid-load must not lose their selected child.
+    if (!isPending && sessionData === null) {
       clearActiveChildCookieClient();
     }
-    const isSignedIn = !!data;
-    if (!previousSignedIn.current && isSignedIn && target && !redirected.current) {
+    // Bounce a visitor who is already signed in on mount to the validated
+    // deep-link. The fresh-sign-in / OAuth-callback cases are handled natively
+    // by the library via the `redirectTo` prop below.
+    if (sessionData && target && !redirected.current) {
       redirected.current = true;
       router.replace(target);
     }
-    previousSignedIn.current = isSignedIn;
-  }, [session?.data, target, router]);
-
-  // The library navigates to "/" after sign-in. If a callbackURL was passed,
-  // divert to it instead so deep-links into gated pages survive the auth round-trip.
-  const handleNavigate = (href: string) => {
-    if (target && href === "/") {
-      router.push(target);
-    } else {
-      router.push(href);
-    }
-  };
-  const handleReplace = (href: string) => {
-    if (target && href === "/") {
-      router.replace(target);
-    } else {
-      router.replace(href);
-    }
-  };
+  }, [sessionData, isPending, target, router]);
 
   return (
     <main
@@ -68,8 +64,13 @@ export function AuthPageClient({
       <div className="w-full max-w-md">
         <NeonAuthUIProvider
           authClient={authClient}
-          navigate={handleNavigate}
-          replace={handleReplace}
+          navigate={router.push}
+          replace={router.replace}
+          // Pass the validated target as the library's own post-auth redirect.
+          // An explicit prop takes precedence over the unguarded `?redirectTo=`
+          // query param the library would otherwise read, closing that
+          // open-redirect path; falls back to "/" when there is no callbackURL.
+          redirectTo={target ?? "/"}
           onSessionChange={router.refresh}
           Link={Link}
         >
