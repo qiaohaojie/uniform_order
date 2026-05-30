@@ -7,15 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient, useSession } from "@/lib/auth/client";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
-
-// Only allow same-origin, non-auth, relative paths — avoids open-redirect
-// (//evil.com) and sign-in → sign-in loops.
-function safeCallbackPath(raw: string | null): string | null {
-  if (!raw) return null;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
-  if (raw.startsWith("/auth/") || raw === "/auth") return null;
-  return raw;
-}
+import { safeInternalPath } from "@/lib/auth/safe-redirect";
 
 export function AuthPageClient({
   path,
@@ -26,39 +18,26 @@ export function AuthPageClient({
 }) {
   const router = useRouter();
   const session = useSession();
-  const target = safeCallbackPath(callbackURL);
-  const previousSignedIn = useRef<boolean>(false);
+  const target = safeInternalPath(callbackURL);
+  const sessionData = session?.data;
+  const isPending = session?.isPending ?? false;
   const redirected = useRef<boolean>(false);
 
   useEffect(() => {
-    const data = session?.data;
-    if (data === null) {
+    // Clear the active-child cookie only once the session has resolved to
+    // signed-out. `data` is null while `isPending`, so an authenticated parent
+    // landing here mid-load must not lose their selected child.
+    if (!isPending && sessionData === null) {
       clearActiveChildCookieClient();
     }
-    const isSignedIn = !!data;
-    if (!previousSignedIn.current && isSignedIn && target && !redirected.current) {
+    // Bounce a visitor who is already signed in on mount to the validated
+    // deep-link. The fresh-sign-in / OAuth-callback cases are handled natively
+    // by the library via the `redirectTo` prop below.
+    if (sessionData && target && !redirected.current) {
       redirected.current = true;
       router.replace(target);
     }
-    previousSignedIn.current = isSignedIn;
-  }, [session?.data, target, router]);
-
-  // The library navigates to "/" after sign-in. If a callbackURL was passed,
-  // divert to it instead so deep-links into gated pages survive the auth round-trip.
-  const handleNavigate = (href: string) => {
-    if (target && href === "/") {
-      router.push(target);
-    } else {
-      router.push(href);
-    }
-  };
-  const handleReplace = (href: string) => {
-    if (target && href === "/") {
-      router.replace(target);
-    } else {
-      router.replace(href);
-    }
-  };
+  }, [sessionData, isPending, target, router]);
 
   return (
     <main
@@ -68,12 +47,21 @@ export function AuthPageClient({
       <div className="w-full max-w-md">
         <NeonAuthUIProvider
           authClient={authClient}
-          navigate={handleNavigate}
-          replace={handleReplace}
+          navigate={router.push}
+          replace={router.replace}
+          // Post-auth redirect target = the validated callbackURL (`/` default).
+          // The open redirect is closed primarily server-side (page.tsx strips an
+          // unsafe `?redirectTo=` before this mounts), so `getSearchParam(
+          // "redirectTo")` can never return an attacker value. We still pass the
+          // sanitized target on both the provider (context fallback) and <AuthView>
+          // (form-level `redirectToProp`, first in the library's
+          // `redirectToProp || getSearchParam("redirectTo") || contextRedirectTo`
+          // chain) as defense in depth.
+          redirectTo={target ?? "/"}
           onSessionChange={router.refresh}
           Link={Link}
         >
-          <AuthView path={path} />
+          <AuthView path={path} redirectTo={target ?? "/"} />
         </NeonAuthUIProvider>
       </div>
     </main>

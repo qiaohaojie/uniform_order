@@ -38,7 +38,7 @@ export default function PrivacyPage() {
 
         <h2 className="font-serif text-xl mt-6">Your rights</h2>
         <p>
-          You can update or delete your account from <Link href="/auth/account" className="underline">your account settings</Link>.
+          You can update or delete your account from <Link href="/profile" className="underline">your account settings</Link>.
         </p>
         <p>
           For refund or shipping questions about a specific order, contact the school directly — the school is the seller of record.
