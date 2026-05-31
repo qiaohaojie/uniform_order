@@ -1,0 +1,45 @@
+/* Base styles — mirrors the Claude Design export shell.
+   Token values match apps/web/src/index.css @theme (same design system). */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #faf6ee; /* --color-parchment */
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  color: #15212f; /* --color-ink */
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+a:hover {
+  opacity: 0.75;
+}
+
+button.btn:hover:not(:disabled),
+a.btn:hover {
+  filter: brightness(0.95);
+}
+
+/* FAQ accordion — native <details>, no JS. The +/− marker is CSS-driven. */
+.faq-item > summary {
+  list-style: none;
+}
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+.faq-mark::after {
+  content: "+";
+}
+.faq-item[open] .faq-mark::after {
+  content: "−";
+}

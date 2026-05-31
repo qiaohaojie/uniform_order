@@ -5,6 +5,9 @@
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
     "start:web": "pnpm --filter web start",
+    "dev:landing": "pnpm --filter landing dev",
+    "build:landing": "pnpm --filter landing build",
+    "preview:landing": "pnpm --filter landing preview",
     "check-types": "pnpm -r check-types",
     "check-types:web": "pnpm --filter web check-types",
     "print-qa": "pnpm --filter web print-qa"
@@ -15,7 +18,8 @@
       "@heroui-pro/react",
       "@tailwindcss/oxide",
       "sharp",
-      "unrs-resolver"
+      "unrs-resolver",
+      "esbuild"
     ]
   },
   "devDependencies": {
