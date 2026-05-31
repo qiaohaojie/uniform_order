@@ -12,11 +12,11 @@ import {
 
 const ACCENT_NAVY = NAVY;
 
-// CTA destinations. The shop app is a separate deploy on the shop subdomain
-// (Hostinger Node.js — see CLAUDE.md / astro.config.mjs). Demo + sales enquiries
-// route to the inbox until a dedicated booking flow exists.
+// CTA destinations. The web app is a separate deploy on the app subdomain
+// (app.uniformorder.online, Hostinger Node.js — see CLAUDE.md / astro.config.mjs).
+// Demo + sales enquiries route to the inbox until a dedicated booking flow exists.
 // NOTE: confirm these destinations before launch.
-const SHOP_URL = "https://shop.uniformorder.online";
+const SHOP_URL = "https://app.uniformorder.online";
 const DEMO_MAILTO = "mailto:hello@uniformorder.online?subject=Book%20a%20UniformOrder%20demo";
 
 // ---------- Shared bits ----------
@@ -864,7 +864,8 @@ function App() {
     <div>
       <NavBar />
       <Hero />
-      <TrustStrip />
+      {/* Hidden until we have live schools to showcase — restore when customers are onboarded. */}
+      {/* <TrustStrip /> */}
       <ProblemSection />
       <ProductSection />
       <BuiltForSchoolsSection />

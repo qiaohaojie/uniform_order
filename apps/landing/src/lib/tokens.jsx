@@ -20,7 +20,7 @@ const SUCCESS = '#2F6B3D';
 const TENANTS = {
   imhs: {
     id: 'imhs',
-    name: 'Illawarra Modern High School',
+    name: 'Imagined High School',
     short: 'IMHS',
     crest: 'IMHS',
     accent: '#7A1F2B',           // school maroon
