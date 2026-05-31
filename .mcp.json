@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "hostinger": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "hostinger-api-mcp"]
+    }
+  }
+}

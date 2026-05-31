@@ -1,0 +1,41 @@
+---
+import "../styles/global.css";
+import { App } from "../components/landing.jsx";
+
+const title = "UniformOrder — Online uniform shops for Australian schools";
+const description =
+  "UniformOrder replaces the paper form, the spreadsheet, and the volunteer cash box with a clean online uniform shop branded to your school. Parents order from their phone; your P&C packs from a tablet; payouts land in the school's bank account.";
+const canonical = "https://uniformorder.online/";
+const ogImage = "https://uniformorder.online/og.png";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <!-- Open Graph / social -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Fonts: matches the design system (Newsreader / Inter / JetBrains Mono) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,400..600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- No client directive → Astro prerenders App to static HTML, ships zero JS. -->
+    <App />
+  </body>
+</html>
