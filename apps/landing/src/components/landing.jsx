@@ -12,11 +12,11 @@ import {
 
 const ACCENT_NAVY = NAVY;
 
-// CTA destinations. The shop app is a separate deploy on the shop subdomain
-// (Hostinger Node.js — see CLAUDE.md / astro.config.mjs). Demo + sales enquiries
-// route to the inbox until a dedicated booking flow exists.
+// CTA destinations. The web app is a separate deploy on the app subdomain
+// (app.uniformorder.online, Hostinger Node.js — see CLAUDE.md / astro.config.mjs).
+// Demo + sales enquiries route to the inbox until a dedicated booking flow exists.
 // NOTE: confirm these destinations before launch.
-const SHOP_URL = "https://shop.uniformorder.online";
+const SHOP_URL = "https://app.uniformorder.online";
 const DEMO_MAILTO = "mailto:hello@uniformorder.online?subject=Book%20a%20UniformOrder%20demo";
 
 // ---------- Shared bits ----------
@@ -151,10 +151,10 @@ function HeroVisual() {
         <DoubleRule/>
         <div style={{ marginTop: 12 }}>
           {[
-            { id: 'NSBH-04298', name: 'Riley Qiao', year: 'Y9', items: 6, total: 363, tone: 'navy', status: 'New' },
-            { id: 'NSBH-04297', name: 'Arjun Patel', year: 'Y7', items: 4, total: 178, tone: 'navy', status: 'New' },
-            { id: 'NSBH-04295', name: 'Tom Whitlam', year: 'Y8', items: 8, total: 412, tone: 'warn', status: 'Packing' },
-            { id: 'NSBH-04293', name: 'Luka Kovac', year: 'Y10', items: 5, total: 240, tone: 'success', status: 'Ready' },
+            { id: 'IMHS-04298', name: 'Riley Qiao', year: 'Y9', items: 6, total: 363, tone: 'navy', status: 'New' },
+            { id: 'IMHS-04297', name: 'Arjun Patel', year: 'Y7', items: 4, total: 178, tone: 'navy', status: 'New' },
+            { id: 'IMHS-04295', name: 'Tom Whitlam', year: 'Y8', items: 8, total: 412, tone: 'warn', status: 'Packing' },
+            { id: 'IMHS-04293', name: 'Luka Kovac', year: 'Y10', items: 5, total: 240, tone: 'success', status: 'Ready' },
           ].map((o, i) => (
             <div key={o.id} style={{
               display: 'grid', gridTemplateColumns: '110px 1fr auto auto', gap: 12, alignItems: 'center',
@@ -191,7 +191,7 @@ function HeroVisual() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 18px 14px' }}>
             <Crest tenant={TENANTS.nsbh} size={36} />
             <div>
-              <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: INK, lineHeight: 1 }}>NSBH</div>
+              <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: INK, lineHeight: 1 }}>IMHS</div>
               <div style={{ fontFamily: SANS, fontSize: 10, color: INK_DIM, marginTop: 2 }}>Uniform shop</div>
             </div>
             <div style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 999, background: '#fff', border: `1px solid ${RULE}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -233,7 +233,7 @@ function HeroVisual() {
 
 function TrustStrip() {
   const crests = [
-    { id: 'nsbh', short: 'NSBH', accent: '#7A1F2B' },
+    { id: 'nsbh', short: 'IMHS', accent: '#7A1F2B' },
     { id: 'rgsh', short: 'RGHS', accent: '#2F5D50' },
     { id: 'kbhs', short: 'KHS', accent: '#1F3A6E' },
     { id: 'spc',  short: 'SPC',  accent: '#4A2238' },
@@ -389,17 +389,17 @@ function ParentVisual() {
 function OperatorVisual() {
   const cols = [
     { name: 'New', tone: 'info', items: [
-      { id: 'NSBH-04298', kid: 'Riley Qiao', year: 'Y9', total: 363 },
-      { id: 'NSBH-04297', kid: 'Arjun Patel', year: 'Y7', total: 178 },
-      { id: 'NSBH-04296', kid: 'Ethan Chen', year: 'Y11', total: 102 },
+      { id: 'IMHS-04298', kid: 'Riley Qiao', year: 'Y9', total: 363 },
+      { id: 'IMHS-04297', kid: 'Arjun Patel', year: 'Y7', total: 178 },
+      { id: 'IMHS-04296', kid: 'Ethan Chen', year: 'Y11', total: 102 },
     ]},
     { name: 'Packing', tone: 'warn', items: [
-      { id: 'NSBH-04295', kid: 'Tom Whitlam', year: 'Y8', total: 412 },
-      { id: 'NSBH-04294', kid: 'Mateo Moreno', year: 'Y9', total: 95 },
+      { id: 'IMHS-04295', kid: 'Tom Whitlam', year: 'Y8', total: 412 },
+      { id: 'IMHS-04294', kid: 'Mateo Moreno', year: 'Y9', total: 95 },
     ]},
     { name: 'Ready', tone: 'success', items: [
-      { id: 'NSBH-04293', kid: 'Luka Kovac', year: 'Y10', total: 240 },
-      { id: 'NSBH-04292', kid: 'Oliver Zhang', year: 'Y7', total: 388 },
+      { id: 'IMHS-04293', kid: 'Luka Kovac', year: 'Y10', total: 240 },
+      { id: 'IMHS-04292', kid: 'Oliver Zhang', year: 'Y7', total: 388 },
     ]},
   ];
   return (
@@ -407,7 +407,7 @@ function OperatorVisual() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Crest tenant={TENANTS.nsbh} size={26} />
-          <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: '#fff' }}>NSBH · Order queue</div>
+          <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: '#fff' }}>IMHS · Order queue</div>
         </div>
         <div style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.6 }}>Mon, 11 May · 9:42am</div>
       </div>
@@ -864,7 +864,8 @@ function App() {
     <div>
       <NavBar />
       <Hero />
-      <TrustStrip />
+      {/* Hidden until we have live schools to showcase — restore when customers are onboarded. */}
+      {/* <TrustStrip /> */}
       <ProblemSection />
       <ProductSection />
       <BuiltForSchoolsSection />

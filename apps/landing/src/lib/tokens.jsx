@@ -20,15 +20,15 @@ const SUCCESS = '#2F6B3D';
 const TENANTS = {
   nsbh: {
     id: 'nsbh',
-    name: 'North Sydney Boys High School',
-    short: 'NSBH',
-    crest: 'NSBH',
+    name: 'Imagined High School',
+    short: 'IMHS',
+    crest: 'IMHS',
     accent: '#7A1F2B',           // school maroon
     accentInk: '#FFFFFF',
     motto: 'Aeterna non caduca',
     address: 'Falcon St, Crows Nest NSW 2065',
     shopHours: 'Mon & Thu · 8:15am – 1:30pm',
-    shopEmail: 'uniformshop@nsbh.nsw.edu.au',
+    shopEmail: 'uniformshop@imhs.nsw.edu.au',
   },
   rgsh: {
     id: 'rgsh',
