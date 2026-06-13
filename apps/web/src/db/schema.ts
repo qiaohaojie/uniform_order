@@ -330,6 +330,12 @@ export const orderEvents = pgTable(
   (t) => ({
     orderTimeIdx: index("idx_order_events_order_time").on(t.orderId, t.createdAt),
     tenantTimeIdx: index("idx_order_events_tenant_time").on(t.tenantId, t.createdAt),
+    // At most one order_paid event per order — lets the webhook insert the audit
+    // event unconditionally + idempotently (onConflictDoNothing) so it survives
+    // Stripe redelivery without leaving a gap in the audit timeline (#11).
+    paidUnique: uniqueIndex("order_events_paid_unique")
+      .on(t.orderId)
+      .where(sql`${t.eventType} = 'order_paid'`),
   }),
 );
 

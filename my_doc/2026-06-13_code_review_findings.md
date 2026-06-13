@@ -34,7 +34,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 21 | low | dev email log leaked recipient PII | ✅ **FIXED** (masked) |
 | 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ✅ **RESOLVED** (min-viable; operatorEmail redesign deferred) |
 | 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ✅ **RESOLVED** |
-| 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ⬇ LOG |
+| 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ✅ **RESOLVED** (migration 0015 applied to dev) |
 | 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ⬇ LOG (needs migration) |
 | 5 | medium | persisted line prices can diverge from stored order subtotal | ⬇ LOG |
 | 9b/10 | low | orders POST PII fields unbounded / unvalidated | ⬇ LOG |
@@ -136,6 +136,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #11 — `payment_intent.succeeded` webhook flips order status and writes the `order_paid` event in two non-atomic awaits
+
+> **✅ RESOLVED (this session, 2026-06-13) — migration APPLIED (dev db).** Added a partial unique index `order_events_paid_unique` on `order_events(order_id) WHERE event_type='order_paid'` (`schema.ts` `paidUnique` + `drizzle/0015_order_paid_unique.sql` + `_journal.json` idx 15). The webhook now resolves the order id on BOTH paths — the row flipped this delivery, OR (on redelivery, already `paid`) a `SELECT … WHERE stripePaymentIntentId = pi.id` — and inserts the `order_paid` event **unconditionally** with `.onConflictDoNothing({ target: orderEvents.orderId, where: sql\`event_type='order_paid'\` })`, so a failed-then-redelivered insert backfills the audit event instead of leaving a permanent gap. Confirmation email + `order_confirmed` analytics stay inside the `flipped.length === 1` branch (fire once, never on redelivery). **Apply status:** index created on the DEV Neon db (`ap-southeast-2`), `__drizzle_migrations` bookkeeping row id 17 inserted (`hash="manual_0015_order_paid_unique"`, matching the existing manual-apply convention). Verified `indexdef`: `UNIQUE … (order_id) WHERE (event_type = 'order_paid')`. **Note for prod deploy:** run `drizzle-kit migrate` (or apply 0015 manually) on the production db before this ships — the `onConflictDoNothing` correctness depends on the partial index existing.
 
 - **Severity:** medium · **Fix-risk:** moderate (payment webhook) · **Confidence:** high
 - **Files:** `apps/web/src/app/api/stripe/webhook/route.ts:67-93` (the `payment_intent.succeeded` branch).
