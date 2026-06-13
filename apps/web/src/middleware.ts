@@ -48,9 +48,10 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on HTML routes; skip static assets and the image optimizer (they don't
-  // execute scripts and don't need a per-request nonce).
+  // Run on HTML routes; skip /api (JSON, never renders HTML or reads the nonce —
+  // minting a CSP nonce there is pure overhead), static assets, and the image
+  // optimizer (they don't execute scripts and don't need a per-request nonce).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff2?)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff2?)$).*)",
   ],
 };
