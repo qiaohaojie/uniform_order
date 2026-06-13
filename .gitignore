@@ -60,3 +60,6 @@ GTM/demo_data/.env.demo
 *.mp4
 .understand-anything/tmp
 .web_scraper
+
+# supergoal run scaffolding (run roots, phase specs, state, patches) — local-only
+.supergoal/
