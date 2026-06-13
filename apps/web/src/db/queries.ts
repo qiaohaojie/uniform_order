@@ -4,6 +4,20 @@ import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzl
 import type { BatchItem } from "drizzle-orm/batch";
 import { cache } from "react";
 import type { CatalogItem, SizeGuide, Tenant } from "@/lib/data";
+import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
+
+/**
+ * Translate a 23505 on the active-variant-label unique index into a clear,
+ * caller-presentable validation error; rethrow anything else unchanged.
+ */
+function rethrowVariantLabelConflict(err: unknown): never {
+  if (isUniqueConstraintError(err, "catalog_variants_item_label_active_unique")) {
+    throw new Error(
+      "Duplicate size/label on this item — each active variant label must be unique."
+    );
+  }
+  throw err;
+}
 
 export type FulfilmentStatus =
   | "to_prepare" | "ready" | "needs_attention" | "completed";
@@ -564,7 +578,11 @@ export async function addCatalogItem(data: {
     itemInsert,
     ...variantInserts,
   ];
-  await db.batch(stmts);
+  try {
+    await db.batch(stmts);
+  } catch (err) {
+    rethrowVariantLabelConflict(err);
+  }
 }
 
 /**
@@ -669,7 +687,11 @@ export async function updateCatalogItem(
     itemUpdate,
     ...variantWrites,
   ];
-  await db.batch(stmts);
+  try {
+    await db.batch(stmts);
+  } catch (err) {
+    rethrowVariantLabelConflict(err);
+  }
 }
 
 /**

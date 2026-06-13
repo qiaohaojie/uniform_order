@@ -35,7 +35,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ✅ **RESOLVED** (min-viable; operatorEmail redesign deferred) |
 | 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ✅ **RESOLVED** |
 | 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ✅ **RESOLVED** (migration 0015 applied to dev) |
-| 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ⬇ LOG (needs migration) |
+| 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ✅ **RESOLVED** (migration 0016 applied to dev, dedup-checked) |
 | 5 | medium | persisted line prices can diverge from stored order subtotal | ⬇ LOG |
 | 9b/10 | low | orders POST PII fields unbounded / unvalidated | ⬇ LOG |
 | 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ⬇ LOG (needs middleware + nonce) |
@@ -158,6 +158,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #12 — No DB uniqueness on `catalog_variants(item_id, label)`; duplicate active labels silently mis-price order lines
+
+> **✅ RESOLVED (this session, 2026-06-13) — migration APPLIED (dev db), dedup-checked first.** Added a partial unique index `catalog_variants_item_label_active_unique` on `catalog_variants(item_id, label) WHERE active = true` (`schema.ts` `itemLabelActiveUnique` + `drizzle/0016_catalog_variants_unique_label.sql` + `_journal.json` idx 16). `addCatalogItem` / `updateCatalogItem` now wrap their variant `db.batch` and translate a `23505` on this index (via `isUniqueConstraintError(err, "catalog_variants_item_label_active_unique")`) into a clear `Duplicate size/label …` Error. **Apply status:** ran the dedup pre-check first — **0** active duplicate `(item_id,label)` pairs on the dev db — then created the index (verified `indexdef`: `UNIQUE … (item_id, label) WHERE (active = true)`), `__drizzle_migrations` bookkeeping row id 18. **Notes:** (a) the catalog POST/PATCH route currently returns a generic 500 on any throw, so the typed message isn't surfaced to the operator UI yet — a tiny optional follow-up is to map this Error to a 409 with its message; the write is correctly *rejected* regardless. (b) The robust alternative — carry the variant **id** through the cart and key `getCatalogPriceLookup` on variant id instead of `(itemId,label)` — remains the larger optional follow-up (out of scope). **Prod deploy:** dedup-check then apply 0016 before shipping.
 
 - **Severity:** medium · **Fix-risk:** moderate (needs a migration + dedup of any existing dupes) · **Confidence:** medium
 - **Files:** `apps/web/src/db/queries.ts:949-971` (`getCatalogPriceLookup` builds `Map<"itemId::label", price>`), `apps/web/src/app/api/orders/route.ts:359-380` (order-line price snapshot uses `priceLookup.get(priceLookupKey(itemId, variantLabel)) ?? line.unitPrice`), `apps/web/src/db/schema.ts:154-163` (`catalog_variants` — no unique index on `(item_id, label)`).
