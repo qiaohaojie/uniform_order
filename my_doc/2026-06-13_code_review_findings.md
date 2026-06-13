@@ -36,7 +36,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ✅ **RESOLVED** |
 | 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ✅ **RESOLVED** (migration 0015 applied to dev) |
 | 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ✅ **RESOLVED** (migration 0016 applied to dev, dedup-checked) |
-| 5 | medium | persisted line prices can diverge from stored order subtotal | ⬇ LOG |
+| 5 | medium | persisted line prices can diverge from stored order subtotal | ✅ **RESOLVED** |
 | 9b/10 | low | orders POST PII fields unbounded / unvalidated | ⬇ LOG |
 | 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ⬇ LOG (needs middleware + nonce) |
 | 17 | medium | rate limiter collapses to one global bucket if client IP not derivable | ⬇ LOG (needs Hostinger header verification) |
@@ -184,6 +184,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #5 — Persisted order line prices can sum to a different number than the stored order subtotal/total
+
+> **✅ RESOLVED (this session, 2026-06-13).** `insertOrder` now persists the client-supplied `line.unitPrice` — the exact PI-snapshot the parent saw and that backed the Stripe charge — instead of the live-catalog re-read (`catalogPrice ?? line.unitPrice` removed, along with the now-unused `getCatalogPriceLookup`/`priceLookupKey` imports in this route; `getCatalogPriceLookup` is still used by `/api/stripe/payment-intent`). Added a soft assertion: `lineSubtotal = round2(Σ unitPrice*qty)` compared to the Stripe-locked `verifiedTotals.subtotal` within 1c; on drift it `serverCaptureException("api-orders-post", "line_subtotal_drift", …)` and **continues** (a paid order is never blocked). Stale "prefer the live catalog price" comments updated. Decoupled from #12 by design — persisting the client-selected price needs no variant-id lookup.
 
 - **Severity:** medium · **Fix-risk:** moderate (changes which price source is persisted on the order-write path) · **Confidence:** high
 - **Files:** `apps/web/src/app/api/orders/route.ts:284-302` (totals locked to `stripePI.amount/100`), `:359-380` (line snapshot uses `const unitPrice = catalogPrice ?? line.unitPrice` — the **live** catalog price), `apps/web/src/app/api/stripe/payment-intent/route.ts:67-98` (PI amount was computed from the catalog snapshot *at PI-creation time*).
