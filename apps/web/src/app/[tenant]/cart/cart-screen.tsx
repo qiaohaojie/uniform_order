@@ -111,7 +111,7 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
                     </button>
                   </div>
                   <div className="text-[13px] font-bold tnum" style={{ color: "var(--color-ink)" }}>
-                    ${line.price * line.qty}
+                    ${(line.price * line.qty).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -124,7 +124,7 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
         <div className="px-4 pt-3.5 pb-6 border-t bg-white flex-shrink-0" style={{ borderColor: "var(--color-rule)" }}>
           <div className="flex justify-between text-[12px] mb-1" style={{ color: "var(--color-ink-dim)" }}>
             <span>Subtotal · {totalQty} items</span>
-            <span className="tnum">${total}</span>
+            <span className="tnum">${total.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-[12px] mb-2" style={{ color: "var(--color-ink-dim)" }}>
             <span>GST included</span>
@@ -132,7 +132,7 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
           </div>
           <div className="flex justify-between items-baseline mb-3">
             <span className="font-serif text-[18px] font-semibold">Total</span>
-            <span className="font-serif text-[22px] font-semibold tnum">${total}</span>
+            <span className="font-serif text-[22px] font-semibold tnum">${total.toFixed(2)}</span>
           </div>
           <Link
             href={`/${tenant.id}/checkout`}

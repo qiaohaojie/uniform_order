@@ -22,7 +22,14 @@ export async function POST(req: NextRequest) {
   try {
     const stripe = getStripe();
     const body = await req.json();
-    const { tenantId, amount, currency = "aud", metadata, lines, delivery, subtotal, gst } = body;
+    const { tenantId, amount, metadata, lines, delivery, subtotal, gst } = body;
+
+    // Currency is server-pinned to AUD. The catalog prices, the totals
+    // assertion, tenant payout reconciliation and order finalisation
+    // (pi.amount / 100) all assume a two-decimal AUD charge. A client-supplied
+    // currency (e.g. a zero-decimal "jpy") would corrupt the recorded total/GST
+    // and silently charge in the wrong currency, so it is never trusted.
+    const currency = "aud";
 
     if (!tenantId || amount === undefined || amount === null) {
       return NextResponse.json(
@@ -111,14 +118,23 @@ export async function POST(req: NextRequest) {
     // the recorded subtotal/GST/shipping breakdown.
     const fulfilmentMethod = delivery === "ship" ? "shipping" : "pickup";
 
+    // Spread client-supplied metadata FIRST so the server-authoritative keys
+    // below always win. Otherwise a client could pass
+    // metadata: { fulfilmentMethod: "shipping" } and override the pinned value
+    // that /api/orders trusts as anti-tamper, recording a phantom shipping fee.
+    const clientMetadata =
+      metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? (metadata as Record<string, string>)
+        : {};
+
     const intentParams: Stripe.PaymentIntentCreateParams = {
       amount: amountInCents,
       currency,
       metadata: {
+        ...clientMetadata,
         tenantId,
         stripeAccountId: tenant.stripeAccountId,
         fulfilmentMethod,
-        ...metadata,
       },
       automatic_payment_methods: { enabled: true },
       transfer_data: { destination: tenant.stripeAccountId },

@@ -8,12 +8,19 @@ function getUtapi() {
 
 /**
  * Best-effort delete of an UploadThing file by its public URL.
- * Throws on failure; callers should catch + log + continue.
+ * A real UTApi failure still throws (callers catch + log + continue); but an
+ * unrecognised URL shape is treated as a warn-and-skip rather than a throw, so
+ * a future UploadThing URL-format drift degrades to a leaked orphan file
+ * instead of breaking the catalog update that triggered the cleanup.
  */
 export async function deleteUploadthingFileByUrl(url: string): Promise<void> {
-  // UploadThing public URLs look like https://utfs.io/f/<fileKey>
+  // UploadThing public URLs look like https://utfs.io/f/<fileKey> or the newer
+  // https://<appId>.ufs.sh/f/<fileKey>; both expose the key under a /f/ segment.
   const match = /https?:\/\/[^/]+\/f\/([^/?#]+)/.exec(url);
-  if (!match) throw new Error(`Unrecognized UploadThing URL: ${url}`);
+  if (!match) {
+    console.warn(`Skipping UploadThing cleanup for unrecognized URL: ${url}`);
+    return;
+  }
   const fileKey = match[1];
   await getUtapi().deleteFiles(fileKey);
 }
