@@ -38,7 +38,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ✅ **RESOLVED** (migration 0016 applied to dev, dedup-checked) |
 | 5 | medium | persisted line prices can diverge from stored order subtotal | ✅ **RESOLVED** |
 | 9b/10 | low | orders POST PII fields unbounded / unvalidated | ⬇ LOG |
-| 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ⬇ LOG (needs middleware + nonce) |
+| 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ✅ **RESOLVED** (nonce middleware; browser smoke check recommended) |
 | 17 | medium | rate limiter collapses to one global bucket if client IP not derivable | ⬇ LOG (needs Hostinger header verification) |
 | 18 | low | auth endpoints have no app-level rate limit | ⬇ LOG |
 | 2 | low | `refundedAmountCents` from webhook is charge-local, not DB sum | ⬇ LOG (latent) |
@@ -207,6 +207,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #16 — CSP allows `'unsafe-inline'` in `script-src` in production
+
+> **✅ RESOLVED (this session, 2026-06-13).** Added `apps/web/src/middleware.ts` that mints a per-request nonce (`Buffer.from(crypto.randomUUID()).toString("base64")`) and emits the CSP with `script-src 'self' 'nonce-…' <Stripe/PostHog origins>` — **no `'unsafe-inline'`** for scripts. `'unsafe-eval'` stays dev-gated (`isDev && …`); `style-src` keeps `'unsafe-inline'`. The nonce is set on both request (`x-nonce`) and response headers so Next stamps it onto its framework/next-script tags. Moved CSP out of `next.config.ts` (removed the `csp`/`scriptSrc` consts + the `Content-Security-Policy` header entry); the other static headers (HSTS, X-Content-Type-Options, Referrer-Policy, X-Frame-Options) remain in `next.config.ts`. `matcher` skips `_next/static`, `_next/image`, favicon and static asset extensions. **Script loading under the new CSP:** PostHog (`posthog-js` `posthog.init`) and Stripe (`@stripe/stripe-js`) both load purely at runtime (no inline `<script>` tags, zero `dangerouslySetInnerHTML` in the app), and their origins are in the `script-src`/`connect-src` allowlists — so nothing needed an explicit `nonce={…}` attribute. **Verified:** `pnpm check-types:web` exit 0 and `pnpm build:web` exit 0 (build report shows `ƒ Proxy (Middleware)` — middleware compiled). **Not runtime-verified in a browser** (no headed browser from the agent): recommend a quick CSP-console smoke check in your Chrome on the running app to confirm no `script-src` violations before shipping; if a third-party inline blocker ever appears, add `'strict-dynamic'` (not blanket `'unsafe-inline'`).
 
 - **Severity:** medium · **Fix-risk:** risky (a naive removal breaks the app; needs middleware + nonce) · **Confidence:** high
 - **Files:** `apps/web/next.config.ts:8-18` (`scriptSrc` always includes `'unsafe-inline'`), `:22-31` (CSP assembly), `:51-56` (headers).
