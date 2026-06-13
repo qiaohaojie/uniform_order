@@ -3,7 +3,8 @@ import type Stripe from "stripe";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, tenants, orderRefunds, auditEvents, orderEvents } from "@/db/schema";
-import { sendOrderConfirmationEmail, sendOrderRefundEmail } from "@/lib/email";
+import { sendOrderRefundEmail } from "@/lib/email";
+import { recordOrderPaid } from "@/lib/orders/record-order-paid";
 
 function formatAud(amount: number): string {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount);
@@ -86,40 +87,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (resolved) {
-      // Idempotent: the partial unique index order_events_paid_unique
-      // (order_id WHERE event_type='order_paid') makes a redelivered insert a
-      // harmless no-op. The conflict target's `where` must match that index.
-      await db
-        .insert(orderEvents)
-        .values({
-          orderId: resolved.id,
-          tenantId: resolved.tenantId,
-          eventType: "order_paid",
-          metadataJson: { paymentIntentId: pi.id },
-        })
-        .onConflictDoNothing({
-          target: orderEvents.orderId,
-          where: sql`${orderEvents.eventType} = 'order_paid'`,
-        });
-    }
-
-    // Confirmation email + analytics fire ONCE, only on the real first
-    // transition (this delivery flipped the row) — never on redelivery.
-    if (flipped.length === 1) {
-      await serverCapture("stripe-webhook", "order_confirmed", {
-        order_id: flipped[0].id,
-        stripe_payment_intent_id: pi.id,
+      // Idempotent record of the payment: order_paid audit event (deduped by the
+      // partial unique index), analytics once, and the confirmation email
+      // (self-idempotent). Shared with the order POST so whichever path runs —
+      // or both, in any order, across webhook redeliveries — the effects fire
+      // exactly once and a previously-failed email is retried.
+      await recordOrderPaid({
+        orderId: resolved.id,
+        tenantId: resolved.tenantId,
+        paymentIntentId: pi.id,
         amount: pi.amount ? pi.amount / 100 : undefined,
         currency: pi.currency,
+        analyticsDistinctId: "stripe-webhook",
       });
-      try {
-        await sendOrderConfirmationEmail(flipped[0].id);
-      } catch (err) {
-        console.error("Confirmation email failed for order", flipped[0].id, err);
-        await serverCaptureException("stripe-webhook", err instanceof Error ? err : new Error(String(err)), { step: "confirmation-email", orderId: flipped[0].id });
-      }
-    } else if (!resolved) {
-      console.info("stripe webhook: no order matched payment intent", pi.id);
+    } else {
+      // The order POST hasn't inserted the row yet (this webhook won the race).
+      // That's fine: the POST verifies the PI succeeded, inserts the order as
+      // `paid`, and calls recordOrderPaid itself — so nothing is lost here.
+      console.info("stripe webhook: no order matched payment intent yet", pi.id);
     }
 
     return NextResponse.json({ received: true });
