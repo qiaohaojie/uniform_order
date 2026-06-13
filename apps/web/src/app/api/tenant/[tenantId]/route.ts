@@ -54,7 +54,15 @@ export async function PATCH(
     const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
     if (tenantAccessResponse) return tenantAccessResponse;
 
-    const parsed = PatchSchema.safeParse(await req.json());
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      // Empty or malformed JSON: return 400 rather than letting req.json()
+      // throw into the outer catch (which would surface as a 500).
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid settings", issues: parsed.error.flatten() },
