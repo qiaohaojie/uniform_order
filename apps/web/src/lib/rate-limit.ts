@@ -28,9 +28,18 @@ function getClientAddress(req: NextRequest) {
     return trustedProxyIp.trim();
   }
 
-  // x-forwarded-for can be spoofed by the client on untrusted networks.
-  // We intentionally do not fall back to it here; only x-real-ip and
-  // cf-connecting-ip from known proxy layers are accepted.
+  // x-forwarded-for fallback. Exactly one trusted reverse proxy (Hostinger)
+  // sits in front of the Node app, so the proxy APPENDS the real client IP as
+  // the LAST entry. The FIRST entry is client-supplied and spoofable, so we
+  // trust only the last hop. (On Cloudflare/Vercel you'd trust a different
+  // index; this is correct for the single-trusted-proxy Hostinger topology.)
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    const lastHop = parts[parts.length - 1];
+    if (lastHop) return lastHop;
+  }
+
   return null;
 }
 
@@ -41,7 +50,13 @@ export function applyRateLimit(
 ) {
   const now = Date.now();
   const clientAddress = getClientAddress(req);
-  const bucketKey = clientAddress ? `${key}:${clientAddress}` : key;
+  // Fail closed when no client IP is derivable: instead of collapsing every
+  // anonymous caller into one shared, generously-limited global bucket (a DoS
+  // amplification vector), route them to a distinct `:noip` bucket with a much
+  // tighter limit. Authenticated callers pass a user-id-scoped `key` and keep
+  // the full limit regardless of IP.
+  const bucketKey = clientAddress ? `${key}:${clientAddress}` : `${key}:noip`;
+  const effectiveLimit = clientAddress ? limit : Math.max(1, Math.floor(limit / 6));
   const existing = buckets.get(bucketKey);
 
   if (!existing || existing.resetAt <= now) {
@@ -49,7 +64,7 @@ export function applyRateLimit(
     return null;
   }
 
-  if (existing.count >= limit) {
+  if (existing.count >= effectiveLimit) {
     const retryAfterSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
     return NextResponse.json(
       { error: "Too many requests" },
@@ -57,7 +72,7 @@ export function applyRateLimit(
         status: 429,
         headers: {
           "Retry-After": String(retryAfterSeconds),
-          "X-RateLimit-Limit": String(limit),
+          "X-RateLimit-Limit": String(effectiveLimit),
           "X-RateLimit-Remaining": "0",
         },
       }
