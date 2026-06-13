@@ -730,11 +730,12 @@ export async function updateTenantStripe(
 
 export async function updateTenantSettings(
   tenantId: string,
+  // shopEmail is intentionally excluded: it is the operator authorization key and must
+  // never be writable through self-service settings (see api/tenant/[tenantId] PATCH).
   data: {
     name?: string;
-    address?: string;
-    shopHours?: string;
-    shopEmail?: string;
+    address?: string | null;
+    shopHours?: string | null;
   }
 ) {
   return db

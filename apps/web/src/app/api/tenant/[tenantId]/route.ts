@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getTenant, updateTenantSettings } from "@/db/queries";
 import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
+
+// shopEmail is intentionally NOT settable here: it is the operator authorization key
+// (ensureTenantAccess grants access iff session email === tenant.shopEmail). Allowing
+// self-service edits would let an operator hand access to any email or lock themselves out.
+const PatchSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  address: z.string().trim().max(300).nullable().optional(),
+  shopHours: z.string().trim().max(200).nullable().optional(),
+});
 
 // GET /api/tenant/:tenantId
 // Public by design for parent-facing shop metadata (name/address/hours/contact).
@@ -44,9 +54,14 @@ export async function PATCH(
     const tenantAccessResponse = ensureTenantAccess(authResult.user, tenant.shopEmail);
     if (tenantAccessResponse) return tenantAccessResponse;
 
-    const body = await req.json();
-    const { name, address, shopHours, shopEmail } = body;
-    const updated = await updateTenantSettings(tenantId, { name, address, shopHours, shopEmail });
+    const parsed = PatchSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid settings", issues: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const updated = await updateTenantSettings(tenantId, parsed.data);
     if (updated.length === 0) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }

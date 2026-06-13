@@ -32,7 +32,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 19 | low | UploadThing cleanup threw on unknown URL shape | ✅ **FIXED** |
 | 20 | low | email recipient not format-validated | ✅ **FIXED** (guard in `sendEmail`) |
 | 21 | low | dev email log leaked recipient PII | ✅ **FIXED** (masked) |
-| 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ⬇ **LOG — do first** |
+| 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ✅ **RESOLVED** (min-viable; operatorEmail redesign deferred) |
 | 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ⬇ LOG |
 | 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ⬇ LOG |
 | 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ⬇ LOG (needs migration) |
@@ -59,6 +59,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ## HIGH priority
 
 ### #8 — Tenant settings PATCH lets an operator overwrite the `shopEmail` authorization key (account takeover / lockout)
+
+> **✅ RESOLVED (this session, 2026-06-13) — minimum-viable.** `shopEmail` is no longer self-service editable: the PATCH route (`api/tenant/[tenantId]/route.ts`) now zod-validates the body via `PatchSchema` (name/address/shopHours only — `shopEmail` deliberately absent) and 400s on malformed/oversized input; `updateTenantSettings`'s `data` type drops `shopEmail` so it can never be written through that function; the operator settings UI (`settings-client.tsx`) renders the shop-email field read-only/disabled with a "Contact the platform admin to change the shop email" note and stops sending `shopEmail` in the PATCH body. **Deferred (future work):** the recommended `tenants.operatorEmail`-column / `tenant_operators` redesign that fully decouples the authz key from the contact field (migration-bearing, touches every `ensureTenantAccess` call site) — out of scope for this batch.
 
 - **Severity:** high · **Fix-risk:** risky (touches the authz model + operator settings UI) · **Confidence:** high
 - **Files:**
