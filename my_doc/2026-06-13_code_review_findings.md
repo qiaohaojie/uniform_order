@@ -33,7 +33,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 20 | low | email recipient not format-validated | ✅ **FIXED** (guard in `sendEmail`) |
 | 21 | low | dev email log leaked recipient PII | ✅ **FIXED** (masked) |
 | 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ✅ **RESOLVED** (min-viable; operatorEmail redesign deferred) |
-| 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ⬇ LOG |
+| 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ✅ **RESOLVED** |
 | 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ⬇ LOG |
 | 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ⬇ LOG (needs migration) |
 | 5 | medium | persisted line prices can diverge from stored order subtotal | ⬇ LOG |
@@ -106,6 +106,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ## MEDIUM priority
 
 ### #4 — `POST /api/stripe/payment-intent` has no authentication and no rate limit
+
+> **✅ RESOLVED (this session, 2026-06-13).** Added `requireSessionUser()` + `applyRateLimit(req, "payment-intent:<userId>", { limit: 10, windowMs: 60_000 })` at the very top of `POST` (before `req.json()`), mirroring `/api/orders`. Anonymous callers now get the 401 path and abusive ones 429 before any Stripe/DB work. The checkout page already redirects unauthenticated users to sign-in, so authenticated parents complete checkout unchanged (no UX change). Also stamped `parentUserId` into the server-authoritative PI metadata for defense-in-depth.
 
 - **Severity:** medium · **Fix-risk:** risky (sits on the live checkout path — must confirm the caller is authenticated *before* payment, or you'll break checkout) · **Confidence:** high
 - **Files:** `apps/web/src/app/api/stripe/payment-intent/route.ts` (whole `POST` handler) · compare to `apps/web/src/app/api/orders/route.ts:106-115` (the sibling that *does* gate).
