@@ -443,8 +443,11 @@ export async function POST(req: NextRequest) {
       tenant_id: tenantId,
       delivery: fulfilmentMethod === "shipping" ? "ship" : "pickup",
       fulfilment_method: fulfilmentMethod,
-      total,
-      subtotal,
+      // Report the server-verified totals, not the raw client body. `subtotal` is
+      // otherwise unvalidated (only typeof-checked), so a crafted body could skew
+      // PostHog revenue even though the charge and persisted order are correct.
+      total: verifiedTotals.total,
+      subtotal: verifiedTotals.subtotal,
       item_count: lines.length,
       $set: { email: normalizedParentEmail },
     });

@@ -87,6 +87,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (resolved) {
+      // Defense-in-depth: the order is matched only by stripePaymentIntentId, but
+      // the PI's tenantId is server-pinned at creation (anti-tamper). Cross-check
+      // that the resolved order belongs to the tenant the PI was minted for before
+      // firing paid side-effects. A mismatch should be impossible in normal
+      // operation, so we skip + alert rather than email/record under the wrong
+      // tenant. Older PIs without pinned metadata (piTenantId null) are exempt.
+      const piTenantId =
+        typeof pi.metadata?.tenantId === "string" ? pi.metadata.tenantId : null;
+      if (piTenantId && piTenantId !== resolved.tenantId) {
+        console.error("stripe webhook: PI/order tenant mismatch", {
+          paymentIntentId: pi.id,
+          piTenantId,
+          orderTenantId: resolved.tenantId,
+        });
+        await serverCaptureException(
+          "stripe-webhook",
+          new Error("pi_order_tenant_mismatch"),
+          { paymentIntentId: pi.id, piTenantId, orderTenantId: resolved.tenantId }
+        );
+        return NextResponse.json({ received: true, ignored: "tenant mismatch" });
+      }
+
       // Idempotent record of the payment: order_paid audit event (deduped by the
       // partial unique index), analytics once, and the confirmation email
       // (self-idempotent). Shared with the order POST so whichever path runs —
