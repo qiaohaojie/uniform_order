@@ -6,6 +6,8 @@ import {
   assertTotalsMatch,
   TotalsMismatchError,
 } from "@/lib/order-totals";
+import { requireSessionUser } from "@/lib/auth/authorization";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 // TODO(refunds): When a refund route is added (e.g. POST /api/stripe/refund),
 // it MUST pass `reverse_transfer: true` (and usually `refund_application_fee: true`)
@@ -21,6 +23,19 @@ import {
 export async function POST(req: NextRequest) {
   try {
     const stripe = getStripe();
+
+    // Require an authenticated session and rate-limit per user BEFORE any work:
+    // this route mints PaymentIntents on the tenant's connected account, so anonymous
+    // access would allow PI minting and tenant-readiness enumeration. The checkout page
+    // already redirects unauthenticated users to sign-in, so authed parents are unaffected.
+    const authResult = await requireSessionUser();
+    if ("response" in authResult) return authResult.response;
+    const rl = applyRateLimit(req, `payment-intent:${authResult.user.id}`, {
+      limit: 10,
+      windowMs: 60_000,
+    });
+    if (rl) return rl;
+
     const body = await req.json();
     const { tenantId, amount, metadata, lines, delivery, subtotal, gst } = body;
 
@@ -135,6 +150,7 @@ export async function POST(req: NextRequest) {
         tenantId,
         stripeAccountId: tenant.stripeAccountId,
         fulfilmentMethod,
+        parentUserId: authResult.user.id,
       },
       automatic_payment_methods: { enabled: true },
       transfer_data: { destination: tenant.stripeAccountId },
