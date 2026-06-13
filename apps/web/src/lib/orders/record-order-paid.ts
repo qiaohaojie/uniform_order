@@ -30,10 +30,11 @@ type RecordOrderPaidArgs = {
  *    `order_events_paid_unique` (`order_id` WHERE event_type='order_paid'); its
  *    RETURNING tells us whether THIS call was the first to record the payment,
  *    which gates the analytics capture to exactly once;
- *  - `sendOrderConfirmationEmail` is self-idempotent (guards on the order's
- *    `emailsSent.confirmation`), so we call it on every invocation — a send that
- *    failed on an earlier delivery is retried on the next, but only ever sends
- *    once.
+ *  - `sendOrderConfirmationEmail` is self-idempotent under concurrency: it
+ *    atomically CLAIMS the order's `emailsSent.confirmation` slot (a single
+ *    conditional UPDATE flips an empty slot to `pending`), so only one of two
+ *    concurrent callers sends. A send that failed on an earlier delivery
+ *    releases the claim and is retried on the next, but only ever sends once.
  */
 export async function recordOrderPaid({
   orderId,
