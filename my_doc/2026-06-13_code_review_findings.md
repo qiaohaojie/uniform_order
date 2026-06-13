@@ -32,14 +32,14 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 19 | low | UploadThing cleanup threw on unknown URL shape | ✅ **FIXED** |
 | 20 | low | email recipient not format-validated | ✅ **FIXED** (guard in `sendEmail`) |
 | 21 | low | dev email log leaked recipient PII | ✅ **FIXED** (masked) |
-| 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ⬇ **LOG — do first** |
-| 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ⬇ LOG |
-| 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ⬇ LOG |
-| 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ⬇ LOG (needs migration) |
-| 5 | medium | persisted line prices can diverge from stored order subtotal | ⬇ LOG |
+| 8 | **high** | tenant settings PATCH lets operator rewrite the `shopEmail` authz key | ✅ **RESOLVED** (min-viable; operatorEmail redesign deferred) |
+| 4 | medium | `/api/stripe/payment-intent` has no auth / rate limit | ✅ **RESOLVED** |
+| 11 | medium | `payment_intent.succeeded` webhook writes status + event non-atomically | ✅ **RESOLVED** (migration 0015 applied to dev) |
+| 12 | medium | no DB uniqueness on `catalog_variants(item_id,label)` → mis-priced lines | ✅ **RESOLVED** (migration 0016 applied to dev, dedup-checked) |
+| 5 | medium | persisted line prices can diverge from stored order subtotal | ✅ **RESOLVED** |
 | 9b/10 | low | orders POST PII fields unbounded / unvalidated | ⬇ LOG |
-| 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ⬇ LOG (needs middleware + nonce) |
-| 17 | medium | rate limiter collapses to one global bucket if client IP not derivable | ⬇ LOG (needs Hostinger header verification) |
+| 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ✅ **RESOLVED** (nonce middleware; browser smoke check recommended) |
+| 17 | medium | rate limiter collapses to one global bucket if client IP not derivable | ✅ **RESOLVED** (xff last-hop + :noip fail-closed; confirm Hostinger header at deploy) |
 | 18 | low | auth endpoints have no app-level rate limit | ⬇ LOG |
 | 2 | low | `refundedAmountCents` from webhook is charge-local, not DB sum | ⬇ LOG (latent) |
 | 3 | low | webhook-reconciled refund emits no operator-attributed audit event | ⬇ LOG (latent) |
@@ -59,6 +59,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ## HIGH priority
 
 ### #8 — Tenant settings PATCH lets an operator overwrite the `shopEmail` authorization key (account takeover / lockout)
+
+> **✅ RESOLVED (this session, 2026-06-13) — minimum-viable.** `shopEmail` is no longer self-service editable: the PATCH route (`api/tenant/[tenantId]/route.ts`) now zod-validates the body via `PatchSchema` (name/address/shopHours only — `shopEmail` deliberately absent) and 400s on malformed/oversized input; `updateTenantSettings`'s `data` type drops `shopEmail` so it can never be written through that function; the operator settings UI (`settings-client.tsx`) renders the shop-email field read-only/disabled with a "Contact the platform admin to change the shop email" note and stops sending `shopEmail` in the PATCH body. **Deferred (future work):** the recommended `tenants.operatorEmail`-column / `tenant_operators` redesign that fully decouples the authz key from the contact field (migration-bearing, touches every `ensureTenantAccess` call site) — out of scope for this batch.
 
 - **Severity:** high · **Fix-risk:** risky (touches the authz model + operator settings UI) · **Confidence:** high
 - **Files:**
@@ -105,6 +107,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 
 ### #4 — `POST /api/stripe/payment-intent` has no authentication and no rate limit
 
+> **✅ RESOLVED (this session, 2026-06-13).** Added `requireSessionUser()` + `applyRateLimit(req, "payment-intent:<userId>", { limit: 10, windowMs: 60_000 })` at the very top of `POST` (before `req.json()`), mirroring `/api/orders`. Anonymous callers now get the 401 path and abusive ones 429 before any Stripe/DB work. The checkout page already redirects unauthenticated users to sign-in, so authenticated parents complete checkout unchanged (no UX change). Also stamped `parentUserId` into the server-authoritative PI metadata for defense-in-depth.
+
 - **Severity:** medium · **Fix-risk:** risky (sits on the live checkout path — must confirm the caller is authenticated *before* payment, or you'll break checkout) · **Confidence:** high
 - **Files:** `apps/web/src/app/api/stripe/payment-intent/route.ts` (whole `POST` handler) · compare to `apps/web/src/app/api/orders/route.ts:106-115` (the sibling that *does* gate).
 
@@ -133,6 +137,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 
 ### #11 — `payment_intent.succeeded` webhook flips order status and writes the `order_paid` event in two non-atomic awaits
 
+> **✅ RESOLVED (this session, 2026-06-13) — migration APPLIED (dev db).** Added a partial unique index `order_events_paid_unique` on `order_events(order_id) WHERE event_type='order_paid'` (`schema.ts` `paidUnique` + `drizzle/0015_order_paid_unique.sql` + `_journal.json` idx 15). The webhook now resolves the order id on BOTH paths — the row flipped this delivery, OR (on redelivery, already `paid`) a `SELECT … WHERE stripePaymentIntentId = pi.id` — and inserts the `order_paid` event **unconditionally** with `.onConflictDoNothing({ target: orderEvents.orderId, where: sql\`event_type='order_paid'\` })`, so a failed-then-redelivered insert backfills the audit event instead of leaving a permanent gap. Confirmation email + `order_confirmed` analytics stay inside the `flipped.length === 1` branch (fire once, never on redelivery). **Apply status:** index created on the DEV Neon db (`ap-southeast-2`), `__drizzle_migrations` bookkeeping row id 17 inserted (`hash="manual_0015_order_paid_unique"`, matching the existing manual-apply convention). Verified `indexdef`: `UNIQUE … (order_id) WHERE (event_type = 'order_paid')`. **Note for prod deploy:** run `drizzle-kit migrate` (or apply 0015 manually) on the production db before this ships — the `onConflictDoNothing` correctness depends on the partial index existing.
+
 - **Severity:** medium · **Fix-risk:** moderate (payment webhook) · **Confidence:** high
 - **Files:** `apps/web/src/app/api/stripe/webhook/route.ts:67-93` (the `payment_intent.succeeded` branch).
 
@@ -152,6 +158,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #12 — No DB uniqueness on `catalog_variants(item_id, label)`; duplicate active labels silently mis-price order lines
+
+> **✅ RESOLVED (this session, 2026-06-13) — migration APPLIED (dev db), dedup-checked first.** Added a partial unique index `catalog_variants_item_label_active_unique` on `catalog_variants(item_id, label) WHERE active = true` (`schema.ts` `itemLabelActiveUnique` + `drizzle/0016_catalog_variants_unique_label.sql` + `_journal.json` idx 16). `addCatalogItem` / `updateCatalogItem` now wrap their variant `db.batch` and translate a `23505` on this index (via `isUniqueConstraintError(err, "catalog_variants_item_label_active_unique")`) into a clear `Duplicate size/label …` Error. **Apply status:** ran the dedup pre-check first — **0** active duplicate `(item_id,label)` pairs on the dev db — then created the index (verified `indexdef`: `UNIQUE … (item_id, label) WHERE (active = true)`), `__drizzle_migrations` bookkeeping row id 18. **Notes:** (a) the catalog POST/PATCH route currently returns a generic 500 on any throw, so the typed message isn't surfaced to the operator UI yet — a tiny optional follow-up is to map this Error to a 409 with its message; the write is correctly *rejected* regardless. (b) The robust alternative — carry the variant **id** through the cart and key `getCatalogPriceLookup` on variant id instead of `(itemId,label)` — remains the larger optional follow-up (out of scope). **Prod deploy:** dedup-check then apply 0016 before shipping.
 
 - **Severity:** medium · **Fix-risk:** moderate (needs a migration + dedup of any existing dupes) · **Confidence:** medium
 - **Files:** `apps/web/src/db/queries.ts:949-971` (`getCatalogPriceLookup` builds `Map<"itemId::label", price>`), `apps/web/src/app/api/orders/route.ts:359-380` (order-line price snapshot uses `priceLookup.get(priceLookupKey(itemId, variantLabel)) ?? line.unitPrice`), `apps/web/src/db/schema.ts:154-163` (`catalog_variants` — no unique index on `(item_id, label)`).
@@ -177,6 +185,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 
 ### #5 — Persisted order line prices can sum to a different number than the stored order subtotal/total
 
+> **✅ RESOLVED (this session, 2026-06-13).** `insertOrder` now persists the client-supplied `line.unitPrice` — the exact PI-snapshot the parent saw and that backed the Stripe charge — instead of the live-catalog re-read (`catalogPrice ?? line.unitPrice` removed, along with the now-unused `getCatalogPriceLookup`/`priceLookupKey` imports in this route; `getCatalogPriceLookup` is still used by `/api/stripe/payment-intent`). Added a soft assertion: `lineSubtotal = round2(Σ unitPrice*qty)` compared to the Stripe-locked `verifiedTotals.subtotal` within 1c; on drift it `serverCaptureException("api-orders-post", "line_subtotal_drift", …)` and **continues** (a paid order is never blocked). Stale "prefer the live catalog price" comments updated. Decoupled from #12 by design — persisting the client-selected price needs no variant-id lookup.
+
 - **Severity:** medium · **Fix-risk:** moderate (changes which price source is persisted on the order-write path) · **Confidence:** high
 - **Files:** `apps/web/src/app/api/orders/route.ts:284-302` (totals locked to `stripePI.amount/100`), `:359-380` (line snapshot uses `const unitPrice = catalogPrice ?? line.unitPrice` — the **live** catalog price), `apps/web/src/app/api/stripe/payment-intent/route.ts:67-98` (PI amount was computed from the catalog snapshot *at PI-creation time*).
 
@@ -197,6 +207,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #16 — CSP allows `'unsafe-inline'` in `script-src` in production
+
+> **✅ RESOLVED (this session, 2026-06-13).** Added `apps/web/src/middleware.ts` that mints a per-request nonce (`Buffer.from(crypto.randomUUID()).toString("base64")`) and emits the CSP with `script-src 'self' 'nonce-…' <Stripe/PostHog origins>` — **no `'unsafe-inline'`** for scripts. `'unsafe-eval'` stays dev-gated (`isDev && …`); `style-src` keeps `'unsafe-inline'`. The nonce is set on both request (`x-nonce`) and response headers so Next stamps it onto its framework/next-script tags. Moved CSP out of `next.config.ts` (removed the `csp`/`scriptSrc` consts + the `Content-Security-Policy` header entry); the other static headers (HSTS, X-Content-Type-Options, Referrer-Policy, X-Frame-Options) remain in `next.config.ts`. `matcher` skips `_next/static`, `_next/image`, favicon and static asset extensions. **Script loading under the new CSP:** PostHog (`posthog-js` `posthog.init`) and Stripe (`@stripe/stripe-js`) both load purely at runtime (no inline `<script>` tags, zero `dangerouslySetInnerHTML` in the app), and their origins are in the `script-src`/`connect-src` allowlists — so nothing needed an explicit `nonce={…}` attribute. **Verified:** `pnpm check-types:web` exit 0 and `pnpm build:web` exit 0 (build report shows `ƒ Proxy (Middleware)` — middleware compiled). **Not runtime-verified in a browser** (no headed browser from the agent): recommend a quick CSP-console smoke check in your Chrome on the running app to confirm no `script-src` violations before shipping; if a third-party inline blocker ever appears, add `'strict-dynamic'` (not blanket `'unsafe-inline'`).
 
 - **Severity:** medium · **Fix-risk:** risky (a naive removal breaks the app; needs middleware + nonce) · **Confidence:** high
 - **Files:** `apps/web/next.config.ts:8-18` (`scriptSrc` always includes `'unsafe-inline'`), `:22-31` (CSP assembly), `:51-56` (headers).
@@ -221,6 +233,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #17 — Rate limiter degrades to a single shared global bucket when the client IP can't be derived
+
+> **✅ RESOLVED (this session, 2026-06-13).** `getClientAddress` now falls back to `x-forwarded-for` after `req.ip`/`x-real-ip`/`cf-connecting-ip`, trusting **only the LAST hop** (`parts[parts.length - 1]`) — correct for the single-trusted-proxy Hostinger topology where the proxy appends the real client IP; the first entry is client-spoofable and is not trusted (documented in the comment). `applyRateLimit` no longer collapses no-IP anonymous callers into one generous global bucket: when `clientAddress` is null it uses a distinct `:noip` bucket with `effectiveLimit = max(1, floor(limit/6))`, and the 429 `X-RateLimit-Limit` header reflects that effective limit. Authenticated callers (key includes the user id) keep the full limit and per-user isolation. **Deploy note:** confirm `x-forwarded-for` is actually populated by Hostinger's proxy at deploy (can't be verified without deploying); if Hostinger instead sets `x-real-ip`, that path already takes precedence. Upstash/Redis-backed limiter remains the durable cross-instance follow-up (the existing in-memory note already flags this).
 
 - **Severity:** medium · **Fix-risk:** moderate (depends on verifying Hostinger's proxy headers — get this wrong and you either trust a spoofable header or keep the bug) · **Confidence:** medium
 - **Files:** `apps/web/src/lib/rate-limit.ts:19-35` (`getClientAddress` — only reads `req.ip`, `x-real-ip`, `cf-connecting-ip`; deliberately refuses `x-forwarded-for`), `:43-44` (when address is null, `bucketKey = key` with no IP suffix).

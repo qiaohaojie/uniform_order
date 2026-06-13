@@ -151,16 +151,27 @@ export const catalogItems = pgTable("catalog_items", {
 });
 
 // ─── Catalog variants (size/colour options with price) ───────────────────────
-export const catalogVariants = pgTable("catalog_variants", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  itemId: text("item_id")
-    .notNull()
-    .references(() => catalogItems.id, { onDelete: "cascade" }),
-  label: text("label").notNull(), // e.g. "Size 8", "Small"
-  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-  sizes: jsonb("sizes").$type<string[]>().notNull().default([]),
-  active: boolean("active").notNull().default(true),
-});
+export const catalogVariants = pgTable(
+  "catalog_variants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    label: text("label").notNull(), // e.g. "Size 8", "Small"
+    price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+    sizes: jsonb("sizes").$type<string[]>().notNull().default([]),
+    active: boolean("active").notNull().default(true),
+  },
+  (t) => ({
+    // getCatalogPriceLookup keys order-line pricing on (itemId,label); two ACTIVE
+    // variants sharing a label would let an order line bind to an arbitrary price.
+    // Enforce uniqueness among active variants only (inactive/archived may repeat).
+    itemLabelActiveUnique: uniqueIndex("catalog_variants_item_label_active_unique")
+      .on(t.itemId, t.label)
+      .where(sql`${t.active} = true`),
+  }),
+);
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
 export const orders = pgTable(
@@ -330,6 +341,12 @@ export const orderEvents = pgTable(
   (t) => ({
     orderTimeIdx: index("idx_order_events_order_time").on(t.orderId, t.createdAt),
     tenantTimeIdx: index("idx_order_events_tenant_time").on(t.tenantId, t.createdAt),
+    // At most one order_paid event per order — lets the webhook insert the audit
+    // event unconditionally + idempotently (onConflictDoNothing) so it survives
+    // Stripe redelivery without leaving a gap in the audit timeline (#11).
+    paidUnique: uniqueIndex("order_events_paid_unique")
+      .on(t.orderId)
+      .where(sql`${t.eventType} = 'order_paid'`),
   }),
 );
 

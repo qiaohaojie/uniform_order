@@ -33,7 +33,8 @@ export function SettingsClient({
   const stripeResult = searchParams.get("stripe"); // "success" | "refresh" | null
 
   const [name, setName] = useState(tenant.name);
-  const [shopEmail, setShopEmail] = useState(tenant.shopEmail ?? "");
+  // Read-only: shopEmail is the operator authz key, not editable via self-service settings.
+  const [shopEmail] = useState(tenant.shopEmail ?? "");
   const [address, setAddress] = useState(tenant.address ?? "");
   const [shopHours, setShopHours] = useState(tenant.shopHours ?? "");
   const [saving, setSaving] = useState(false);
@@ -81,7 +82,7 @@ export function SettingsClient({
       const res = await fetch(`/api/tenant/${tenantId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, shopEmail, address, shopHours }),
+        body: JSON.stringify({ name, address, shopHours }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -162,10 +163,15 @@ export function SettingsClient({
                 </label>
                 <input
                   value={shopEmail}
-                  onChange={(e) => setShopEmail(e.target.value)}
-                  className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
-                  style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)", fontFamily: "var(--font-sans)" }}
+                  readOnly
+                  disabled
+                  aria-readonly="true"
+                  className="w-full h-10 border rounded-md px-3 text-[13px] outline-none cursor-not-allowed opacity-70"
+                  style={{ borderColor: "var(--color-rule)", color: "var(--color-ink-dim)", fontFamily: "var(--font-sans)", background: "var(--color-parchment)" }}
                 />
+                <p className="text-[11px] mt-1" style={{ color: "var(--color-ink-dim)" }}>
+                  Contact the platform admin to change the shop email.
+                </p>
               </div>
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-[0.6px] mb-1.5" style={{ color: "var(--color-ink-dim)" }}>

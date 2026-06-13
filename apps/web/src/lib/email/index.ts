@@ -9,12 +9,6 @@ import { OrderRefund } from "./templates/OrderRefund";
 import { enqueueNotification, type EnqueueResult } from "./dispatch";
 import React from "react";
 
-type EmailStamp = { sentAt: string; messageId: string };
-type EmailsSent = {
-  confirmation?: EmailStamp;
-  ready?: EmailStamp;
-};
-
 function requireAppUrl(): string {
   const url = process.env.NEXT_PUBLIC_APP_URL;
   if (!url) {
@@ -52,23 +46,58 @@ async function getOrderForEmail(orderId: string) {
 }
 
 /**
+ * Releases a previously-claimed confirmation slot so a later delivery can retry.
+ * Removes the `confirmation` key entirely (back to the un-claimed state).
+ */
+async function releaseConfirmationClaim(orderId: string) {
+  await db
+    .update(orders)
+    .set({
+      emailsSent: sql`COALESCE(${orders.emailsSent}, '{}'::jsonb) - 'confirmation'`,
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, orderId));
+}
+
+/**
  * Sends an order confirmation email to the parent.
- * Uses "Stamp on Success" logic to prevent duplicate emails.
+ *
+ * `recordOrderPaid` invokes this from BOTH the order POST and the
+ * `payment_intent.succeeded` webhook (which Stripe may redeliver), so two calls
+ * can run concurrently. A read-then-write guard (read `emailsSent.confirmation`,
+ * then send, then stamp) lets both callers observe an empty slot before either
+ * stamps it, and the parent receives two emails. Instead we ATOMICALLY claim the
+ * slot: a single conditional UPDATE flips a still-empty slot to a `pending`
+ * marker, and only the caller whose UPDATE actually changed a row (RETURNING
+ * non-empty) proceeds to send. On failure the claim is released so the next
+ * delivery retries — preserving the prior "retry until sent once" behaviour.
  */
 export async function sendOrderConfirmationEmail(orderId: string) {
+  // Atomic claim: only one concurrent caller can flip null -> pending.
+  const claimed = await db
+    .update(orders)
+    .set({
+      emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{confirmation}', '{"status":"pending"}'::jsonb)`,
+      updatedAt: new Date(),
+    })
+    .where(
+      sql`${orders.id} = ${orderId} AND (COALESCE(${orders.emailsSent}, '{}'::jsonb) -> 'confirmation') IS NULL`
+    )
+    .returning({ id: orders.id });
+
+  if (claimed.length === 0) {
+    // Already claimed/sent by a concurrent or prior caller — nothing to do.
+    return;
+  }
+
   const data = await getOrderForEmail(orderId);
   if (!data) {
     console.error(`[email] Order ${orderId} not found for confirmation email`);
+    await releaseConfirmationClaim(orderId);
     return;
   }
 
   const { order, tenant, lines } = data;
-
-  // Check if already sent (Idempotency)
-  const emailsSent = (order.emailsSent as EmailsSent) ?? {};
-  if (emailsSent.confirmation) {
-    return;
-  }
 
   const refundPolicyUrl = tenant.currentLegalVersionId
     ? `${requireAppUrl()}/${tenant.id}/refund-policy`
@@ -94,17 +123,31 @@ export async function sendOrderConfirmationEmail(orderId: string) {
     refundPolicyUrl,
   };
 
-  const html = await render(React.createElement(OrderConfirmationEmail, props));
-  const text = await render(React.createElement(OrderConfirmationEmail, props), {
-    plainText: true,
-  });
+  let html: string;
+  let text: string;
+  try {
+    html = await render(React.createElement(OrderConfirmationEmail, props));
+    text = await render(React.createElement(OrderConfirmationEmail, props), {
+      plainText: true,
+    });
+  } catch (err) {
+    // Render failed before send — release the claim so a redelivery retries.
+    await releaseConfirmationClaim(orderId);
+    throw err;
+  }
 
-  const result = await sendEmail({
-    to: order.parentEmail,
-    subject: `Order Confirmation #${order.id} - ${tenant.name}`,
-    html,
-    text,
-  });
+  let result: Awaited<ReturnType<typeof sendEmail>>;
+  try {
+    result = await sendEmail({
+      to: order.parentEmail,
+      subject: `Order Confirmation #${order.id} - ${tenant.name}`,
+      html,
+      text,
+    });
+  } catch (err) {
+    await releaseConfirmationClaim(orderId);
+    throw err;
+  }
 
   if (result?.id) {
     const stamp = {
@@ -121,6 +164,10 @@ export async function sendOrderConfirmationEmail(orderId: string) {
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
+  } else {
+    // Provider returned no id => not actually delivered. Release the claim so a
+    // later delivery can retry, matching the prior stamp-on-success behaviour.
+    await releaseConfirmationClaim(orderId);
   }
 }
 
