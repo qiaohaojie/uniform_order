@@ -39,7 +39,7 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 | 5 | medium | persisted line prices can diverge from stored order subtotal | ✅ **RESOLVED** |
 | 9b/10 | low | orders POST PII fields unbounded / unvalidated | ⬇ LOG |
 | 16 | medium | CSP `'unsafe-inline'` in `script-src` in prod | ✅ **RESOLVED** (nonce middleware; browser smoke check recommended) |
-| 17 | medium | rate limiter collapses to one global bucket if client IP not derivable | ⬇ LOG (needs Hostinger header verification) |
+| 17 | medium | rate limiter collapses to one global bucket if client IP not derivable | ✅ **RESOLVED** (xff last-hop + :noip fail-closed; confirm Hostinger header at deploy) |
 | 18 | low | auth endpoints have no app-level rate limit | ⬇ LOG |
 | 2 | low | `refundedAmountCents` from webhook is charge-local, not DB sum | ⬇ LOG (latent) |
 | 3 | low | webhook-reconciled refund emits no operator-attributed audit event | ⬇ LOG (latent) |
@@ -233,6 +233,8 @@ These come from `CLAUDE.md` and the codebase. Violating one of these will break 
 ---
 
 ### #17 — Rate limiter degrades to a single shared global bucket when the client IP can't be derived
+
+> **✅ RESOLVED (this session, 2026-06-13).** `getClientAddress` now falls back to `x-forwarded-for` after `req.ip`/`x-real-ip`/`cf-connecting-ip`, trusting **only the LAST hop** (`parts[parts.length - 1]`) — correct for the single-trusted-proxy Hostinger topology where the proxy appends the real client IP; the first entry is client-spoofable and is not trusted (documented in the comment). `applyRateLimit` no longer collapses no-IP anonymous callers into one generous global bucket: when `clientAddress` is null it uses a distinct `:noip` bucket with `effectiveLimit = max(1, floor(limit/6))`, and the 429 `X-RateLimit-Limit` header reflects that effective limit. Authenticated callers (key includes the user id) keep the full limit and per-user isolation. **Deploy note:** confirm `x-forwarded-for` is actually populated by Hostinger's proxy at deploy (can't be verified without deploying); if Hostinger instead sets `x-real-ip`, that path already takes precedence. Upstash/Redis-backed limiter remains the durable cross-instance follow-up (the existing in-memory note already flags this).
 
 - **Severity:** medium · **Fix-risk:** moderate (depends on verifying Hostinger's proxy headers — get this wrong and you either trust a spoofable header or keep the bug) · **Confidence:** medium
 - **Files:** `apps/web/src/lib/rate-limit.ts:19-35` (`getClientAddress` — only reads `req.ip`, `x-real-ip`, `cf-connecting-ip`; deliberately refuses `x-forwarded-for`), `:43-44` (when address is null, `bucketKey = key` with no IP suffix).
