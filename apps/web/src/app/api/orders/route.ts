@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines, tenants } from "@/db";
 import {
-  getCatalogPriceLookup,
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
   getTenant,
@@ -18,7 +17,7 @@ import { applyRateLimit } from "@/lib/rate-limit";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
-import { priceLookupKey, round2 } from "@/lib/order-totals";
+import { round2 } from "@/lib/order-totals";
 import { SHIP_FEE_AUD } from "@/lib/shipping";
 import { getStripe } from "@/lib/stripe";
 
@@ -196,9 +195,9 @@ export async function POST(req: NextRequest) {
     // authoritative total and derive the rest server-side.
     //
     // Structural validation (qty, unitPrice types) stays — we still want to
-    // refuse garbage payloads. Per-line unitPrice falls back to the client
-    // value when the catalog has shifted; this is fine because the total is
-    // bounded by what Stripe actually charged.
+    // refuse garbage payloads. The per-line unitPrice we persist is the client
+    // PI-snapshot value (not a live-catalog re-read); this is fine because the
+    // total is bounded by what Stripe actually charged.
     const piTypeError = (() => {
       if (!Array.isArray(lines) || lines.length === 0) return "lines_invalid";
       for (const l of lines) {
@@ -301,10 +300,26 @@ export async function POST(req: NextRequest) {
       total: round2(authoritativeTotal),
     };
 
-    // Per-line price snapshot: prefer the live catalog when the variant still
-    // exists (keeps receipts in sync with the shop), fall back to the client
-    // value otherwise. Either way the total is locked by Stripe above.
-    const priceLookup = await getCatalogPriceLookup(tenantId);
+    // Per-line price snapshot: persist the client-supplied unitPrice — the exact
+    // figure the parent saw and that backed the PaymentIntent — NOT a live-catalog
+    // re-read. A live re-read could diverge from the stored (Stripe-locked) subtotal
+    // if an operator edited a price between PI creation and order POST. Each
+    // unitPrice is already validated as a finite number upstream, and the TOTAL is
+    // Stripe-locked, so a tampered per-line price cannot change what was charged.
+    // We soft-assert Σ(line) ≈ subtotal below and log drift without blocking a paid order.
+    const lineSubtotal = round2(
+      lines.reduce((s, l) => s + l.unitPrice * l.qty, 0)
+    );
+    if (Math.abs(lineSubtotal - verifiedTotals.subtotal) > 0.01) {
+      // Drift between the client line prices and the Stripe-locked subtotal. The
+      // customer already paid the correct total, so we do NOT reject — we surface
+      // the discrepancy for reconciliation and continue writing the paid order.
+      await serverCaptureException(
+        "api-orders-post",
+        new Error("line_subtotal_drift"),
+        { tenantId, lineSubtotal, subtotal: verifiedTotals.subtotal }
+      );
+    }
 
     let normalizedParentNote: string | null = null;
     if (typeof parentNote === "string") {
@@ -358,14 +373,9 @@ export async function POST(req: NextRequest) {
       });
       const linesInsert = db.insert(orderLines).values(
         lines.map((line) => {
-          // Prefer the live catalog price; fall back to the client value if
-          // the variant has been deactivated/renamed since PI creation. Total
-          // is locked by Stripe in the assertion above, so client-supplied
-          // unitPrice can't be used to under-pay the order.
-          const catalogPrice = priceLookup.get(
-            priceLookupKey(line.itemId, line.variantLabel),
-          );
-          const unitPrice = catalogPrice ?? line.unitPrice;
+          // Persist the client PI-snapshot price (see block comment above). The
+          // total is Stripe-locked, so this cannot change what was charged.
+          const unitPrice = line.unitPrice;
           return {
             orderId,
             itemId: line.itemId,
