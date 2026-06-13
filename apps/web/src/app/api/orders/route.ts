@@ -14,8 +14,8 @@ import {
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
-import { sendOrderConfirmationEmail } from "@/lib/email";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
+import { recordOrderPaid } from "@/lib/orders/record-order-paid";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
 import { round2 } from "@/lib/order-totals";
 import { SHIP_FEE_AUD } from "@/lib/shipping";
@@ -364,6 +364,12 @@ export async function POST(req: NextRequest) {
         subtotal: String(verifiedTotals.subtotal),
         gst: String(verifiedTotals.gst),
         total: String(verifiedTotals.total),
+        // We reach this insert only after verifying stripePI.status === "succeeded"
+        // above, so the payment is already captured. Persist `paid` directly rather
+        // than defaulting to `pending` and relying on the webhook to flip it — the
+        // webhook can race ahead of this insert, find no row, and (correctly) no-op,
+        // which would otherwise leave a genuinely-paid order stuck `pending`.
+        paymentStatus: "paid",
         stripePaymentIntentId: normalizedStripePaymentIntentId,
         stripeRef: normalizedStripePaymentIntentId,
         refundPolicyAcceptedAt: new Date(),
@@ -443,11 +449,22 @@ export async function POST(req: NextRequest) {
       $set: { email: normalizedParentEmail },
     });
 
-    // Send order confirmation email (best-effort; do not fail the request)
+    // Record the payment side effects (order_paid audit event, analytics, and
+    // the confirmation email) idempotently. The order is already inserted `paid`
+    // above; this is shared with the payment_intent.succeeded webhook so the
+    // effects fire exactly once whichever path runs first. Best-effort — the
+    // order is already saved and paid, and the webhook backstops any failure here.
     try {
-      await sendOrderConfirmationEmail(createdOrderId);
+      await recordOrderPaid({
+        orderId: createdOrderId,
+        tenantId,
+        paymentIntentId: normalizedStripePaymentIntentId,
+        amount: verifiedTotals.total,
+        currency: "aud",
+        analyticsDistinctId: authResult.user.id,
+      });
     } catch (err) {
-      console.error("Order confirmation email failed for order", createdOrderId, err);
+      console.error("recordOrderPaid failed for order", createdOrderId, err);
     }
 
     return NextResponse.json({ orderId: createdOrderId }, { status: 201 });
