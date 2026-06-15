@@ -63,3 +63,4 @@ GTM/demo_data/.env.demo
 
 # supergoal run scaffolding (run roots, phase specs, state, patches) — local-only
 .supergoal/
+.mcp.json
