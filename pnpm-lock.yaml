@@ -45,14 +45,14 @@ importers:
         specifier: ^2.18.0
         version: 2.18.0(react@19.2.5)
       '@heroui-pro/react':
-        specifier: 1.0.0-beta.2
-        version: 1.0.0-beta.2
+        specifier: 1.0.0-beta.5
+        version: 1.0.0-beta.5
       '@heroui/react':
-        specifier: ^3.0.3
-        version: 3.0.3(@react-spectrum/provider@3.11.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(tailwindcss@4.2.4)
+        specifier: ^3.1.0
+        version: 3.1.0(@react-spectrum/provider@3.11.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(tailwindcss@4.2.4)
       '@heroui/styles':
-        specifier: ^3.0.3
-        version: 3.0.3(tailwind-merge@3.5.0)(tailwindcss@4.2.4)
+        specifier: ^3.1.0
+        version: 3.1.0(tailwind-merge@3.5.0)(tailwindcss@4.2.4)
       '@neondatabase/auth':
         specifier: 0.3.0-beta
         version: 0.3.0-beta(a494993e2e77aa203ca2d7bf0abe3a62)
@@ -1090,18 +1090,18 @@ packages:
       react: '>= 16.3.0'
       react-dom: '>= 16.3.0'
 
-  '@heroui-pro/react@1.0.0-beta.2':
-    resolution: {integrity: sha512-kB/9uFP30MN4F2hU4ONmGlqIVEptPkRSotd2w3bxoRzuZR4Z/9rqTguMFaIABxQJ8NWOXuIGOZLo2OCJU8llTA==}
+  '@heroui-pro/react@1.0.0-beta.5':
+    resolution: {integrity: sha512-KqsFFqWvUJGGpICR1WVlAlhiWW0Wx69pkJvykm28fcT/rn8xXnvY42xvmDwXACUYW6//mLrUZds4pXqwVWq81Q==}
 
-  '@heroui/react@3.0.3':
-    resolution: {integrity: sha512-UJPOxg3IbS5KtI2GLP7S56KrSBn/r4xQyntCVpnPzgoT7JuciB4dq7IhckuDNHcrdIPO45JrKHGJz2hiYxaRGg==}
+  '@heroui/react@3.1.0':
+    resolution: {integrity: sha512-q+K3Kz5h2ceOEMPuNORLGX1Pqh4McN30y31eykzZZjLbmta4nwi4sDMVAv7/w8QWnWVDOucusXz5x9s5N656nA==}
     peerDependencies:
       react: '>=19.0.0'
       react-dom: '>=19.0.0'
       tailwindcss: '>=4.0.0'
 
-  '@heroui/styles@3.0.3':
-    resolution: {integrity: sha512-DtN5QWfLVxy6DSDNgtUuHVU/h4G+dfoDHHxGVZRW6plCEh1Rc5Yc7YW7b8JBiYCknSRx/fqLXpas3Fe5Q5XJSw==}
+  '@heroui/styles@3.1.0':
+    resolution: {integrity: sha512-euZtlV5hk9qOWhkSbTaJIrdnm0bGxvu1FEN6nnLGt7PM7AdL40z4C3ZYQ+cW+ObSsqsWHzQRsuhmLHVt1uTS4w==}
     peerDependencies:
       tailwindcss: '>=4.0.0'
 
@@ -5467,14 +5467,14 @@ snapshots:
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
-  '@heroui-pro/react@1.0.0-beta.2':
+  '@heroui-pro/react@1.0.0-beta.5':
     dependencies:
       chalk: 5.6.2
       heroui-pro: 1.0.0-beta.4
 
-  '@heroui/react@3.0.3(@react-spectrum/provider@3.11.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(tailwindcss@4.2.4)':
+  '@heroui/react@3.1.0(@react-spectrum/provider@3.11.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(tailwindcss@4.2.4)':
     dependencies:
-      '@heroui/styles': 3.0.3(tailwind-merge@3.4.0)(tailwindcss@4.2.4)
+      '@heroui/styles': 3.1.0(tailwind-merge@3.4.0)(tailwindcss@4.2.4)
       '@radix-ui/react-avatar': 1.1.11(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@react-aria/i18n': 3.13.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@react-aria/ssr': 3.10.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -5494,7 +5494,7 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  '@heroui/styles@3.0.3(tailwind-merge@3.4.0)(tailwindcss@4.2.4)':
+  '@heroui/styles@3.1.0(tailwind-merge@3.4.0)(tailwindcss@4.2.4)':
     dependencies:
       tailwind-variants: 3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.2.4)
       tailwindcss: 4.2.4
@@ -5502,7 +5502,7 @@ snapshots:
     transitivePeerDependencies:
       - tailwind-merge
 
-  '@heroui/styles@3.0.3(tailwind-merge@3.5.0)(tailwindcss@4.2.4)':
+  '@heroui/styles@3.1.0(tailwind-merge@3.5.0)(tailwindcss@4.2.4)':
     dependencies:
       tailwind-variants: 3.2.2(tailwind-merge@3.5.0)(tailwindcss@4.2.4)
       tailwindcss: 4.2.4
