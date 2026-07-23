@@ -3,6 +3,8 @@ import { getSessionUser } from "@/lib/auth/authorization";
 import { getChildrenForParent, getTenantsByIds } from "@/db/queries";
 import { ProfileClient } from "./profile-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProfilePage() {
   const user = await getSessionUser();
   if (!user) {

@@ -5,6 +5,8 @@ import { OrdersListClient } from "./orders-list-client";
 import { getSessionUser } from "@/lib/auth/authorization";
 import { listOrdersForParent } from "@/db/queries";
 
+export const dynamic = "force-dynamic";
+
 export default async function OrdersPage() {
   const user = await getSessionUser();
   if (!user) {

@@ -5,6 +5,7 @@ import { CATEGORIES } from "@/lib/data";
 import { getTenant, getActiveCatalog, toTenantBrand, getPopularItems } from "@/db/queries";
 import { getActiveChild } from "@/lib/active-child.server";
 import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
+import { CartBadge } from "@/components/cart-badge";
 import { Crest } from "@/components/crest";
 import { CartIcon } from "@/components/icons";
 import { MobileShell } from "@/components/mobile-shell";
@@ -91,12 +92,7 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
           <Link href={`/${tenant.id}/cart`} className="w-9 h-9 flex items-center justify-center text-white" aria-label="Cart">
             <span className="relative">
               <CartIcon size={22} />
-              <span
-                className="absolute -top-1 -right-1.5 rounded-[10px] text-[10px] font-bold h-4 min-w-4 px-1 flex items-center justify-center"
-                style={{ background: "#fff", color: tenant.accent }}
-              >
-                6
-              </span>
+              <CartBadge accent={tenant.accent} />
             </span>
           </Link>
         </div>
