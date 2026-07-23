@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "@heroui/styles/css";
-@import "@heroui-pro/react/css";
 
 @theme {
   --color-navy: #0E2A47;

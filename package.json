@@ -14,8 +14,6 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "heroui-pro",
-      "@heroui-pro/react",
       "@tailwindcss/oxide",
       "sharp",
       "unrs-resolver",
