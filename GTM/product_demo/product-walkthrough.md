@@ -6,7 +6,7 @@ This document is the investor/buyer narrative. Read it alongside `demo-playbook.
 
 ## 1. The problem
 
-Australian schools sell uniforms the same way they did thirty years ago. The baseline is a paper order form — the original is on file at `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` — handed to parents at orientation, filled in by hand, returned with a cheque or cash, and stacked in a folder until someone finds time to enter it into a spreadsheet. The uniform shop is rarely a dedicated function: it is usually owned by a P&C committee volunteer or a single part-time staffer who also handles excursion money, lost property, and canteen rosters.
+Australian schools sell uniforms the same way they did thirty years ago. The baseline is a paper order form handed to parents at orientation, filled in by hand, returned with a cheque or cash, and stacked in a folder until someone finds time to enter it into a spreadsheet. The uniform shop is rarely a dedicated function: it is usually owned by a P&C committee volunteer or a single part-time staffer who also handles excursion money, lost property, and canteen rosters.
 
 The operational pain is predictable. Forms get lost in school bags. Cheques bounce or go uncashed for months. GST tracking is done by hand in Excel, and the totals rarely match the bank statement on the first pass. There is no audit trail — if a parent disputes whether their order was received, there is no record. At the start of each school year, when every family in the school tries to buy at once, the errors compound: wrong sizes, duplicate orders, missed refunds, and a reconciliation exercise that can consume an entire weekend.
 

@@ -103,7 +103,7 @@ Total runtime when presented: ~25 minutes. Designed to be read silently in ~9 mi
 - **Headline:** Every Australian school runs a uniform shop. Almost none run it digitally.
 - **Layout:** Two-column.
   - Left: three short paragraphs describing the operator (P&C volunteer, part-time staffer), the workflow (paper forms, cheques, spreadsheets), and the cost (≈20 hours per term).
-  - Right: a single full-bleed image of the actual paper order form from `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf`, with a caption: "The form most schools still use in 2026."
+  - Right: a single full-bleed image of the actual paper order form, with a caption: "The form most schools still use in 2026."
 - **Footer:** Source: paper-form workflow analysis (own research, 2026); ≈20-hour figure is a pilot-validation target, not a measured value.
 
 ### Slide 4 — Market size and shape

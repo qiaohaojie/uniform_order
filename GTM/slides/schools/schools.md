@@ -110,7 +110,7 @@ Each section opens with a navy section divider slide so a PDF reader has clear v
 ### Slide 3 — How uniform shops run today
 
 - **Headline:** This is what running a uniform shop looks like today.
-- **Layout:** Two columns. Left column = bulleted reality. Right column = a single image of the actual paper form (`my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` rendered as a thumbnail), captioned "The form most schools still use in 2026."
+- **Layout:** Two columns. Left column = bulleted reality. Right column = a single image of the actual paper form (rendered as a thumbnail), captioned "The form most schools still use in 2026."
 - **Left-column bullets (no more than five, each one short sentence):**
   - Paper forms returned in school bags. Some arrive. Some don't.
   - Cheques and cash reconciled by hand in a spreadsheet.

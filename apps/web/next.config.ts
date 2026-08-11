@@ -24,11 +24,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: [
-    "3000-it8fbc5z29q5hjljqdaf7-21feb482.sg1.manus.computer",
-    "*.sg1.manus.computer",
-    "*.manus.computer",
-  ],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "utfs.io" },

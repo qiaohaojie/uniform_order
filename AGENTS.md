@@ -82,7 +82,7 @@ Use `.tnum` for prices and numeric displays. HeroUI v3 (`@heroui/react`) is inst
 
 Read prototypes as source references only. Do not copy their internal structure into the app.
 
-- Paper form: `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf`
-- Design system: `my_doc/UI_prototypes/project/Design System.html`
-- Parent/admin/superadmin prototypes: `my_doc/UI_prototypes/project/`
-- Supporting HeroUI references: `my_doc/HeroUI/design/data.jsx`, `my_doc/HeroUI/design/primitives.jsx`
+- Paper form: synthetic uniform order form reference (catalog modeled in `apps/web/src/lib/data.ts`)
+- Design system: synthetic design system tokens (`apps/web/src/index.css`, `apps/landing/src/lib/tokens.jsx`)
+- Parent/admin/superadmin prototypes: synthetic UI prototype references (`apps/landing/src/components/landing.jsx`)
+- Supporting HeroUI references: HeroUI v3 documentation and primitives

@@ -80,5 +80,5 @@ Path alias `@/*` → `apps/web/src/*`. `LayoutProps<"/[tenant]">` and `PageProps
 - `docs/remaining_work.md` — pre-go-live backlog
 - `docs/completed.md` — shipped features
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — design specs + implementation plans
-- `my_doc/UI_prototypes/project/` — Claude Design exports (`parent.jsx`, `operator.jsx`, `superadmin.jsx`); read source directly, don't screenshot
-- `my_doc/UI_prototypes/project/uploads/Uniform_Online_Order_Form.pdf` — paper form this project digitises
+- Synthetic UI prototype references (`parent.jsx`, `operator.jsx`, `superadmin.jsx`; see `apps/landing/src/components/landing.jsx` and `apps/landing/src/lib/tokens.jsx`)
+- Synthetic uniform order paper form reference (catalog model in `apps/web/src/lib/data.ts`)

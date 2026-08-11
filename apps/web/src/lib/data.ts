@@ -1,6 +1,6 @@
 // Mock data for UniformOrder — multi-tenant school uniform ordering.
 // Two demo tenants (IMHS for son Tim, RGHS for daughter Sam), catalog
-// adapted from the IMHS paper form, and one parent (Alex Taylor).
+// adapted from synthetic sample data, and demo parent (Jane Doe).
 
 export type TenantId = "imhs" | "rgsh";
 
