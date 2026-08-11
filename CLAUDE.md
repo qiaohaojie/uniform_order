@@ -69,7 +69,7 @@ Tailwind CSS v4 (`@import "tailwindcss"`) with custom tokens in `src/index.css` 
 
 `.tnum` class for numeric/price displays. `GarmentVector` (`components/garment.tsx`) renders product SVGs keyed by item ID — no raster images.
 
-HeroUI v3 (`@heroui/react`) + HeroUI Pro (`@heroui-pro/react`) are installed; current UI is mostly bespoke Tailwind. Use HeroUI for new interactive elements.
+HeroUI v3 (`@heroui/react`) is installed; current UI is mostly bespoke Tailwind. Use HeroUI for new interactive elements.
 
 ### TypeScript
 

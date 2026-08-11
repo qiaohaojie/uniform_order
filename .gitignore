@@ -29,7 +29,6 @@ pnpm-debug.log*
 .DS_Store
 .idea/
 .vscode/
-my_doc/HeroUI/HEROUI_PERSONAL_TOKEN.txt
 
 # git worktrees
 .worktrees/
@@ -58,7 +57,6 @@ GTM/product_demo/recordings/output/
 GTM/demo_data/.env.demo
 *.webm
 *.mp4
-.understand-anything/tmp
 .web_scraper
 
 # supergoal run scaffolding (run roots, phase specs, state, patches) — local-only

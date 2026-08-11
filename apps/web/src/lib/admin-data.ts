@@ -36,7 +36,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     rollClass: "9F",
     parent: "Alex Taylor",
     mobile: "0405 178 183",
-    email: "support@uniformorder.online",
+    email: "support@pimspace.com",
     items: [
       { itemId: "shirt-ls", variantLabel: "10–24", size: "16", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
       { itemId: "jumper", variantLabel: "12–16", size: "16", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },
@@ -201,7 +201,7 @@ const RGSH_ORDERS: AdminOrder[] = [
     rollClass: "7B",
     parent: "Alex Taylor",
     mobile: "0405 178 183",
-    email: "support@uniformorder.online",
+    email: "support@pimspace.com",
     items: [
       { itemId: "shirt-ss", variantLabel: "10–26", size: "12", qty: 2, price: 32, name: "White Shirt — Short Sleeves" },
       { itemId: "polo", variantLabel: "10–26", size: "12", qty: 1, price: 40, name: "Sports Polo Shirt" },

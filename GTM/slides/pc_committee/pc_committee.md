@@ -105,7 +105,7 @@ Total runtime when presented at a P&C meeting: ~15 minutes including questions. 
 
 - **Headline (Newsreader 52pt):** *Running the uniform shop, without the weekend.*
 - **Sub-headline (Inter 20pt, navy):** A proposal for the [School Name] P&C.
-- **Layout:** Parchment background. Headline top-left occupying the top half. Sub-headline directly below with a thin gold rule between. Small footer in 11pt: "Presented at the [Month Year] P&C meeting · george.qiao@pimspace.com".
+- **Layout:** Parchment background. Headline top-left occupying the top half. Sub-headline directly below with a thin gold rule between. Small footer in 11pt: "Presented at the [Month Year] P&C meeting · support@pimspace.com".
 - **Speaker note:** Open by thanking the committee for the time slot. Acknowledge by name — Treasurer, President, and the current uniform shop coordinator if present — that this proposal is built around their workload.
 
 ### Slide 2 — Section divider: "What you already know"
@@ -202,7 +202,7 @@ Total runtime when presented at a P&C meeting: ~15 minutes including questions. 
   1. A motion to authorise the President and Treasurer to enter into a 30-day pilot.
   2. A nominated coordinator for the catalog load — typically the current uniform shop volunteer.
   3. A standing 10-minute slot on the next P&C agenda for a pilot debrief.
-- **Footer (small):** Contact: george.qiao@pimspace.com · uniformorder.online
+- **Footer (small):** Contact: support@pimspace.com · uniformorder.online
 - **Speaker note:** Hand the President a one-page printed version of this slide to attach to the minutes. Do not return to the cover slide. Take questions.
 
 ---

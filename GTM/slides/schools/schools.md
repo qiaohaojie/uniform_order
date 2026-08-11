@@ -213,7 +213,7 @@ Each section opens with a navy section divider slide so a PDF reader has clear v
   - Direct support channel with the founder for the duration of the pilot.
   - A debrief at day 30 with timing and error-rate numbers from your actual orders.
 - **Call to action (Inter 16pt, navy):** Pick a 30-minute slot to walk through the demo with your coordinator → [calendar link]
-- **Footer:** george.qiao@pimspace.com · uniformorder.online
+- **Footer:** support@pimspace.com · uniformorder.online
 - **Speaker note:** End on this slide. Do not return to the cover. Hand the prospect a printed copy of this slide.
 
 ---

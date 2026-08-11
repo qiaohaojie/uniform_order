@@ -242,7 +242,7 @@ Total runtime when presented: ~25 minutes. Designed to be read silently in ~9 mi
   - A 45-minute conversation about your network of school-board contacts.
   - One warm introduction to a school we are not currently in conversation with.
   - A standing 30-minute monthly check-in for the next two quarters.
-- **CTA:** george.qiao@pimspace.com
+- **CTA:** support@pimspace.com
 - **Speaker note:** The ask varies per stakeholder type. Edit this slide before each send. The principle: ask for a small, specific, time-bound action — never "let me know what you think".
 
 ---

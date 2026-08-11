@@ -74,7 +74,7 @@ Path alias: `@/*` maps to `apps/web/src/*`.
 
 Tailwind CSS v4 tokens live in `apps/web/src/index.css`. Core tokens include `navy-deep`, `parchment`, `paper`, `rule`, `gold`, Newsreader headings, and Inter body text.
 
-Use `.tnum` for prices and numeric displays. HeroUI v3 and HeroUI Pro are installed; use them for new interactive elements when they fit. Existing UI is mostly bespoke Tailwind.
+Use `.tnum` for prices and numeric displays. HeroUI v3 (`@heroui/react`) is installed; use it for new interactive elements when it fits. Existing UI is mostly bespoke Tailwind.
 
 `components/garment.tsx` renders SVG product vectors by item ID; product imagery is not image-based.
 

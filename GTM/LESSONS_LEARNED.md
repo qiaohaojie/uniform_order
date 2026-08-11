@@ -92,7 +92,7 @@ projects: [
 **Rule going forward:** when this project is set up on a new machine, the prereq checklist is:
 
 1. `GTM/demo_data/.env.demo` exists with `DATABASE_URL` set.
-2. `PLATFORM_ADMIN_EMAILS` in `apps/web/.env.local` includes every email that will sign in as a platform admin (`george.qiao@pimspace.com,platformadmin@demo.uniformorder.online` minimum).
+2. `PLATFORM_ADMIN_EMAILS` in `apps/web/.env.local` includes every email that will sign in as a platform admin (`support@pimspace.com,platformadmin@demo.uniformorder.online` minimum).
 3. The three Neon Auth users (`operator@`, `parent@`, `platformadmin@demo.uniformorder.online`) exist in `neon_auth."user"`. Verify with `SELECT id, email FROM neon_auth."user"`.
 4. Tenants have `shop_email = 'operator@demo.uniformorder.online'`. The fixture already sets this, but verify after seed.
 
