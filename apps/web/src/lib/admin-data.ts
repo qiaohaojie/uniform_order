@@ -31,12 +31,12 @@ const IMHS_ORDERS: AdminOrder[] = [
     status: "packing",
     delivery: "pickup",
     placedAt: "27 Apr 2026 · 9:42am",
-    kid: "Tim Doe",
+    kid: "Tim Taylor",
     year: "Year 9",
     rollClass: "9F",
     parent: "Jane Doe",
     mobile: "0400 000 000",
-    email: "support@pimspace.com",
+    email: "alex.taylor@example.com",
     items: [
       { itemId: "shirt-ls", variantLabel: "10–24", size: "16", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
       { itemId: "jumper", variantLabel: "12–16", size: "16", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },
@@ -98,7 +98,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     year: "Year 8",
     rollClass: "8B",
     parent: "Mark Williams",
-    mobile: "0434 111 222",
+    mobile: "0400 000 000",
     email: "mark.w@example.com",
     items: [
       { itemId: "jumper", variantLabel: "12–16", size: "14", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },
@@ -117,7 +117,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     year: "Year 11",
     rollClass: "11E",
     parent: "Kate Thompson",
-    mobile: "0445 333 444",
+    mobile: "0400 000 000",
     email: "kate.thompson@example.com",
     items: [
       { itemId: "shirt-ls", variantLabel: "10–24", size: "18", qty: 2, price: 28, name: "White Shirt — Long Sleeves" },
@@ -137,7 +137,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     year: "Year 9",
     rollClass: "9C",
     parent: "John Davis",
-    mobile: "0456 555 666",
+    mobile: "0400 000 000",
     email: "john.davis@example.com",
     items: [
       { itemId: "polo", variantLabel: "10–26", size: "18", qty: 2, price: 40, name: "Sports Polo Shirt" },
@@ -157,7 +157,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     year: "Year 12",
     rollClass: "12A",
     parent: "Amy Lee",
-    mobile: "0467 777 888",
+    mobile: "0400 000 000",
     email: "amy.lee@example.com",
     items: [
       { itemId: "blazer", variantLabel: "100–115cm chest", size: "105", qty: 1, price: 210, name: "Blazer — Crested" },
@@ -177,7 +177,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     year: "Year 7",
     rollClass: "7D",
     parent: "Paul Brown",
-    mobile: "0478 999 000",
+    mobile: "0400 000 000",
     email: "paul.brown@example.com",
     items: [
       { itemId: "shirt-ss", variantLabel: "10–26", size: "10", qty: 3, price: 32, name: "White Shirt — Short Sleeves" },
@@ -196,12 +196,12 @@ const RGSH_ORDERS: AdminOrder[] = [
     status: "new",
     delivery: "pickup",
     placedAt: "27 Apr 2026 · 10:15am",
-    kid: "Sam Doe",
+    kid: "Sam Taylor",
     year: "Year 7",
     rollClass: "7B",
     parent: "Jane Doe",
     mobile: "0400 000 000",
-    email: "support@pimspace.com",
+    email: "alex.taylor@example.com",
     items: [
       { itemId: "shirt-ss", variantLabel: "10–26", size: "12", qty: 2, price: 32, name: "White Shirt — Short Sleeves" },
       { itemId: "polo", variantLabel: "10–26", size: "12", qty: 1, price: 40, name: "Sports Polo Shirt" },
@@ -220,7 +220,7 @@ const RGSH_ORDERS: AdminOrder[] = [
     year: "Year 9",
     rollClass: "9A",
     parent: "Helen Wilson",
-    mobile: "0489 123 456",
+    mobile: "0400 000 000",
     email: "helen.wilson@example.com",
     items: [
       { itemId: "jumper", variantLabel: "12–16", size: "14", qty: 1, price: 75, name: "Jumper — Wool Blend, Crested" },

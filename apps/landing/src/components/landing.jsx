@@ -151,7 +151,7 @@ function HeroVisual() {
         <DoubleRule/>
         <div style={{ marginTop: 12 }}>
           {[
-            { id: 'IMHS-04298', name: 'Tim Doe', year: 'Y9', items: 6, total: 363, tone: 'navy', status: 'New' },
+            { id: 'IMHS-04298', name: 'Tim Taylor', year: 'Y9', items: 6, total: 363, tone: 'navy', status: 'New' },
             { id: 'IMHS-04297', name: 'Arjun Patel', year: 'Y7', items: 4, total: 178, tone: 'navy', status: 'New' },
             { id: 'IMHS-04295', name: 'Tom Whitlam', year: 'Y8', items: 8, total: 412, tone: 'warn', status: 'Packing' },
             { id: 'IMHS-04293', name: 'Luka Kovac', year: 'Y10', items: 5, total: 240, tone: 'success', status: 'Ready' },
@@ -389,7 +389,7 @@ function ParentVisual() {
 function OperatorVisual() {
   const cols = [
     { name: 'New', tone: 'info', items: [
-      { id: 'IMHS-04298', kid: 'Tim Doe', year: 'Y9', total: 363 },
+      { id: 'IMHS-04298', kid: 'Tim Taylor', year: 'Y9', total: 363 },
       { id: 'IMHS-04297', kid: 'Arjun Patel', year: 'Y7', total: 178 },
       { id: 'IMHS-04296', kid: 'Ethan Chen', year: 'Y11', total: 102 },
     ]},

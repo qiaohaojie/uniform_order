@@ -393,7 +393,7 @@ export function CheckoutScreen({
             <div className="col-span-2">
               <FieldLabel htmlFor="studentName">Student name</FieldLabel>
               <input id="studentName" value={student.studentName} onChange={(e) => setField("studentName", e.target.value)}
-                placeholder="e.g. Tim Doe"
+                placeholder="e.g. Tim Taylor"
                 aria-required="true" aria-invalid={!!fieldErrors.studentName}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.studentName ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />
