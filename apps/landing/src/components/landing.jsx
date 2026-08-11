@@ -10,7 +10,7 @@ import {
   Crest, PlatformMark, Btn, Chip, DoubleRule, Spark, GarmentVector, GithubIcon,
 } from "../lib/components.jsx";
 
-const GITHUB_URL = "https://github.com/georgeqiao/uniform_order";
+const GITHUB_URL = "https://github.com/qiaohaojie/uniform_order";
 const SHOP_URL = "https://app.uniformorder.online";
 const DEMO_MAILTO = "mailto:hello@uniformorder.online?subject=Book%20a%20UniformOrder%20demo";
 
@@ -587,7 +587,7 @@ function BuiltForSchoolsSection() {
 function OpenSourceSection() {
   const pillars = [
     { title: '100% Free & Open Source', body: 'Released under the OSI-approved MIT License. Clone the repository, audit the source code, and adapt it freely for your school.' },
-    { title: 'Full Data Sovereignty', body: 'Your student data belongs exclusively to your school. Self-host on Hostinger, Vercel, or Docker in Australia with zero vendor lock-in.' },
+    { title: 'Full Data Sovereignty', body: 'Your student data belongs exclusively to your school. Self-host on your own infrastructure with zero vendor lock-in and full control over where data lives.' },
     { title: 'Modern Tech Stack', body: 'Built with Next.js 16, Astro 6, Neon PostgreSQL, Drizzle ORM, and Stripe Connect for speed, accessibility, and reliability.' },
     { title: 'Community Driven', body: 'Contribute improvements, feature requests, or localized reporting formats via transparent GitHub pull requests.' },
   ];
@@ -605,7 +605,7 @@ function OpenSourceSection() {
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <Btn size="md" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={16}/>}>Star on GitHub</Btn>
-              <Btn size="md" variant="secondary" href={`${GITHUB_URL}/blob/main/docs/HOSTINGER_DEPLOYMENT.md`} target="_blank">Self-Hosting Guide</Btn>
+              <Btn size="md" variant="secondary" href={`${GITHUB_URL}#readme`} target="_blank">Clone &amp; self-host</Btn>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -669,13 +669,14 @@ function PricingSection() {
             sub="100% Open Source under MIT License"
             features={[
               'Full source code access on GitHub',
-              'Self-host on Hostinger, Vercel or Docker',
+              'Self-host on your own infrastructure',
               'Direct Stripe Connect payouts',
               'Unlimited parents &amp; orders',
               'Community support &amp; GitHub Issues',
             ]}
             cta="View on GitHub"
             href={GITHUB_URL}
+            target="_blank"
             leadingIcon={<GithubIcon size={16}/>}
           />
           <PlanCard
@@ -718,7 +719,7 @@ function PricingSection() {
   );
 }
 
-function PlanCard({ name, price, unit, sub, features, cta, highlight, href, leadingIcon }) {
+function PlanCard({ name, price, unit, sub, features, cta, highlight, href, target, leadingIcon }) {
   return (
     <div style={{
       background: highlight ? NAVY : '#fff',
@@ -755,6 +756,7 @@ function PlanCard({ name, price, unit, sub, features, cta, highlight, href, lead
       <Btn
         fullWidth
         href={href}
+        target={target}
         variant={highlight ? 'primary' : 'secondary'}
         accent={highlight ? GOLD : NAVY}
         leading={leadingIcon}
@@ -788,7 +790,7 @@ function FAQSection() {
     { q: 'Is UniformOrder 100% Open Source?',
       a: 'Yes! UniformOrder is released under the MIT License on GitHub. Anyone can inspect, clone, modify, and self-host the application without licensing fees.', defaultOpen: true },
     { q: 'Can our school self-host UniformOrder for free?',
-      a: 'Absolutely. Detailed self-hosting documentation for Hostinger Node.js, Vercel, and Docker is available in our GitHub repository. You only pay for your own hosting provider and standard Stripe payment processing fees.' },
+      a: 'Yes. Clone the MIT-licensed repository on GitHub, follow the README to run it on infrastructure you control, and configure Stripe Connect for your school. You only pay for your own hosting and standard Stripe payment processing fees.' },
     { q: 'What is the difference between Self-Hosted and Managed Cloud?',
       a: 'Self-hosted gives complete control to your school&rsquo;s IT team or technical volunteers. Managed Cloud is operated by us to give P&amp;Cs a zero-maintenance turnkey solution with onboarding support and domain configuration.' },
     { q: 'Who owns the money — UniformOrder or the school?',
@@ -876,7 +878,7 @@ function Footer() {
     { h: 'Open Source', links: [
       { label: 'GitHub Repository', href: GITHUB_URL, target: '_blank' },
       { label: 'MIT License', href: `${GITHUB_URL}/blob/main/LICENSE`, target: '_blank' },
-      { label: 'Self-Hosting Guide', href: `${GITHUB_URL}/blob/main/docs/HOSTINGER_DEPLOYMENT.md`, target: '_blank' },
+      { label: 'README & setup', href: `${GITHUB_URL}#readme`, target: '_blank' },
       { label: 'Security Brief', href: `${GITHUB_URL}/blob/main/SECURITY.md`, target: '_blank' },
     ]},
     { h: 'For schools', links: [
@@ -888,6 +890,8 @@ function Footer() {
     { h: 'Legal & Privacy', links: [
       { label: 'Terms of Service', href: `${SHOP_URL}/terms`, target: '_blank' },
       { label: 'Privacy Policy', href: `${SHOP_URL}/privacy`, target: '_blank' },
+      { label: 'Refund Policy', href: `${SHOP_URL}/refund-policy`, target: '_blank' },
+      { label: 'Legal Notices', href: `${SHOP_URL}/legal`, target: '_blank' },
       { label: 'Security Policy', href: `${GITHUB_URL}/blob/main/SECURITY.md`, target: '_blank' },
     ]},
   ];
