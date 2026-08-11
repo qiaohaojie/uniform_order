@@ -39,7 +39,7 @@ export const TENANTS: Record<TenantId, Tenant> = {
     motto: "Reach for the Stars",
     address: "200 River Road, Sydney NSW 2000",
     shopHours: "Tue & Fri · 8:00am – 1:00pm",
-    shopEmail: "uniformshop@imhs.demo.uniformorder.online",
+    shopEmail: "uniformshop@rghs.demo.uniformorder.online",
     timezone: "Australia/Sydney",
   },
 };

@@ -34,7 +34,7 @@ const IMHS_ORDERS: AdminOrder[] = [
     kid: "Tim Taylor",
     year: "Year 9",
     rollClass: "9F",
-    parent: "Jane Doe",
+    parent: "Alex Taylor",
     mobile: "0400 000 000",
     email: "alex.taylor@example.com",
     items: [
@@ -199,7 +199,7 @@ const RGSH_ORDERS: AdminOrder[] = [
     kid: "Sam Taylor",
     year: "Year 7",
     rollClass: "7B",
-    parent: "Jane Doe",
+    parent: "Alex Taylor",
     mobile: "0400 000 000",
     email: "alex.taylor@example.com",
     items: [

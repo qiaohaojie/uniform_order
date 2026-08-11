@@ -29,7 +29,7 @@ import("@neondatabase/serverless").then(async ({ neon }) => {
        'Mon & Thu · 8:15am – 1:30pm', 'uniformshop@imhs.demo.uniformorder.online'),
       ('rgsh', 'Riverside Academy', 'RGHS', '#2F5D50',
        'Reach for the Stars', '200 River Road, Sydney NSW 2000',
-       'Tue & Fri · 8:00am – 1:00pm', 'uniformshop@imhs.demo.uniformorder.online')
+       'Tue & Fri · 8:00am – 1:00pm', 'uniformshop@rghs.demo.uniformorder.online')
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name, short = EXCLUDED.short, accent = EXCLUDED.accent,
       motto = EXCLUDED.motto, address = EXCLUDED.address,

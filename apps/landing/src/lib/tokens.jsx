@@ -20,7 +20,7 @@ const SUCCESS = '#2F6B3D';
 const TENANTS = {
   imhs: {
     id: 'imhs',
-    name: 'Imagined High School',
+    name: 'Illawarra Modern High School',
     short: 'IMHS',
     crest: 'IMHS',
     accent: '#7A1F2B',           // school maroon
@@ -40,7 +40,7 @@ const TENANTS = {
     motto: 'Reach for the Stars',
     address: '200 River Road, Sydney NSW 2000',
     shopHours: 'Tue & Fri · 8:00am – 1:00pm',
-    shopEmail: 'uniformshop@imhs.demo.uniformorder.online',
+    shopEmail: 'uniformshop@rghs.demo.uniformorder.online',
   },
 };
 
@@ -146,7 +146,7 @@ const PAST_ORDERS = [
 
 // Operator-side: order queue across statuses.
 const ADMIN_ORDERS = [
-  { id: 'IMHS-04298', parent: 'Jane Doe', kid: 'Tim Taylor', year: 'Year 9', items: 6, total: 363, placed: '27 Apr · 9:42am', status: 'new', delivery: 'pickup', email: 'alex.taylor@example.com' },
+  { id: 'IMHS-04298', parent: 'Alex Taylor', kid: 'Tim Taylor', year: 'Year 9', items: 6, total: 363, placed: '27 Apr · 9:42am', status: 'new', delivery: 'pickup', email: 'alex.taylor@example.com' },
   { id: 'IMHS-04297', parent: 'Sarah Patel', kid: 'Arjun Patel', year: 'Year 7', items: 4, total: 178, placed: '27 Apr · 8:11am', status: 'new', delivery: 'pickup' },
   { id: 'IMHS-04296', parent: 'Lin Chen',    kid: 'Ethan Chen',  year: 'Year 11', items: 2, total: 102, placed: '26 Apr · 7:30pm', status: 'new', delivery: 'ship' },
   { id: 'IMHS-04295', parent: 'Jane Whitlam',kid: 'Tom Whitlam', year: 'Year 8', items: 8, total: 412, placed: '26 Apr · 4:55pm', status: 'packing', delivery: 'pickup' },
