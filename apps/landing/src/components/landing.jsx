@@ -7,15 +7,10 @@ import {
 } from "../lib/tokens.jsx";
 import {
   SERIF, SANS, MONO,
-  Crest, PlatformMark, Btn, Chip, DoubleRule, Spark, GarmentVector,
+  Crest, PlatformMark, Btn, Chip, DoubleRule, Spark, GarmentVector, GithubIcon,
 } from "../lib/components.jsx";
 
-const ACCENT_NAVY = NAVY;
-
-// CTA destinations. The web app is a separate deploy on the app subdomain
-// (app.uniformorder.online, Hostinger Node.js — see CLAUDE.md / astro.config.mjs).
-// Demo + sales enquiries route to the inbox until a dedicated booking flow exists.
-// NOTE: confirm these destinations before launch.
+const GITHUB_URL = "https://github.com/georgeqiao/uniform_order";
 const SHOP_URL = "https://app.uniformorder.online";
 const DEMO_MAILTO = "mailto:hello@uniformorder.online?subject=Book%20a%20UniformOrder%20demo";
 
@@ -57,14 +52,18 @@ function NavBar() {
           <PlatformMark size={26} color={NAVY} />
           <nav style={{ display: 'flex', gap: 28, fontFamily: SANS, fontSize: 14, color: INK }}>
             <a href="#product" style={navLink}>Product</a>
+            <a href="#open-source" style={navLink}>Open Source</a>
             <a href="#schools" style={navLink}>For Schools &amp; P&amp;C</a>
             <a href="#pricing" style={navLink}>Pricing</a>
             <a href="#faq" style={navLink}>FAQ</a>
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{ ...navLink, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+            <GithubIcon size={16} /> GitHub
+          </a>
           <a href={SHOP_URL} style={{ ...navLink, fontWeight: 600 }}>Sign in</a>
-          <Btn size="sm" href={DEMO_MAILTO}>Book a 20-min demo</Btn>
+          <Btn size="sm" href={DEMO_MAILTO}>Book a demo</Btn>
         </div>
       </Container>
     </div>
@@ -87,34 +86,34 @@ function Hero() {
 
       <Container style={{ padding: '88px 40px 96px', display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: 64, alignItems: 'center' }}>
         <div>
-          <Eyebrow n="01" label="For Australian schools &amp; P&amp;C uniform shops" />
+          <Eyebrow n="01" label="100% Free &amp; Open Source · MIT Licensed" />
           <h1 style={{
             fontFamily: SERIF, fontWeight: 500, fontSize: 72, lineHeight: 1.02,
             letterSpacing: -1.4, margin: '20px 0 22px', color: INK, textWrap: 'pretty',
           }}>
-            The online uniform shop<br/>your P&amp;C has been<br/>
+            The open-source uniform shop<br/>your P&amp;C has been<br/>
             <span style={{ fontStyle: 'italic', color: NAVY }}>waiting for.</span>
           </h1>
           <p style={{ fontFamily: SANS, fontSize: 18, lineHeight: 1.55, color: INK_DIM, maxWidth: 540, margin: '0 0 32px' }}>
-            UniformOrder replaces the paper form, the spreadsheet, and the volunteer-run cash box with a clean online shop branded to your school. Parents order from their phone, your P&amp;C packs from a tablet, and payouts land straight in the school&rsquo;s bank account.
+            UniformOrder is a free, open-source online uniform shop platform designed for Australian schools and P&amp;Cs. Self-host it for free on your own infrastructure or run it on our turnkey managed cloud.
           </p>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
-            <Btn size="lg" href={SHOP_URL}>Start a 30-day free trial</Btn>
-            <Btn size="lg" variant="secondary" href={DEMO_MAILTO}>Book a 20-min demo</Btn>
+            <Btn size="lg" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={18} />}>Explore on GitHub</Btn>
+            <Btn size="lg" variant="secondary" href={SHOP_URL}>Try Demo App</Btn>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontFamily: SANS, fontSize: 13, color: INK_DIM }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Dot color={SUCCESS}/> No card to start
+              <Dot color={SUCCESS}/> 100% Open Source (MIT)
+            </span>
+            <span style={{ width: 1, height: 12, background: RULE }} />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Dot color={SUCCESS}/> Self-Host or Managed Cloud
             </span>
             <span style={{ width: 1, height: 12, background: RULE }} />
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Dot color={SUCCESS}/> Payouts via Stripe Connect
-            </span>
-            <span style={{ width: 1, height: 12, background: RULE }} />
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Dot color={SUCCESS}/> Hosted in Sydney
             </span>
           </div>
         </div>
@@ -552,7 +551,7 @@ function BuiltForSchoolsSection() {
       <Container>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 80, alignItems: 'start' }}>
           <div>
-            <Eyebrow n="04" label="For Australian schools" color="rgba(255,255,255,0.65)" />
+            <Eyebrow n="05" label="For Australian schools" color="rgba(255,255,255,0.65)" />
             <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 48, lineHeight: 1.1, letterSpacing: -0.8, margin: '20px 0 18px' }}>
               Built around how Australian schools <span style={{ fontStyle: 'italic' }}>actually</span> work.
             </h2>
@@ -560,8 +559,8 @@ function BuiltForSchoolsSection() {
               We&rsquo;ve worked alongside P&amp;C uniform-shop conveners in NSW, VIC and QLD. The platform respects the way you already operate — and the obligations that come with handling families&rsquo; money.
             </p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <Btn size="md">Talk to our team</Btn>
-              <Btn size="md" variant="secondary" style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Read the security brief</Btn>
+              <Btn size="md" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={16}/>}>View Source Code</Btn>
+              <Btn size="md" variant="secondary" href={`${GITHUB_URL}/blob/main/SECURITY.md`} target="_blank" style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Read Security Brief</Btn>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
@@ -574,6 +573,46 @@ function BuiltForSchoolsSection() {
               }}>
                 <div style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 17, marginBottom: 8, color: '#fff' }} dangerouslySetInnerHTML={{ __html: f.title }} />
                 <div style={{ fontFamily: SANS, fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: f.body }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Container>
+    </section>
+  );
+}
+
+// ---------- Open Source & Community ----------
+
+function OpenSourceSection() {
+  const pillars = [
+    { title: '100% Free & Open Source', body: 'Released under the OSI-approved MIT License. Clone the repository, audit the source code, and adapt it freely for your school.' },
+    { title: 'Full Data Sovereignty', body: 'Your student data belongs exclusively to your school. Self-host on Hostinger, Vercel, or Docker in Australia with zero vendor lock-in.' },
+    { title: 'Modern Tech Stack', body: 'Built with Next.js 16, Astro 6, Neon PostgreSQL, Drizzle ORM, and Stripe Connect for speed, accessibility, and reliability.' },
+    { title: 'Community Driven', body: 'Contribute improvements, feature requests, or localized reporting formats via transparent GitHub pull requests.' },
+  ];
+  return (
+    <section id="open-source" style={{ background: PAPER, padding: '96px 0', borderTop: `1px solid ${RULE}` }}>
+      <Container>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 80, alignItems: 'start' }}>
+          <div>
+            <Eyebrow n="04" label="Open Source &amp; Community" />
+            <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 48, lineHeight: 1.1, letterSpacing: -0.8, margin: '20px 0 18px', color: INK }}>
+              Built in the open for transparency &amp; longevity.
+            </h2>
+            <p style={{ fontFamily: SANS, fontSize: 16, lineHeight: 1.6, color: INK_DIM, margin: '0 0 28px', maxWidth: 460 }}>
+              UniformOrder believes school software shouldn&rsquo;t lock P&amp;Cs into proprietary silos or unexpected price hikes. Anyone can inspect, self-host, or extend the platform.
+            </p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <Btn size="md" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={16}/>}>Star on GitHub</Btn>
+              <Btn size="md" variant="secondary" href={`${GITHUB_URL}/blob/main/docs/HOSTINGER_DEPLOYMENT.md`} target="_blank">Self-Hosting Guide</Btn>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {pillars.map((p, i) => (
+              <div key={i} style={{ background: PARCHMENT, border: `1px solid ${RULE}`, borderRadius: 10, padding: 22 }}>
+                <div style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 18, color: INK, marginBottom: 8 }}>{p.title}</div>
+                <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK_DIM, lineHeight: 1.55 }}>{p.body}</div>
               </div>
             ))}
           </div>
@@ -614,43 +653,46 @@ function PricingSection() {
     <section id="pricing" style={{ background: PAPER, padding: '96px 0', borderTop: `1px solid ${RULE}`, borderBottom: `1px solid ${RULE}` }}>
       <Container>
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <Eyebrow n="05" label="Pricing" />
+          <Eyebrow n="06" label="Pricing &amp; Open Source" />
           <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 48, lineHeight: 1.1, letterSpacing: -0.8, margin: '16px 0 12px', color: INK }}>
-            Honest pricing for non-profit P&amp;Cs.
+            Honest open-source options for non-profit P&amp;Cs.
           </h2>
-          <p style={{ fontFamily: SANS, fontSize: 17, color: INK_DIM, maxWidth: 600, margin: '0 auto', lineHeight: 1.55 }}>
-            A flat monthly fee. Stripe&rsquo;s standard processing fees on top — we don&rsquo;t mark them up.
+          <p style={{ fontFamily: SANS, fontSize: 17, color: INK_DIM, maxWidth: 640, margin: '0 auto', lineHeight: 1.55 }}>
+            Choose between 100% free self-hosting or our managed cloud service.
           </p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, alignItems: 'stretch' }}>
           <PlanCard
-            name="Trial"
-            price="Free"
-            sub="30 days, no card required"
+            name="Community"
+            price="$0"
+            unit="free forever"
+            sub="100% Open Source under MIT License"
             features={[
-              'All Standard features',
-              'Up to 25 live orders',
-              'Sandbox Stripe account',
-              'Email support',
+              'Full source code access on GitHub',
+              'Self-host on Hostinger, Vercel or Docker',
+              'Direct Stripe Connect payouts',
+              'Unlimited parents &amp; orders',
+              'Community support &amp; GitHub Issues',
             ]}
-            cta="Start free trial"
-            href={SHOP_URL}
+            cta="View on GitHub"
+            href={GITHUB_URL}
+            leadingIcon={<GithubIcon size={16}/>}
           />
           <PlanCard
-            name="Standard"
+            name="Managed Cloud"
             price="$149"
             unit="/ month"
-            sub="The plan most schools start on"
+            sub="Turnkey hosting &amp; management for P&amp;Cs"
             highlight
             features={[
-              'Unlimited parents &amp; orders',
-              'Full Kanban + bulk catalog upload',
-              'Direct Stripe Connect payouts',
-              'GST-ready monthly exports',
-              'Custom domain &amp; branding',
-              'Priority email + phone support',
+              'Everything in Community',
+              'Hosted on uniformorder.online',
+              'Automated catalog digitisation',
+              'Custom school domain &amp; SSL setup',
+              'Automated DB backups &amp; platform updates',
+              'Priority email + phone P&amp;C support',
             ]}
-            cta="Start free trial"
+            cta="Start 30-day trial"
             href={SHOP_URL}
           />
           <PlanCard
@@ -658,7 +700,7 @@ function PricingSection() {
             price="Talk to us"
             sub="For school groups &amp; dioceses"
             features={[
-              'Everything in Standard',
+              'Everything in Managed Cloud',
               'Multiple campuses, one console',
               'SSO for staff (Microsoft / Google)',
               'Custom contracts &amp; invoicing',
@@ -676,7 +718,7 @@ function PricingSection() {
   );
 }
 
-function PlanCard({ name, price, unit, sub, features, cta, highlight, href }) {
+function PlanCard({ name, price, unit, sub, features, cta, highlight, href, leadingIcon }) {
   return (
     <div style={{
       background: highlight ? NAVY : '#fff',
@@ -715,6 +757,7 @@ function PlanCard({ name, price, unit, sub, features, cta, highlight, href }) {
         href={href}
         variant={highlight ? 'primary' : 'secondary'}
         accent={highlight ? GOLD : NAVY}
+        leading={leadingIcon}
         style={highlight ? { background: '#fff', color: NAVY, borderColor: '#fff' } : {}}
       >{cta}</Btn>
     </div>
@@ -742,28 +785,30 @@ function FAQItem({ q, a, defaultOpen }) {
 
 function FAQSection() {
   const faqs = [
+    { q: 'Is UniformOrder 100% Open Source?',
+      a: 'Yes! UniformOrder is released under the MIT License on GitHub. Anyone can inspect, clone, modify, and self-host the application without licensing fees.', defaultOpen: true },
+    { q: 'Can our school self-host UniformOrder for free?',
+      a: 'Absolutely. Detailed self-hosting documentation for Hostinger Node.js, Vercel, and Docker is available in our GitHub repository. You only pay for your own hosting provider and standard Stripe payment processing fees.' },
+    { q: 'What is the difference between Self-Hosted and Managed Cloud?',
+      a: 'Self-hosted gives complete control to your school&rsquo;s IT team or technical volunteers. Managed Cloud is operated by us to give P&amp;Cs a zero-maintenance turnkey solution with onboarding support and domain configuration.' },
     { q: 'Who owns the money — UniformOrder or the school?',
       a: 'The school does. Payments use Stripe Connect destination charges, so funds settle directly into <em>your school&rsquo;s</em> Stripe account and payout into <em>your school&rsquo;s</em> bank account. UniformOrder never holds your float.' },
     { q: 'Is this just for NSW schools?',
-      a: 'No. We started with NSW high schools but the platform is built for any Australian school running a uniform shop — public, Catholic or independent, primary or secondary, in any state. AUD pricing, AU date formats, GST-ready exports.', defaultOpen: true },
+      a: 'No. We started with NSW high schools but the platform is built for any Australian school running a uniform shop — public, Catholic or independent, primary or secondary, in any state. AUD pricing, AU date formats, GST-ready exports.' },
     { q: 'What happens to our existing paper order form?',
-      a: 'During onboarding we&rsquo;ll digitise it for you. Send us the PDF and an Excel/Word price list — we set up the categories, items and sizing tables in your shop, and you review before launch. Usually two business days.' },
+      a: 'On managed cloud onboarding we&rsquo;ll digitise it for you. Send us the PDF and an Excel/Word price list — we set up the categories, items and sizing tables in your shop, and you review before launch. Usually two business days.' },
     { q: 'Does the P&amp;C still need a Stripe account?',
       a: 'Yes — but we walk one of your P&amp;C office-bearers through the Stripe Connect onboarding (it takes ~15 minutes and asks for the P&amp;C ABN, bank account, and one director&rsquo;s ID). The platform won&rsquo;t go live until Stripe has approved your account.' },
     { q: 'What about second-hand uniforms and donated stock?',
       a: 'Each item can be flagged as &ldquo;new&rdquo; or &ldquo;second-hand&rdquo; with separate stock and pricing. Donated stock is fully supported, and you can offer it free or for a nominal fee.' },
-    { q: 'Can parents pay with school credit / vouchers?',
-      a: 'Yes — operators can issue store credit codes (e.g. for refunds or BackToSchool vouchers) which parents apply at checkout. Useful for low-SES support programs run by the P&amp;C.' },
-    { q: 'How long does it take to switch over?',
-      a: 'Most schools are live within 5–10 business days of signing up — that includes catalog digitisation, Stripe Connect approval, custom-domain setup, and a 30-minute training call with your volunteers.' },
   ];
   return (
     <section id="faq" style={{ background: PARCHMENT, padding: '96px 0' }}>
       <Container style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 80 }}>
         <div>
-          <Eyebrow n="06" label="FAQ" />
+          <Eyebrow n="07" label="FAQ" />
           <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 40, lineHeight: 1.1, letterSpacing: -0.6, margin: '16px 0 16px', color: INK }}>
-            Questions P&amp;C presidents tend to ask first.
+            Questions P&amp;C presidents &amp; developers ask first.
           </h2>
           <p style={{ fontFamily: SANS, fontSize: 15, lineHeight: 1.6, color: INK_DIM }}>
             Can&rsquo;t see what you&rsquo;re after? <a href="mailto:hello@uniformorder.online" style={{ color: NAVY, textDecoration: 'underline' }}>Email us</a> — a real human replies, usually within the same day.
@@ -797,16 +842,16 @@ function CTABanner() {
             <circle cx="180" cy="180" r="50" stroke="#fff" strokeWidth="1" fill="none"/>
           </svg>
           <div>
-            <Eyebrow n="07" label="Get started" color="rgba(255,255,255,0.6)" />
+            <Eyebrow n="08" label="Get started" color="rgba(255,255,255,0.6)" />
             <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 44, lineHeight: 1.1, letterSpacing: -0.6, margin: '16px 0 14px' }}>
               Give your P&amp;C their Saturdays back.
             </h2>
             <p style={{ fontFamily: SANS, fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)', maxWidth: 480, margin: 0 }}>
-              30 days free. No credit card. We&rsquo;ll digitise your paper order form for free as part of onboarding — so the first thing your volunteers see is their own shop, with their own items, ready to take orders.
+              Start 30 days free on our managed cloud, or clone the repository to self-host today for free under the MIT License.
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Btn size="lg" href={SHOP_URL} style={{ background: '#fff', color: NAVY, borderColor: '#fff' }}>Start a 30-day free trial</Btn>
+            <Btn size="lg" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={18} />} style={{ background: '#fff', color: NAVY, borderColor: '#fff' }}>Explore on GitHub</Btn>
             <Btn size="lg" variant="secondary" href={DEMO_MAILTO} style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Book a 20-minute demo</Btn>
             <div style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.6, marginTop: 6 }}>
               Or call 02 8123 4567 · weekdays 9–5 AEST
@@ -822,10 +867,29 @@ function CTABanner() {
 
 function Footer() {
   const cols = [
-    { h: 'Product', links: ['Parent shop', 'Operator dashboard', 'Reports & exports', 'Bulk catalog upload', 'Security'] },
-    { h: 'For schools', links: ['NSW Department schools', 'Independent schools', 'Catholic systemic', 'Primary schools', 'P&C resources'] },
-    { h: 'Company', links: ['About', 'Pricing', 'Contact', 'Changelog'] },
-    { h: 'Legal', links: ['Terms of Service', 'Privacy Policy', 'Refund policy', 'Security brief'] },
+    { h: 'Product', links: [
+      { label: 'Parent shop', href: '#product' },
+      { label: 'Operator dashboard', href: '#product' },
+      { label: 'Reports & exports', href: '#product' },
+      { label: 'Bulk catalog upload', href: '#product' },
+    ]},
+    { h: 'Open Source', links: [
+      { label: 'GitHub Repository', href: GITHUB_URL, target: '_blank' },
+      { label: 'MIT License', href: `${GITHUB_URL}/blob/main/LICENSE`, target: '_blank' },
+      { label: 'Self-Hosting Guide', href: `${GITHUB_URL}/blob/main/docs/HOSTINGER_DEPLOYMENT.md`, target: '_blank' },
+      { label: 'Security Brief', href: `${GITHUB_URL}/blob/main/SECURITY.md`, target: '_blank' },
+    ]},
+    { h: 'For schools', links: [
+      { label: 'NSW Department schools', href: '#schools' },
+      { label: 'Independent schools', href: '#schools' },
+      { label: 'Catholic systemic', href: '#schools' },
+      { label: 'P&C resources', href: '#schools' },
+    ]},
+    { h: 'Legal & Privacy', links: [
+      { label: 'Terms of Service', href: `${SHOP_URL}/terms`, target: '_blank' },
+      { label: 'Privacy Policy', href: `${SHOP_URL}/privacy`, target: '_blank' },
+      { label: 'Security Policy', href: `${GITHUB_URL}/blob/main/SECURITY.md`, target: '_blank' },
+    ]},
   ];
   return (
     <footer style={{ background: NAVY_DEEP, color: 'rgba(255,255,255,0.7)', padding: '64px 0 32px' }}>
@@ -834,7 +898,7 @@ function Footer() {
           <div>
             <PlatformMark size={28} color="#fff" />
             <p style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.6, color: 'rgba(255,255,255,0.55)', marginTop: 16, maxWidth: 280 }}>
-              Online uniform shop software for Australian schools and Parents &amp; Citizens Associations. Made in Sydney.
+              Open-source online uniform shop software for Australian schools and Parents &amp; Citizens Associations. Made in Sydney.
             </p>
           </div>
           {cols.map(c => (
@@ -842,14 +906,18 @@ function Footer() {
               <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: '#fff', marginBottom: 14 }}>{c.h}</div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {c.links.map(l => (
-                  <li key={l}><a href="#" style={{ fontFamily: SANS, fontSize: 13.5, color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>{l}</a></li>
+                  <li key={l.label}>
+                    <a href={l.href} target={l.target} rel={l.target === '_blank' ? 'noopener noreferrer' : undefined} style={{ fontFamily: SANS, fontSize: 13.5, color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>
+                      {l.label}
+                    </a>
+                  </li>
                 ))}
               </ul>
             </div>
           ))}
         </div>
         <div style={{ paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 0.6 }}>
-          <span>© 2026 UniformOrder Pty Ltd · ABN 12 345 678 910</span>
+          <span>© 2026 UniformOrder · Released under the MIT License</span>
           <span>uniformorder.online</span>
         </div>
       </Container>
@@ -868,6 +936,7 @@ function App() {
       {/* <TrustStrip /> */}
       <ProblemSection />
       <ProductSection />
+      <OpenSourceSection />
       <BuiltForSchoolsSection />
       <QuoteSection />
       <PricingSection />

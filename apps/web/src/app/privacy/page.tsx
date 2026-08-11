@@ -6,9 +6,9 @@ export default function PrivacyPage() {
       <h1 className="font-serif text-3xl font-semibold mb-4">Privacy notice</h1>
       <div className="space-y-4 text-[14px] leading-[1.6]" style={{ color: "var(--color-ink)" }}>
         <p>
-          uniformorder.online is a shopfront platform that lets schools (the seller of record) sell uniforms online.
-          This notice tells you what personal information we collect when you use the platform, why, where it&apos;s stored,
-          how long we keep it, and how you can access or delete it.
+          uniformorder.online is an open-source shopfront platform (MIT Licensed) that lets schools (the seller of record) sell uniforms online.
+          This notice tells you what personal information we collect when you use the managed cloud service, why, where it&apos;s stored,
+          how long we keep it, and how you can access or delete it. (For self-hosted instances, data governance is managed directly by your school&apos;s infrastructure administrator.)
         </p>
 
         <h2 className="font-serif text-xl mt-6">What we collect</h2>
