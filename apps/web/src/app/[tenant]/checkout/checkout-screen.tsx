@@ -423,7 +423,7 @@ export function CheckoutScreen({
             <div>
               <FieldLabel htmlFor="parentName">Parent / guardian name</FieldLabel>
               <input id="parentName" value={student.parentName} onChange={(e) => setField("parentName", e.target.value)}
-                placeholder="e.g. Jane Doe"
+                placeholder="e.g. Alex Taylor"
                 aria-required="true" aria-invalid={!!fieldErrors.parentName}
                 className="w-full h-10 border rounded-md px-3 text-[13px] outline-none"
                 style={{ borderColor: fieldErrors.parentName ? "#B23A2A" : "var(--color-rule)", color: "var(--color-ink)" }} />

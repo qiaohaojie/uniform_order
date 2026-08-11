@@ -1,6 +1,6 @@
 // data.jsx — shared mock data + design tokens for UniformOrder
 // Two demo tenants (IMHS for Tim + a girls' school for the daughter Sam),
-// catalog items adapted from synthetic sample data, and demo parent (Jane Doe).
+// catalog items adapted from synthetic sample data, and demo parent (Alex Taylor).
 
 const NAVY = '#0E2A47';
 const NAVY_DEEP = '#081A2D';

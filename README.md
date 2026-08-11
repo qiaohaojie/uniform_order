@@ -54,7 +54,7 @@ uniform_order/                  # pnpm monorepo
 
 **Server / client pattern:** route `page.tsx` files fetch data on the server and pass props into `"use client"` companions (`*-screen.tsx` / `*-client.tsx`). Path alias `@/*` → `apps/web/src/*`.
 
-**Tenants today:** demo slugs `imhs` (Imagined High School) and `rgsh` (Riverside Academy). Production tenants are provisioned through the platform portal and stored in Postgres.
+**Tenants today:** demo slugs `imhs` (Illawarra Modern High School) and `rgsh` (Riverside Academy). Production tenants are provisioned through the platform portal and stored in Postgres.
 
 ---
 
