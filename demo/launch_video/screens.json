@@ -1,0 +1,78 @@
+{
+  "projectName": "UniformOrder Open Source Launch",
+  "source": "Local production build with seeded Riverside Academy demo data",
+  "screens": [
+    {
+      "id": "parent-welcome",
+      "title": "School-branded welcome",
+      "description": "Branded entry point with popular items, store hours, and policies.",
+      "imagePath": "remotion/public/assets/screens/01-parent-welcome.png",
+      "width": 430,
+      "height": 932,
+      "duration": 2
+    },
+    {
+      "id": "parent-catalog",
+      "title": "Mobile catalog",
+      "description": "Category browsing, search, pricing, and garment previews.",
+      "imagePath": "remotion/public/assets/screens/02-parent-catalog.png",
+      "width": 430,
+      "height": 932,
+      "duration": 2
+    },
+    {
+      "id": "parent-item",
+      "title": "Item variants",
+      "description": "Fit, size, quantity, and clear add-to-cart pricing.",
+      "imagePath": "remotion/public/assets/screens/03-parent-item-detail.png",
+      "width": 430,
+      "height": 932,
+      "duration": 2
+    },
+    {
+      "id": "parent-cart",
+      "title": "GST-aware cart",
+      "description": "Student-ready order summary with GST and pickup checkout path.",
+      "imagePath": "remotion/public/assets/screens/04-parent-cart.png",
+      "width": 430,
+      "height": 932,
+      "duration": 2
+    },
+    {
+      "id": "admin-dashboard",
+      "title": "Operator dashboard",
+      "description": "Live revenue, order volume, pickup backlog, top sellers, and attention items.",
+      "imagePath": "remotion/public/assets/screens/05-admin-dashboard.png",
+      "width": 1440,
+      "height": 900,
+      "duration": 5
+    },
+    {
+      "id": "admin-orders",
+      "title": "Fulfilment Kanban",
+      "description": "Prepare, ready, attention, and completed order lanes with one-click actions.",
+      "imagePath": "remotion/public/assets/screens/06-admin-orders.png",
+      "width": 1440,
+      "height": 900,
+      "duration": 5
+    },
+    {
+      "id": "admin-reports",
+      "title": "GST-aware reports",
+      "description": "Revenue, order, category, GST, payout, and CSV export views.",
+      "imagePath": "remotion/public/assets/screens/07-admin-reports.png",
+      "width": 1440,
+      "height": 900,
+      "duration": 5
+    },
+    {
+      "id": "admin-catalog",
+      "title": "Catalog control",
+      "description": "Garments, categories, variants, ordering, and availability controls.",
+      "imagePath": "remotion/public/assets/screens/08-admin-catalog.png",
+      "width": 1440,
+      "height": 900,
+      "duration": 4.5
+    }
+  ]
+}

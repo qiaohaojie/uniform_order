@@ -2,198 +2,120 @@
 
 **The online uniform shop for Australian schools and P&C committees.**
 
-UniformOrder replaces the paper form, the spreadsheet, and the volunteer-run cash box with a school-branded online shop. Parents order from their phone. Operators pack from a tablet. Payouts land in the school’s bank account via Stripe Connect.
+Parents order uniforms on their phone. Volunteers pack orders from a tablet. Money goes straight into the school’s bank account. No paper forms, no cash box, no end-of-term spreadsheet scramble.
 
-**Live product:** [uniformorder.online](https://uniformorder.online) · **App:** [app.uniformorder.online](https://app.uniformorder.online)
-
----
-
-## What you get
-
-| Portal | Who | What |
-|---|---|---|
-| **Parent shop** | Families | Mobile-first catalog → size guide → cart → Stripe checkout → pickup confirmation |
-| **School admin** | P&C / uniform shop operators | Kanban fulfilment, batch pick-slip print, catalog editor, GST/CSV reports, settings |
-| **Platform console** | UniformOrder operators | Tenant onboarding wizard, approval queue, Stripe Connect status |
-
-### Highlights
-
-- **Multi-tenant** — each school gets its own slug, accent colour, catalog, legal policy, and Stripe Connect account
-- **Stripe Connect (Standard)** destination charges — schools receive funds directly; optional platform application fee
-- **Fulfilment workflow** — order statuses from paid → packing → ready → collected, with audit log and transactional email
-- **Multi-child parents** — one login, multiple children, cross-school order history
-- **GST-aware exports** — CSV for BAS-friendly reporting
-- **Versioned refund policies** — per-tenant text or external URL, consented at checkout
-- **Catalog self-service** — variants, sizes, size guides, image uploads (UploadThing), platform approval gate
+**Website:** [uniformorder.online](https://uniformorder.online)
 
 ---
 
-## Architecture
+## Who it’s for
 
-```
-uniform_order/                  # pnpm monorepo
-├── apps/web                    # Next.js 16 App Router (parent + admin + platform)
-├── apps/landing                # Astro marketing site
-├── docs/                       # Specs, plans, deployment notes
-└── demo/                        # Demo seed data + product walkthroughs
-```
-
-| Layer | Choice |
+| You are… | What UniformOrder does for you |
 |---|---|
-| App framework | Next.js 16 (App Router, RSC + client companions), `output: "standalone"` |
-| Language | TypeScript |
-| Styling | Tailwind CSS v4 + HeroUI v3 |
-| Database | Neon Postgres + Drizzle ORM |
-| Auth | Neon Auth (magic link + Google) |
-| Payments | Stripe Connect Standard + Payment Element |
-| Email | Emailit (React Email templates) |
-| Images | UploadThing |
-| Analytics | PostHog |
-| Deploy | Hostinger Cloud Startup (Node.js) — **not Vercel** |
-| Region | AU — Neon in `ap-southeast-2` (Sydney) |
-
-**Server / client pattern:** route `page.tsx` files fetch data on the server and pass props into `"use client"` companions (`*-screen.tsx` / `*-client.tsx`). Path alias `@/*` → `apps/web/src/*`.
-
-**Tenants today:** demo slugs `imhs` (Illawarra Modern High School) and `rgsh` (Riverside Academy). Production tenants are provisioned through the platform portal and stored in Postgres.
+| **A parent** | Browse your school’s catalog, pick sizes with a guide, pay by card, and track when the order is ready for pickup. |
+| **A P&C / uniform shop volunteer** | Receive paid orders, pack from a clear queue, print pick slips, and hand over a clean set of books at AGM. |
+| **A school or business manager** | Each school has its own branded shop and bank payouts. Funds go to the school’s Stripe Connect account — not a shared pot. |
+| **A platform operator** | Onboard new schools, approve catalogs, and see Connect status from one console. |
 
 ---
 
-## Quick start
+## Everyday scenarios
 
-### Prerequisites
+### Back-to-school rush
 
-- Node.js 22+
-- [pnpm](https://pnpm.io) 10+
-- A [Neon](https://neon.tech) Postgres database
-- Stripe test keys (Connect enabled)
-- Optional: Neon Auth project, UploadThing, PostHog, Emailit
+It’s the week before term. Dozens of families need shirts, shorts, and jumpers in different sizes for different kids.
 
-### Install
+**Without UniformOrder:** paper forms in bags, cash in envelopes, someone typing orders into a spreadsheet at night.
 
-```bash
-git clone https://github.com/qiaohaojie/uniform_order.git
-cd uniform_order
-pnpm install
-```
+**With UniformOrder:** parents order from the school’s link on their phone. Volunteers open a packing board of *paid* orders only, print a batch of pick slips, and work through the queue. No chasing incomplete forms.
 
-### Configure
+### One parent, two kids, two schools
 
-```bash
-cp apps/web/.env.example apps/web/.env.local
-# Fill in DATABASE_URL, Neon Auth, Stripe, and the rest
-```
+Mum has one child at primary and one at high school. She signs in once, switches which child she’s shopping for, and keeps order history for both.
 
-See [`apps/web/.env.example`](apps/web/.env.example) for every variable. Minimum to boot the shop UI with static fallbacks is `DATABASE_URL` + Neon Auth + Stripe test keys; platform features need `PLATFORM_ADMIN_EMAILS`.
+### Saturday packing morning
 
-### Database
+The coordinator opens the admin board on a tablet. Orders move through **paid → packing → ready → collected**. Each step is recorded. When a parent asks “where’s my order?”, the answer is on the board — not in someone’s memory.
 
-```bash
-# Apply migrations (from apps/web)
-pnpm --filter web exec drizzle-kit migrate
+### Treasurer at AGM
 
-# Product tenants (imhs / rgsh) + catalog — day-to-day local shop data
-cd apps/web && node scripts/seed.mjs
+The Treasurer exports GST-aware CSV reports for BAS and the annual report. Card payments and payouts are in Stripe, tied to the school’s account. There’s an audit trail if anyone questions a refund or a missing order.
 
-# Optional: isolated sales/QA demo tenants (demo-blank / demo-academy)
-# See demo/demo_data/README.md for full setup (copy .env.demo, Neon Auth users)
-cp demo/demo_data/.env.demo.example demo/demo_data/.env.demo
-# set DATABASE_URL in .env.demo (usually same as apps/web/.env.local)
-pnpm --filter web demo:seed
-```
+### Handover to next year’s committee
 
-| Seeder | Tenants | When to use |
-|---|---|---|
-| `apps/web/scripts/seed.mjs` | `imhs`, `rgsh` | Default local product data |
-| `pnpm --filter web demo:seed` | `demo-blank`, `demo-academy` | Sales demos, Kanban samples, product recordings |
+Next year’s coordinator inherits a live catalog, size guides, refund policy text, and a working order history — not a cardboard box of forms and a half-finished spreadsheet.
 
-> **Note:** Neon HTTP does not support interactive transactions. Prefer `db.batch(...)` over `db.transaction(...)` when extending query code.
+### New school coming on board
 
-### Run
-
-```bash
-# Parent + admin + platform app (http://localhost:3000)
-pnpm dev:web
-
-# Marketing landing (separate port; see apps/landing)
-pnpm dev:landing
-```
-
-### Checks
-
-```bash
-pnpm check-types          # whole monorepo
-pnpm check-types:web      # apps/web only
-pnpm build:web            # production build
-```
-
-CI runs `next typegen` then `pnpm check-types` on every push/PR to `main` (see `.github/workflows/check-types.yml`). There is no unit/e2e suite in-repo yet; type-checking is the primary gate.
+Platform staff create the tenant, set branding and legal text, connect Stripe, and approve the catalog before parents can buy. Schools only go live when they’re ready.
 
 ---
 
-## Environment variables
+## What parents get
 
-| Variable | Purpose |
+- **School-branded shop** — crest, colours, and the items *your* school actually sells  
+- **Size guides** on the item page so fewer wrong-size returns  
+- **Multi-child profiles** — one login, orders tagged to the right student  
+- **Card checkout** via Stripe (no cash handling at the canteen window)  
+- **Order tracking** — from paid through to ready for pickup  
+- **Refund policy** shown and consented at checkout (school-controlled text or link)
+
+Parents don’t install an app. They open the school’s link, sign in with email, and order.
+
+---
+
+## What shop operators get
+
+- **Fulfilment board** — statuses for packing workflow, not a shared inbox  
+- **Batch pick-slip print** — pack a list, not one order at a time from memory  
+- **Catalog editor** — variants, sizes, guides, images; platform approval when needed  
+- **Reports & CSV export** — GST-aware figures for the Treasurer and BAS  
+- **Settings** — branding, contact, refund policy, shop email access  
+- **Audit trail** — who changed what, when (protects volunteers as much as the school)
+
+---
+
+## Why committees choose it
+
+| Pain today | How UniformOrder helps |
 |---|---|
-| `DATABASE_URL` | Neon Postgres connection string |
-| `NEON_AUTH_BASE_URL` | Neon Auth host |
-| `NEON_AUTH_COOKIE_SECRET` | ≥32-byte cookie secret |
-| `PLATFORM_ADMIN_EMAILS` | Comma-separated platform-admin allowlist |
-| `NEXT_PUBLIC_APP_URL` | Public app origin (e.g. `http://localhost:3000`) |
-| `STRIPE_SECRET_KEY` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe API keys |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
-| `STRIPE_APPLICATION_FEE_BPS` | Platform fee in basis points (`0` = none) |
-| `UPLOADTHING_TOKEN` | Catalog image uploads |
-| `EMAILIT_API_KEY` / `FROM_EMAIL` | Transactional email |
-| `NEXT_PUBLIC_POSTHOG_*` / `POSTHOG_*` | Product analytics |
-
-Never commit `.env.local` or live keys. Production secrets live in Hostinger hPanel and require an app restart after changes.
+| Paper forms + cash | Online catalog and card payment |
+| “Did we already pack this?” | Clear order statuses and pick slips |
+| Saturday data entry | Orders arrive paid and complete |
+| Handover chaos | System and history outlive any one volunteer |
+| “Where did the money go?” | Stripe Connect payouts to the school’s account |
+| AGM / BAS reporting | Exportable, GST-aware reports |
 
 ---
 
-## Project layout (web app)
+## How a school run works (high level)
 
-```
-apps/web/src/
-├── app/
-│   ├── [tenant]/          # Parent shop (catalog, item, cart, checkout, orders)
-│   ├── admin/[tenant]/    # School operator UI
-│   ├── platform/          # Platform console
-│   ├── api/               # Orders, catalog, tenant, Stripe webhooks
-│   ├── auth/              # Sign-in / session
-│   ├── terms/ privacy/    # Legal pages
-│   └── page.tsx           # School picker / home
-├── components/            # Shared UI (shells, garment SVGs, …)
-├── db/                    # schema.ts, queries.ts, Drizzle client
-└── lib/                   # auth, stripe, email, cart, analytics
-```
+1. **Parents** open the school’s shop link, choose items and sizes, pay online.  
+2. **Operators** see new paid orders, pack them, mark ready, and hand over at pickup.  
+3. **Funds** settle to the school’s connected Stripe account (optional platform fee).  
+4. **Treasurer** exports reports when the books need closing.
 
-Deeper agent/developer guidance lives in [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md). Local development setup: [`docs/Deployment/LOCAL_DEVELOPMENT.md`](docs/Deployment/LOCAL_DEVELOPMENT.md). Production deployment runbook: [`docs/Deployment/PRODUCTION_DEPLOYMENT.md`](docs/Deployment/PRODUCTION_DEPLOYMENT.md).
+For step-by-step instructions by role, see the [user manuals](docs/User_Manuals/README.md).
 
 ---
 
-## Security notes
+## Documentation
 
-- Admin and platform routes require an authenticated session; tenant access is email-gated (operator `shop_email` or platform-admin allowlist).
-- Parent order APIs require auth and email ownership checks.
-- Stripe webhooks verify signatures; order creation is idempotent on PaymentIntent ID.
-- Security headers (HSTS, CSP with per-request nonces, frame denial, etc.) are set in Next config + middleware.
-- Report vulnerabilities privately via GitHub Security Advisories or by emailing `support@pimspace.com` (see [`SECURITY.md`](SECURITY.md)). Do not file public issues for live secrets or payment bugs.
-- `/api/dev/*` login helpers exist for **local development only** and return 404 when `NODE_ENV=production`.
-
----
-
-## Contributing
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, checks, and PR expectations. Participation is governed by our [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
-
----
-
-## License
-
-[MIT](LICENSE) © 2026 PimSpace
+| Doc | Audience |
+|---|---|
+| [User manuals](docs/User_Manuals/README.md) | Parents, P&C operators, sysadmins |
+| [Technical overview](docs/TECHNICAL.md) | Developers & contributors (stack, setup, architecture) |
+| [Local development](docs/Deployment/LOCAL_DEVELOPMENT.md) | Running the monorepo on your machine |
+| [Production deployment](docs/Deployment/PRODUCTION_DEPLOYMENT.md) | Hostinger / Neon / Stripe go-live |
+| [Contributing](CONTRIBUTING.md) | PR expectations and local checks |
+| [Security](SECURITY.md) | Vulnerability reporting |
 
 ---
 
 ## Status
 
-Actively developed product used for Australian school uniform shops. Demo tenants and demo fixtures are synthetic. Production configuration (live Stripe, Hostinger env, school onboarding) is out of band and not included in this repository.
+Actively used for Australian school uniform shops. Demo data in this repo is synthetic. Production schools, Stripe live keys, and hosting config are managed outside the repository.
+
+## License
+
+[MIT](LICENSE) © 2026 PimSpace

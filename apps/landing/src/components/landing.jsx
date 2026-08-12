@@ -12,7 +12,7 @@ import {
 
 const GITHUB_URL = "https://github.com/qiaohaojie/uniform_order";
 const SHOP_URL = import.meta.env.PUBLIC_SHOP_URL || (import.meta.env.DEV ? "http://localhost:3000" : "https://app.uniformorder.online");
-const DEMO_MAILTO = "mailto:hello@uniformorder.online?subject=Book%20a%20UniformOrder%20demo";
+const DEMO_MAILTO = "mailto:support@pimspace.com?subject=Managed%20host%20help%20-%20";
 
 // ---------- Shared bits ----------
 
@@ -98,7 +98,6 @@ function Hero() {
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
             <Btn size="lg" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={18} />}>Explore on GitHub</Btn>
-            <Btn size="lg" variant="secondary" href={SHOP_URL}>Try Demo App</Btn>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontFamily: SANS, fontSize: 13, color: INK_DIM }}>
@@ -620,30 +619,6 @@ function OpenSourceSection() {
   );
 }
 
-// ---------- Quote ----------
-
-function QuoteSection() {
-  return (
-    <section style={{ background: PARCHMENT, padding: '96px 0' }}>
-      <Container style={{ textAlign: 'center', maxWidth: 880 }}>
-        <svg width="40" height="32" viewBox="0 0 40 32" style={{ marginBottom: 24 }}>
-          <path d="M0 32 V18 Q0 4 14 0 L16 6 Q6 8 6 18 H14 V32 Z M22 32 V18 Q22 4 36 0 L38 6 Q28 8 28 18 H36 V32 Z" fill={GOLD} opacity="0.6"/>
-        </svg>
-        <p style={{ fontFamily: SERIF, fontWeight: 400, fontStyle: 'italic', fontSize: 32, lineHeight: 1.35, color: INK, margin: '0 0 28px', letterSpacing: -0.3 }}>
-          We used to spend two Saturdays before back-to-school just sorting paper forms. The first January on UniformOrder we packed 312 orders without staying past 11am — and the bursar got the bank reconciliation by lunchtime.
-        </p>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
-          <Crest tenant={TENANTS.imhs} size={44} />
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: INK }}>Margaret Whitlam</div>
-            <div style={{ fontFamily: SANS, fontSize: 12, color: INK_DIM, marginTop: 2 }}>P&amp;C President · Illawarra Modern High School</div>
-          </div>
-        </div>
-      </Container>
-    </section>
-  );
-}
-
 // ---------- Pricing ----------
 
 function PricingSection() {
@@ -699,27 +674,18 @@ function PricingSection() {
           <PlanCard
             name="Managed host"
             price="Talk to us"
-            sub="We set up and host for your school"
-            features={[
-              'Everything in Free / Multi-campus',
-              'Setup &amp; catalog digitisation (consulting)',
-              'Hosted on uniformorder.online',
-              'Custom domain, SSL &amp; backups',
-              'Ongoing hosting + priority support',
-            ]}
+            sub="Optional help with setup &amp; hosting"
+            body="Need help hosting and running the shop? Contact us — managed host is optional paid help (setup plus ongoing hosting). Stripe processing: 1.7% + A$0.30 (domestic)."
             cta="Talk to us"
             href={DEMO_MAILTO}
           />
-        </div>
-        <div style={{ marginTop: 32, textAlign: 'center', fontFamily: SANS, fontSize: 13, color: INK_DIM }}>
-          Managed host includes a one-off consulting/setup fee plus ongoing hosting. Stripe processing: 1.7% + A$0.30 (domestic).
         </div>
       </Container>
     </section>
   );
 }
 
-function PlanCard({ name, price, unit, sub, features, cta, highlight, badge, href, target, leadingIcon }) {
+function PlanCard({ name, price, unit, sub, features, body, cta, highlight, badge, href, target, leadingIcon }) {
   return (
     <div style={{
       background: highlight ? NAVY : '#fff',
@@ -743,16 +709,31 @@ function PlanCard({ name, price, unit, sub, features, cta, highlight, badge, hre
         {unit && <div style={{ fontFamily: SANS, fontSize: 14, color: highlight ? 'rgba(255,255,255,0.6)' : INK_DIM }}>{unit}</div>}
       </div>
       <div style={{ height: 1, background: highlight ? 'rgba(255,255,255,0.15)' : RULE, marginBottom: 18 }} />
-      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-        {features.map((f, i) => (
-          <li key={i} style={{ display: 'flex', gap: 10, fontFamily: SANS, fontSize: 14, color: highlight ? 'rgba(255,255,255,0.85)' : INK }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" style={{ marginTop: 3, flexShrink: 0 }}>
-              <path d="M3 7.5 L6 10 L11 5" stroke={highlight ? GOLD : NAVY} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span dangerouslySetInnerHTML={{ __html: f }} />
-          </li>
-        ))}
-      </ul>
+      {body ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', marginBottom: 24 }}>
+          <p
+            style={{
+              fontFamily: SANS,
+              fontSize: 14,
+              lineHeight: 1.55,
+              color: highlight ? 'rgba(255,255,255,0.85)' : INK,
+              margin: 0,
+            }}
+            dangerouslySetInnerHTML={{ __html: body }}
+          />
+        </div>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+          {(features || []).map((f, i) => (
+            <li key={i} style={{ display: 'flex', gap: 10, fontFamily: SANS, fontSize: 14, color: highlight ? 'rgba(255,255,255,0.85)' : INK }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" style={{ marginTop: 3, flexShrink: 0 }}>
+                <path d="M3 7.5 L6 10 L11 5" stroke={highlight ? GOLD : NAVY} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span dangerouslySetInnerHTML={{ __html: f }} />
+            </li>
+          ))}
+        </ul>
+      )}
       <Btn
         fullWidth
         href={href}
@@ -792,14 +773,14 @@ function FAQSection() {
     { q: 'Can our school self-host UniformOrder for free?',
       a: 'Yes. Clone the MIT-licensed repository on GitHub, follow the README to run it on infrastructure you control, and configure Stripe Connect for your school. You only pay for your own hosting and standard Stripe payment processing fees.' },
     { q: 'What is the difference between self-hosted Free and Managed host?',
-      a: 'Free (self-hosted) gives complete control to your school&rsquo;s IT team or technical volunteers — one campus or multi-campus — at no licence cost. Managed host is operated by us: setup consulting, catalog digitisation, hosting, backups, and priority support, with a consulting fee plus ongoing host price.' },
+      a: 'Free (self-hosted) gives complete control to your school&rsquo;s IT team or technical volunteers — one campus or multi-campus — at no licence cost. Managed host is for schools that need technical help: we install and configure the open-source repo, host it for you, handle backups and SSL, and provide priority support, with a setup fee plus ongoing host price.' },
     { q: 'Who owns the money — UniformOrder or the school?',
       a: 'The school does. Payments use Stripe Connect destination charges, so funds settle directly into <em>your school&rsquo;s</em> Stripe account and payout into <em>your school&rsquo;s</em> bank account. UniformOrder never holds your float.' },
     { q: 'Is this just for NSW schools?',
       a: 'No. We started with NSW high schools but the platform is built for any Australian school running a uniform shop — public, Catholic or independent, primary or secondary, in any state. AUD pricing, AU date formats, GST-ready exports.' },
     { q: 'What happens to our existing paper order form?',
       a: 'On managed cloud onboarding we&rsquo;ll digitise it for you. Send us the PDF and an Excel/Word price list — we set up the categories, items and sizing tables in your shop, and you review before launch. Usually two business days.' },
-    { q: 'Does the P&amp;C still need a Stripe account?',
+    { q: 'Does the P&C still need a Stripe account?',
       a: 'Yes — but we walk one of your P&amp;C office-bearers through the Stripe Connect onboarding (it takes ~15 minutes and asks for the P&amp;C ABN, bank account, and one director&rsquo;s ID). The platform won&rsquo;t go live until Stripe has approved your account.' },
     { q: 'What about second-hand uniforms and donated stock?',
       a: 'Each item can be flagged as &ldquo;new&rdquo; or &ldquo;second-hand&rdquo; with separate stock and pricing. Donated stock is fully supported, and you can offer it free or for a nominal fee.' },
@@ -813,7 +794,7 @@ function FAQSection() {
             Questions P&amp;C presidents &amp; developers ask first.
           </h2>
           <p style={{ fontFamily: SANS, fontSize: 15, lineHeight: 1.6, color: INK_DIM }}>
-            Can&rsquo;t see what you&rsquo;re after? <a href="mailto:hello@uniformorder.online" style={{ color: NAVY, textDecoration: 'underline' }}>Email us</a> — a real human replies, usually within the same day.
+            Can&rsquo;t see what you&rsquo;re after? <a href="mailto:support@pimspace.com" style={{ color: NAVY, textDecoration: 'underline' }}>Email us</a> — a real human replies, usually within the same day.
           </p>
         </div>
         <div>
@@ -833,28 +814,30 @@ function CTABanner() {
       <Container>
         <div style={{
           background: NAVY, borderRadius: 16, padding: '64px 56px', color: '#fff',
-          display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 60, alignItems: 'center',
+          display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 48, alignItems: 'center',
           position: 'relative', overflow: 'hidden',
         }}>
-          <svg aria-hidden style={{ position: 'absolute', right: -20, bottom: -40, opacity: 0.08 }}
+          <svg aria-hidden style={{ position: 'absolute', right: -20, bottom: -40, opacity: 0.08, pointerEvents: 'none' }}
                width="360" height="360" viewBox="0 0 360 360">
             <circle cx="180" cy="180" r="170" stroke="#fff" strokeWidth="1" fill="none"/>
             <circle cx="180" cy="180" r="130" stroke="#fff" strokeWidth="1" fill="none"/>
             <circle cx="180" cy="180" r="90" stroke="#fff" strokeWidth="1" fill="none"/>
             <circle cx="180" cy="180" r="50" stroke="#fff" strokeWidth="1" fill="none"/>
           </svg>
-          <div>
+          <div style={{ position: 'relative', minWidth: 0 }}>
             <Eyebrow n="08" label="Get started" color="rgba(255,255,255,0.6)" />
-            <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 44, lineHeight: 1.1, letterSpacing: -0.6, margin: '16px 0 14px' }}>
+            <h2 style={{
+              fontFamily: SERIF, fontWeight: 500, fontSize: 40, lineHeight: 1.15, letterSpacing: -0.6,
+              margin: '16px 0 14px',
+            }}>
               Give your P&amp;C their Saturdays back.
             </h2>
-            <p style={{ fontFamily: SANS, fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)', maxWidth: 480, margin: 0 }}>
-              Clone the repository and self-host for free under the MIT License — or try the live demo shop.
+            <p style={{ fontFamily: SANS, fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)', maxWidth: 560, margin: 0 }}>
+              Clone the repository and self-host for free under the MIT License — or ask us to set it up and host it for you.
             </p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
             <Btn size="lg" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={18} />} style={{ background: '#fff', color: NAVY, borderColor: '#fff' }}>Explore on GitHub</Btn>
-            <Btn size="lg" variant="secondary" href={SHOP_URL} style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Try Demo App</Btn>
           </div>
         </div>
       </Container>
@@ -939,7 +922,6 @@ function App() {
       <ProductSection />
       <OpenSourceSection />
       <BuiltForSchoolsSection />
-      <QuoteSection />
       <PricingSection />
       <FAQSection />
       <CTABanner />

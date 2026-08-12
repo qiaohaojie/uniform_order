@@ -51,8 +51,6 @@ repomix-output.xml
 
 # playwright-cli artifacts
 .playwright-cli/
-# §3.8 a11y audit — local Neon Auth session, never commit
-docs/superpowers/audits/2026-05-11-a11y/auth-storage.json
 
 # §3.7 print QA — local storage state + generated PDFs/screenshots
 apps/web/tests/print/.storage.json
@@ -63,8 +61,11 @@ demo/product_demo/recordings/output/
 demo/demo_data/.env.demo
 *.webm
 *.mp4
-.web_scraper
+# Launch-video generated and captured assets; keep the editable source files
+demo/launch_video/hyperframes/
+demo/launch_video/previews/
+demo/launch_video/remotion/
+demo/launch_video/renders/
 
-# supergoal run scaffolding (run roots, phase specs, state, patches) — local-only
-.supergoal/
+# mcp
 .mcp.json

@@ -1,6 +1,9 @@
 # UniformOrder Documentation Index
 
-Welcome to the **UniformOrder** documentation directory. This folder contains technical documentation for developers, system administrators, and open-source contributors.
+Welcome to the **UniformOrder** documentation directory.
+
+- Product overview and use cases: root [`README.md`](../README.md)
+- Developer stack, setup, and architecture: [`TECHNICAL.md`](TECHNICAL.md)
 
 ---
 
@@ -16,6 +19,9 @@ Welcome to the **UniformOrder** documentation directory. This folder contains te
 ---
 
 ## Primary Guides
+
+- [**Technical overview**](TECHNICAL.md)  
+  Stack, monorepo layout, quick start, environment variables, security notes. Linked from the root README for developers.
 
 - [**Local Development Guide**](Deployment/LOCAL_DEVELOPMENT.md)  
   Complete instructions for local environment setup, monorepo scripts, database migrations, and testing both the **Parent-Facing Shop** and **Admin-Facing Portal** locally.
