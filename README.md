@@ -6,6 +6,8 @@ Parents order uniforms on their phone. Volunteers pack orders from a tablet. Mon
 
 **Website:** [uniformorder.online](https://uniformorder.online)
 
+![UniformOrder open source launch](demo/launch_video/renders/uniformorder-open-source-launch.mp4)
+
 ---
 
 ## Who it’s for
