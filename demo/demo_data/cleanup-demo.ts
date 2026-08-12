@@ -117,6 +117,7 @@ async function main() {
     // Cascades clean: orders → lines/events/notifications/refunds; catalog → variants
     await db.delete(schema.orders).where(eq(schema.orders.tenantId, tenantId));
     await db.delete(schema.catalogItems).where(eq(schema.catalogItems.tenantId, tenantId));
+    await db.delete(schema.parentChildren).where(eq(schema.parentChildren.tenantId, tenantId));
     await db.delete(schema.tenantLegalVersions).where(eq(schema.tenantLegalVersions.tenantId, tenantId));
     await db.delete(schema.tenantSettings).where(eq(schema.tenantSettings.tenantId, tenantId));
     await db.delete(schema.auditEvents).where(eq(schema.auditEvents.tenantId, tenantId));

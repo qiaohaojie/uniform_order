@@ -126,6 +126,23 @@ Reference table — if the UI changes, these are the spots that break recordings
 
 ---
 
+## 8. `--reset` / cleanup must delete `parent_children` before tenants
+
+**Issue (live seed 2026-08-12):** After parents saved children against demo tenants, `demo:seed -- --reset` and cleanup failed with:
+
+```text
+update or delete on table "tenants" violates foreign key constraint
+"parent_children_tenant_id_tenants_id_fk" on table "parent_children"
+```
+
+**Why:** `parent_children.tenant_id` → `tenants.id` uses `onDelete: "restrict"` (not cascade). Seed never creates those rows, but real parent flows / UI tests do. Wipe only deleted orders/catalog/legal/settings/audit, then tenants — FK blocked the tenant delete.
+
+**Fix applied:** both `wipeDemoTenant()` in `seed-demo.ts` and the confirm path in `cleanup-demo.ts` delete `schema.parentChildren` for the demo `tenantId` **before** deleting `tenants`.
+
+**Rule going forward:** when adding any table with a non-cascade FK to `tenants`, update wipe + cleanup order in the same PR. Restrict FKs are intentional for prod safety; demo wipe must be explicit.
+
+---
+
 ## Net process improvement
 
 For the *next* demo recording session, the right order is:

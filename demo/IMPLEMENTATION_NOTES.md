@@ -86,7 +86,7 @@ When `DEMO_PARENT_USER_ID` is set to a real `neon_auth."user"` UUID, the first 3
 
 If `apps/web/src/db/schema.ts` changes, the seed/cleanup may need updates. Symbols referenced:
 
-- Tables: `tenants`, `tenantSettings`, `tenantLegalVersions`, `catalogItems`, `catalogVariants`, `orders`, `orderLines`, `orderEvents`, `orderNotificationEvents`, `orderRefunds`, `auditEvents`.
+- Tables: `tenants`, `tenantSettings`, `tenantLegalVersions`, `catalogItems`, `catalogVariants`, `orders`, `orderLines`, `orderEvents`, `orderNotificationEvents`, `orderRefunds`, `auditEvents`, `parentChildren` (wipe/cleanup only — not seeded; `onDelete: restrict` on tenants requires explicit delete before tenant row removal).
 - Enums: `orderFulfilmentStatusEnum`, `orderPaymentStatusEnum`, `orderCompletionTypeEnum`, `orderFulfilmentMethodEnum`, `workflowModeEnum`, `notificationTypeEnum`, `notificationStatusEnum`, `orderEventTypeEnum`, `policyModeEnum`.
 
 If any of these symbols are renamed, the seed will fail to compile / load via tsx and the error will be obvious.

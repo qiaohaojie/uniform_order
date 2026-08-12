@@ -190,6 +190,9 @@ async function wipeDemoTenant(db: Db, tenantId: string) {
     .delete(schema.catalogItems)
     .where(eq(schema.catalogItems.tenantId, tenantId));
   await db
+    .delete(schema.parentChildren)
+    .where(eq(schema.parentChildren.tenantId, tenantId));
+  await db
     .delete(schema.tenantLegalVersions)
     .where(eq(schema.tenantLegalVersions.tenantId, tenantId));
   await db
