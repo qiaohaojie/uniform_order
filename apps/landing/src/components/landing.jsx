@@ -11,7 +11,7 @@ import {
 } from "../lib/components.jsx";
 
 const GITHUB_URL = "https://github.com/qiaohaojie/uniform_order";
-const SHOP_URL = "https://app.uniformorder.online";
+const SHOP_URL = import.meta.env.PUBLIC_SHOP_URL || (import.meta.env.DEV ? "http://localhost:3000" : "https://app.uniformorder.online");
 const DEMO_MAILTO = "mailto:hello@uniformorder.online?subject=Book%20a%20UniformOrder%20demo";
 
 // ---------- Shared bits ----------
@@ -62,8 +62,6 @@ function NavBar() {
           <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{ ...navLink, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
             <GithubIcon size={16} /> GitHub
           </a>
-          <a href={SHOP_URL} style={{ ...navLink, fontWeight: 600 }}>Sign in</a>
-          <Btn size="sm" href={DEMO_MAILTO}>Book a demo</Btn>
         </div>
       </Container>
     </div>
@@ -655,24 +653,26 @@ function PricingSection() {
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <Eyebrow n="06" label="Pricing &amp; Open Source" />
           <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 48, lineHeight: 1.1, letterSpacing: -0.8, margin: '16px 0 12px', color: INK }}>
-            Honest open-source options for non-profit P&amp;Cs.
+            Free for Schools and P&amp;Cs.
           </h2>
           <p style={{ fontFamily: SANS, fontSize: 17, color: INK_DIM, maxWidth: 640, margin: '0 auto', lineHeight: 1.55 }}>
-            Choose between 100% free self-hosting or our managed cloud service.
+            The software is open source and free forever. Self-host one school or many campuses — or ask us to set up and host it for you.
           </p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, alignItems: 'stretch' }}>
           <PlanCard
-            name="Community"
+            name="Free"
             price="$0"
             unit="free forever"
             sub="100% Open Source under MIT License"
+            highlight
+            badge="Open source"
             features={[
               'Full source code access on GitHub',
               'Self-host on your own infrastructure',
               'Direct Stripe Connect payouts',
-              'Unlimited parents &amp; orders',
-              'Community support &amp; GitHub Issues',
+              'Unlimited parents, products &amp; orders',
+              'Community support via GitHub Issues',
             ]}
             cta="View on GitHub"
             href={GITHUB_URL}
@@ -680,46 +680,46 @@ function PricingSection() {
             leadingIcon={<GithubIcon size={16}/>}
           />
           <PlanCard
-            name="Managed Cloud"
-            price="$149"
-            unit="/ month"
-            sub="Turnkey hosting &amp; management for P&amp;Cs"
-            highlight
+            name="Multi-campus"
+            price="$0"
+            unit="free forever"
+            sub="For school groups, dioceses &amp; networks"
             features={[
-              'Everything in Community',
-              'Hosted on uniformorder.online',
-              'Automated catalog digitisation',
-              'Custom school domain &amp; SSL setup',
-              'Automated DB backups &amp; platform updates',
-              'Priority email + phone P&amp;C support',
+              'Everything in Free',
+              'Multiple campuses, one install',
+              'Per-campus catalogues &amp; branding',
+              'Shared operator tooling across sites',
+              'Self-host — no licence fees',
             ]}
-            cta="Start 30-day trial"
-            href={SHOP_URL}
+            cta="View on GitHub"
+            href={GITHUB_URL}
+            target="_blank"
+            leadingIcon={<GithubIcon size={16}/>}
           />
           <PlanCard
-            name="Multi-campus"
+            name="Managed host"
             price="Talk to us"
-            sub="For school groups &amp; dioceses"
+            sub="We set up and host for your school"
             features={[
-              'Everything in Managed Cloud',
-              'Multiple campuses, one console',
-              'SSO for staff (Microsoft / Google)',
-              'Custom contracts &amp; invoicing',
-              'Dedicated onboarding',
+              'Everything in Free / Multi-campus',
+              'Setup &amp; catalog digitisation (consulting)',
+              'Hosted on uniformorder.online',
+              'Custom domain, SSL &amp; backups',
+              'Ongoing hosting + priority support',
             ]}
-            cta="Book a demo"
+            cta="Talk to us"
             href={DEMO_MAILTO}
           />
         </div>
         <div style={{ marginTop: 32, textAlign: 'center', fontFamily: SANS, fontSize: 13, color: INK_DIM }}>
-          Stripe processing: 1.7% + A$0.30 (domestic). Refunded fees are not retained.
+          Managed host includes a one-off consulting/setup fee plus ongoing hosting. Stripe processing: 1.7% + A$0.30 (domestic).
         </div>
       </Container>
     </section>
   );
 }
 
-function PlanCard({ name, price, unit, sub, features, cta, highlight, href, target, leadingIcon }) {
+function PlanCard({ name, price, unit, sub, features, cta, highlight, badge, href, target, leadingIcon }) {
   return (
     <div style={{
       background: highlight ? NAVY : '#fff',
@@ -733,7 +733,7 @@ function PlanCard({ name, price, unit, sub, features, cta, highlight, href, targ
     }}>
       {highlight && (
         <div style={{ position: 'absolute', top: -10, left: 24, background: GOLD, color: '#fff', fontFamily: SANS, fontSize: 10, fontWeight: 700, letterSpacing: 1.4, padding: '4px 10px', borderRadius: 4, textTransform: 'uppercase' }}>
-          Most schools choose this
+          {badge || 'Recommended'}
         </div>
       )}
       <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, marginBottom: 6 }}>{name}</div>
@@ -791,8 +791,8 @@ function FAQSection() {
       a: 'Yes! UniformOrder is released under the MIT License on GitHub. Anyone can inspect, clone, modify, and self-host the application without licensing fees.', defaultOpen: true },
     { q: 'Can our school self-host UniformOrder for free?',
       a: 'Yes. Clone the MIT-licensed repository on GitHub, follow the README to run it on infrastructure you control, and configure Stripe Connect for your school. You only pay for your own hosting and standard Stripe payment processing fees.' },
-    { q: 'What is the difference between Self-Hosted and Managed Cloud?',
-      a: 'Self-hosted gives complete control to your school&rsquo;s IT team or technical volunteers. Managed Cloud is operated by us to give P&amp;Cs a zero-maintenance turnkey solution with onboarding support and domain configuration.' },
+    { q: 'What is the difference between self-hosted Free and Managed host?',
+      a: 'Free (self-hosted) gives complete control to your school&rsquo;s IT team or technical volunteers — one campus or multi-campus — at no licence cost. Managed host is operated by us: setup consulting, catalog digitisation, hosting, backups, and priority support, with a consulting fee plus ongoing host price.' },
     { q: 'Who owns the money — UniformOrder or the school?',
       a: 'The school does. Payments use Stripe Connect destination charges, so funds settle directly into <em>your school&rsquo;s</em> Stripe account and payout into <em>your school&rsquo;s</em> bank account. UniformOrder never holds your float.' },
     { q: 'Is this just for NSW schools?',
@@ -849,15 +849,12 @@ function CTABanner() {
               Give your P&amp;C their Saturdays back.
             </h2>
             <p style={{ fontFamily: SANS, fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)', maxWidth: 480, margin: 0 }}>
-              Start 30 days free on our managed cloud, or clone the repository to self-host today for free under the MIT License.
+              Clone the repository and self-host for free under the MIT License — or try the live demo shop.
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Btn size="lg" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={18} />} style={{ background: '#fff', color: NAVY, borderColor: '#fff' }}>Explore on GitHub</Btn>
-            <Btn size="lg" variant="secondary" href={DEMO_MAILTO} style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Book a 20-minute demo</Btn>
-            <div style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.6, marginTop: 6 }}>
-              Or call 02 8123 4567 · weekdays 9–5 AEST
-            </div>
+            <Btn size="lg" variant="secondary" href={SHOP_URL} style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}>Try Demo App</Btn>
           </div>
         </div>
       </Container>

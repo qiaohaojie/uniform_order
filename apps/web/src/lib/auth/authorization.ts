@@ -44,16 +44,36 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       };
     };
     const user = result?.data?.user;
-    if (!user?.id || !user.email) return null;
-    return {
-      id: user.id,
-      email: normalizeEmail(user.email),
-      name: user.name ?? null,
-    };
+    if (user?.id && user.email) {
+      return {
+        id: user.id,
+        email: normalizeEmail(user.email),
+        name: user.name ?? null,
+      };
+    }
   } catch (error) {
     console.error("Failed to resolve auth session:", error);
-    return null;
   }
+
+  // Local development fallback: check for dev session cookie
+  if (process.env.NODE_ENV === "development") {
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      const devEmail = cookieStore.get("uo_dev_email")?.value;
+      if (devEmail) {
+        return {
+          id: `dev-${devEmail}`,
+          email: normalizeEmail(devEmail),
+          name: devEmail.split("@")[0],
+        };
+      }
+    } catch {
+      // Ignore errors when not in request context
+    }
+  }
+
+  return null;
 }
 
 export async function requireSessionUser() {

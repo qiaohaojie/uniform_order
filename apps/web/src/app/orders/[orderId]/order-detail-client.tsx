@@ -2,11 +2,10 @@
 
 import { MobileShell } from "@/components/mobile-shell";
 import { BottomNav } from "@/components/bottom-nav";
-import { Crest } from "@/components/crest";
+import { Crest, type CrestTenant } from "@/components/crest";
 import { Chip } from "@/components/chip";
 import { DoubleRule } from "@/components/double-rule";
 import { OrderStatusStepper, type StepperStatus } from "@/components/order-status-stepper";
-import type { Tenant } from "@/lib/data";
 
 type FulfilmentStatus = "to_prepare" | "ready" | "needs_attention" | "completed";
 type PaymentStatus = "pending" | "paid" | "partially_refunded" | "refunded";
@@ -113,7 +112,7 @@ export function OrderDetailClient({
   totalRefunded,
 }: {
   order: OrderRow;
-  crestTenant: Tenant;
+  crestTenant: CrestTenant;
   dbTenant: DbTenantRow;
   refunds: RefundRow[];
   totalRefunded: number;

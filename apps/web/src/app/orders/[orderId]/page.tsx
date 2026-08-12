@@ -9,7 +9,6 @@ import {
   getTotalRefunded,
   getTenant,
 } from "@/db/queries";
-import { TENANTS, type TenantId } from "@/lib/data";
 import { OrderDetailClient } from "./order-detail-client";
 
 export default async function OrderDetailPage({
@@ -32,8 +31,13 @@ export default async function OrderDetailPage({
   const dbTenant = await getTenant(order.tenantId);
   if (!dbTenant) notFound();
 
-  const crestTenant = TENANTS[order.tenantId as TenantId];
-  if (!crestTenant) notFound();
+  // Crest only needs id/accent/short — always build from DB so demo tenants
+  // (and any non-static tenant) render without a static TENANTS lookup.
+  const crestTenant = {
+    id: dbTenant.id,
+    accent: dbTenant.accent,
+    short: dbTenant.short,
+  };
 
   const refunds = await getOrderRefunds(orderId);
   const totalRefunded = await getTotalRefunded(orderId);

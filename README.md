@@ -35,7 +35,7 @@ uniform_order/                  # pnpm monorepo
 ├── apps/web                    # Next.js 16 App Router (parent + admin + platform)
 ├── apps/landing                # Astro marketing site
 ├── docs/                       # Specs, plans, deployment notes
-└── GTM/                        # Demo seed data + product walkthroughs
+└── demo/                        # Demo seed data + product walkthroughs
 ```
 
 | Layer | Choice |
@@ -91,9 +91,20 @@ See [`apps/web/.env.example`](apps/web/.env.example) for every variable. Minimum
 # Apply migrations (from apps/web)
 pnpm --filter web exec drizzle-kit migrate
 
-# Optional: seed demo tenants + catalog
+# Product tenants (imhs / rgsh) + catalog — day-to-day local shop data
 cd apps/web && node scripts/seed.mjs
+
+# Optional: isolated sales/QA demo tenants (demo-blank / demo-academy)
+# See demo/demo_data/README.md for full setup (copy .env.demo, Neon Auth users)
+cp demo/demo_data/.env.demo.example demo/demo_data/.env.demo
+# set DATABASE_URL in .env.demo (usually same as apps/web/.env.local)
+pnpm --filter web demo:seed
 ```
+
+| Seeder | Tenants | When to use |
+|---|---|---|
+| `apps/web/scripts/seed.mjs` | `imhs`, `rgsh` | Default local product data |
+| `pnpm --filter web demo:seed` | `demo-blank`, `demo-academy` | Sales demos, Kanban samples, product recordings |
 
 > **Note:** Neon HTTP does not support interactive transactions. Prefer `db.batch(...)` over `db.transaction(...)` when extending query code.
 
@@ -156,7 +167,7 @@ apps/web/src/
 └── lib/                   # auth, stripe, email, cart, analytics
 ```
 
-Deeper agent/developer guidance lives in [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md). Feature history and backlog: [`docs/completed.md`](docs/completed.md), [`docs/remaining_work.md`](docs/remaining_work.md). Deployment runbook: [`docs/prod_deployment.md`](docs/prod_deployment.md).
+Deeper agent/developer guidance lives in [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md). Local development setup: [`docs/Deployment/LOCAL_DEVELOPMENT.md`](docs/Deployment/LOCAL_DEVELOPMENT.md). Production deployment runbook: [`docs/Deployment/PRODUCTION_DEPLOYMENT.md`](docs/Deployment/PRODUCTION_DEPLOYMENT.md).
 
 ---
 
@@ -178,4 +189,4 @@ Deeper agent/developer guidance lives in [`AGENTS.md`](AGENTS.md) and [`CLAUDE.m
 
 ## Status
 
-Actively developed product used for Australian school uniform shops. Demo tenants and GTM fixtures are synthetic. Production configuration (live Stripe, Hostinger env, school onboarding) is out of band and not included in this repository.
+Actively developed product used for Australian school uniform shops. Demo tenants and demo fixtures are synthetic. Production configuration (live Stripe, Hostinger env, school onboarding) is out of band and not included in this repository.
