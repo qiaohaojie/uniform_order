@@ -178,6 +178,13 @@ Deeper agent/developer guidance lives in [`AGENTS.md`](AGENTS.md) and [`CLAUDE.m
 - Stripe webhooks verify signatures; order creation is idempotent on PaymentIntent ID.
 - Security headers (HSTS, CSP with per-request nonces, frame denial, etc.) are set in Next config + middleware.
 - Report vulnerabilities privately via GitHub Security Advisories or by emailing `support@pimspace.com` (see [`SECURITY.md`](SECURITY.md)). Do not file public issues for live secrets or payment bugs.
+- `/api/dev/*` login helpers exist for **local development only** and return 404 when `NODE_ENV=production`.
+
+---
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, checks, and PR expectations. Participation is governed by our [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ---
 
