@@ -57,18 +57,13 @@ apps/web/tests/print/.storage.json
 apps/web/tests/print/output/
 
 # Demo assets — generated artifacts and secrets
+demo/launch_video/
 demo/product_demo/recordings/output/
 demo/demo_data/.env.demo
 *.webm
 *.mp4
 # Launch-video generated and captured assets; keep the editable source files
-demo/launch_video/hyperframes/
-demo/launch_video/previews/
-demo/launch_video/remotion/
-demo/launch_video/renders/
-# Ship the open-source launch cut in the README (other renders stay ignored)
-!demo/launch_video/renders/
-!demo/launch_video/renders/uniformorder-open-source-launch.mp4
+
 
 # mcp
 .mcp.json

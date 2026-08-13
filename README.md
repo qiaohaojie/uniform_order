@@ -6,9 +6,9 @@ Parents order uniforms on their phone. Volunteers pack orders from a tablet. Mon
 
 **Website:** [uniformorder.online](https://uniformorder.online)
 
-[![UniformOrder open source launch — click to watch the full video](docs/assets/uniformorder-open-source-launch-preview.gif)](https://github.com/qiaohaojie/uniform_order/blob/main/demo/launch_video/renders/uniformorder-open-source-launch.mp4)
+[![UniformOrder: parents order, the P&C fulfils — now open source](docs/assets/uniformorder-open-source-launch-preview.gif)](https://l.pimspace.com/launch-video)
 
-**[▶ Watch full launch video (~40s, with audio)](https://github.com/qiaohaojie/uniform_order/blob/main/demo/launch_video/renders/uniformorder-open-source-launch.mp4)**
+**[▶ Watch launch video](https://l.pimspace.com/launch-video)**
 
 ---
 

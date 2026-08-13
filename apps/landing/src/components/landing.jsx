@@ -11,6 +11,7 @@ import {
 } from "../lib/components.jsx";
 
 const GITHUB_URL = "https://github.com/qiaohaojie/uniform_order";
+const LAUNCH_VIDEO_URL = "https://l.pimspace.com/launch-video";
 const SHOP_URL = import.meta.env.PUBLIC_SHOP_URL || (import.meta.env.DEV ? "http://localhost:3000" : "https://app.uniformorder.online");
 const DEMO_MAILTO = "mailto:support@pimspace.com?subject=Managed%20host%20help%20-%20";
 
@@ -96,8 +97,24 @@ function Hero() {
             UniformOrder is a free, open-source online uniform shop platform designed for Australian schools and P&amp;Cs. Self-host it for free on your own infrastructure or run it on our turnkey managed cloud.
           </p>
 
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
+          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 14, marginBottom: 28 }}>
             <Btn size="lg" href={GITHUB_URL} target="_blank" leading={<GithubIcon size={18} />}>Explore on GitHub</Btn>
+            <a
+              href={LAUNCH_VIDEO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontFamily: SANS,
+                fontSize: 14,
+                fontWeight: 600,
+                color: NAVY,
+                textDecoration: 'none',
+                borderBottom: `1px solid ${GOLD}`,
+                paddingBottom: 2,
+              }}
+            >
+              Watch Launch Video
+            </a>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontFamily: SANS, fontSize: 13, color: INK_DIM }}>
