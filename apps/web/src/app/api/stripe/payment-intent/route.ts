@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
-import { getCatalogPriceLookup, getTenant } from "@/db/queries";
+import { getCatalogLineLookup, getTenant } from "@/db/queries";
+import { db, pendingOrderSnapshots } from "@/db";
+import type { PendingOrderLineSnapshot } from "@/db/schema";
 import {
   assertTotalsMatch,
+  priceLookupKey,
   TotalsMismatchError,
 } from "@/lib/order-totals";
 import { requireSessionUser } from "@/lib/auth/authorization";
@@ -86,17 +89,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Build catalog price lookup and assert server-authoritative totals.
-    const priceLookup = await getCatalogPriceLookup(tenantId);
+    const catalogLookup = await getCatalogLineLookup(tenantId);
+    const priceLookup = new Map(
+      Array.from(catalogLookup, ([key, value]) => [key, value.price]),
+    );
+
+    const clientLines = lines as Array<{
+      itemId: string;
+      variantLabel: string;
+      unitPrice: number;
+      qty: number;
+      size?: unknown;
+    }>;
 
     let verified;
     try {
       verified = assertTotalsMatch({
-        lines: lines as Array<{
-          itemId: string;
-          variantLabel: string;
-          unitPrice: number;
-          qty: number;
-        }>,
+        lines: clientLines,
         delivery: delivery === "ship" ? "ship" : "pickup",
         received: { subtotal, gst, total: amountNumber },
         priceLookup,
@@ -159,6 +168,59 @@ export async function POST(req: NextRequest) {
     };
 
     const paymentIntent = await stripe.paymentIntents.create(intentParams);
+
+    // Persist the server-authoritative per-line snapshot, keyed by the
+    // PaymentIntent. POST /api/orders reads this instead of trusting the client
+    // `lines` it is handed after payment: the total is Stripe-locked, but
+    // without a stored snapshot the per-line breakdown (which drives receipts
+    // and partial-refund math) could be reshuffled by the client with the sum
+    // left intact. Prices/names come from the catalog rows just validated by
+    // `assertTotalsMatch`, so they are exactly what backed the charge — and,
+    // unlike a live re-read at order-POST time, they cannot drift if an
+    // operator edits a price in between.
+    //
+    // `size` is a non-price-bearing display field with no catalog counterpart,
+    // so it is carried through from the client as-is.
+    const lineSnapshot: PendingOrderLineSnapshot[] = clientLines.map((line) => {
+      // Non-null: assertTotalsMatch already threw 'unknown_variant' otherwise.
+      const catalogLine = catalogLookup.get(
+        priceLookupKey(line.itemId, line.variantLabel),
+      )!;
+      const size = typeof line.size === "string" ? line.size.trim() : "";
+      return {
+        itemId: line.itemId,
+        itemName: catalogLine.itemName,
+        variantLabel: line.variantLabel,
+        size: size.length > 0 ? size : null,
+        qty: line.qty,
+        unitPrice: catalogLine.price,
+      };
+    });
+
+    try {
+      await db
+        .insert(pendingOrderSnapshots)
+        .values({
+          paymentIntentId: paymentIntent.id,
+          tenantId,
+          userId: authResult.user.id,
+          fulfilmentMethod,
+          subtotal: String(verified.subtotal),
+          gst: String(verified.gst),
+          total: String(verified.total),
+          linesJson: lineSnapshot,
+        })
+        .onConflictDoNothing({ target: pendingOrderSnapshots.paymentIntentId });
+    } catch (err) {
+      // Never fail PI creation over the snapshot: the parent would be blocked
+      // from paying. The order POST falls back to the client lines (with drift
+      // logging) when no snapshot row exists.
+      console.error(
+        "Failed to persist pending order snapshot for",
+        paymentIntent.id,
+        err,
+      );
+    }
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,

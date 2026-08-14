@@ -218,9 +218,12 @@ export function CheckoutScreen({
           tenantId: tenant.id,
           amount: total,
           currency: "aud",
+          // `size` is included so the server-side per-line snapshot written at
+          // PI creation carries the full line (it is not price-bearing).
           lines: lines.map((l) => ({
             itemId: l.itemId,
             variantLabel: l.variantLabel,
+            size: l.size,
             unitPrice: l.price,
             qty: l.qty,
           })),

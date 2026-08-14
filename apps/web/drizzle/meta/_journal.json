@@ -120,6 +120,13 @@
       "when": 1781740800001,
       "tag": "0016_catalog_variants_unique_label",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781740800002,
+      "tag": "0017_pending_order_snapshots",
+      "breakpoints": true
     }
   ]
 }

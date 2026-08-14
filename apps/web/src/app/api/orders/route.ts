@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, orders, orderLines, tenants } from "@/db";
+import { db, orders, orderLines, tenants, pendingOrderSnapshots } from "@/db";
+import type { PendingOrderLineSnapshot } from "@/db/schema";
 import {
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
@@ -195,9 +196,10 @@ export async function POST(req: NextRequest) {
     // authoritative total and derive the rest server-side.
     //
     // Structural validation (qty, unitPrice types) stays — we still want to
-    // refuse garbage payloads. The per-line unitPrice we persist is the client
-    // PI-snapshot value (not a live-catalog re-read); this is fine because the
-    // total is bounded by what Stripe actually charged.
+    // refuse garbage payloads. The per-line prices we PERSIST come from the
+    // server-side snapshot written at PI creation (see the snapshot block
+    // below), so the client `lines` here are only a fallback for PaymentIntents
+    // that predate that table.
     const piTypeError = (() => {
       if (!Array.isArray(lines) || lines.length === 0) return "lines_invalid";
       for (const l of lines) {
@@ -300,24 +302,84 @@ export async function POST(req: NextRequest) {
       total: round2(authoritativeTotal),
     };
 
-    // Per-line price snapshot: persist the client-supplied unitPrice — the exact
-    // figure the parent saw and that backed the PaymentIntent — NOT a live-catalog
-    // re-read. A live re-read could diverge from the stored (Stripe-locked) subtotal
-    // if an operator edited a price between PI creation and order POST. Each
-    // unitPrice is already validated as a finite number upstream, and the TOTAL is
-    // Stripe-locked, so a tampered per-line price cannot change what was charged.
-    // We soft-assert Σ(line) ≈ subtotal below and log drift without blocking a paid order.
+    // ─── Per-line price snapshot ──────────────────────────────────────────
+    //
+    // The authoritative breakdown is the snapshot written at PI creation from
+    // catalog prices validated by `assertTotalsMatch` — exactly what backed the
+    // charge. Reading it here means the client `lines` in this (post-payment)
+    // body are never trusted for price, quantity or item name: a caller can no
+    // longer reshuffle prices across lines with the sum left intact and shape
+    // the amounts that drive receipts and partial-refund math.
+    //
+    // Fallback: a PaymentIntent created before this table existed (or whose
+    // snapshot insert failed) has no row. Those orders are already paid, so we
+    // keep the previous behaviour — persist the client PI-snapshot prices and
+    // soft-assert Σ(line) ≈ subtotal — rather than rejecting a paid order.
+    const [snapshot] = await db
+      .select({
+        linesJson: pendingOrderSnapshots.linesJson,
+        tenantId: pendingOrderSnapshots.tenantId,
+        userId: pendingOrderSnapshots.userId,
+      })
+      .from(pendingOrderSnapshots)
+      .where(
+        eq(pendingOrderSnapshots.paymentIntentId, normalizedStripePaymentIntentId),
+      )
+      .limit(1);
+
+    // A snapshot from a different tenant or a different parent means the PI id
+    // was not minted for this order — refuse rather than silently falling back
+    // to the client lines.
+    if (
+      snapshot &&
+      (snapshot.tenantId !== tenantId ||
+        (snapshot.userId !== null && snapshot.userId !== authResult.user.id))
+    ) {
+      return NextResponse.json(
+        { error: "payment_intent_snapshot_mismatch" },
+        { status: 403 },
+      );
+    }
+
+    const snapshotLines: PendingOrderLineSnapshot[] | null =
+      snapshot && Array.isArray(snapshot.linesJson) && snapshot.linesJson.length > 0
+        ? snapshot.linesJson
+        : null;
+
+    const persistedLines: PendingOrderLineSnapshot[] = snapshotLines ?? lines.map(
+      (l: {
+        itemId: string;
+        itemName: string;
+        variantLabel: string;
+        size?: string | null;
+        qty: number;
+        unitPrice: number;
+      }) => ({
+        itemId: l.itemId,
+        itemName: l.itemName,
+        variantLabel: l.variantLabel,
+        size: typeof l.size === "string" && l.size.trim() ? l.size.trim() : null,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+      }),
+    );
+
     const lineSubtotal = round2(
-      lines.reduce((s, l) => s + l.unitPrice * l.qty, 0)
+      persistedLines.reduce((s, l) => s + l.unitPrice * l.qty, 0)
     );
     if (Math.abs(lineSubtotal - verifiedTotals.subtotal) > 0.01) {
-      // Drift between the client line prices and the Stripe-locked subtotal. The
-      // customer already paid the correct total, so we do NOT reject — we surface
-      // the discrepancy for reconciliation and continue writing the paid order.
+      // Drift between the persisted line prices and the Stripe-locked subtotal.
+      // The customer already paid the correct total, so we do NOT reject — we
+      // surface the discrepancy for reconciliation and write the paid order.
       await serverCaptureException(
         "api-orders-post",
         new Error("line_subtotal_drift"),
-        { tenantId, lineSubtotal, subtotal: verifiedTotals.subtotal }
+        {
+          tenantId,
+          lineSubtotal,
+          subtotal: verifiedTotals.subtotal,
+          source: snapshotLines ? "pi_snapshot" : "client_lines",
+        }
       );
     }
 
@@ -378,21 +440,16 @@ export async function POST(req: NextRequest) {
         legalVersionId,
       });
       const linesInsert = db.insert(orderLines).values(
-        lines.map((line) => {
-          // Persist the client PI-snapshot price (see block comment above). The
-          // total is Stripe-locked, so this cannot change what was charged.
-          const unitPrice = line.unitPrice;
-          return {
-            orderId,
-            itemId: line.itemId,
-            itemName: line.itemName,
-            variantLabel: line.variantLabel,
-            size: line.size?.trim() || null,
-            qty: line.qty,
-            unitPrice: String(unitPrice),
-            lineTotal: String(round2(unitPrice * line.qty)),
-          };
-        })
+        persistedLines.map((line) => ({
+          orderId,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          variantLabel: line.variantLabel,
+          size: line.size,
+          qty: line.qty,
+          unitPrice: String(line.unitPrice),
+          lineTotal: String(round2(line.unitPrice * line.qty)),
+        }))
       );
       await db.batch([orderInsert, linesInsert]);
     };
@@ -438,6 +495,24 @@ export async function POST(req: NextRequest) {
       throw new Error("Unable to generate a unique order ID");
     }
 
+    // The snapshot has served its purpose — the authoritative copy now lives in
+    // order_lines. Best-effort: a stale row is harmless (the PI id is already
+    // consumed, and the orders idempotency check short-circuits any replay).
+    if (snapshot) {
+      try {
+        await db
+          .delete(pendingOrderSnapshots)
+          .where(
+            eq(
+              pendingOrderSnapshots.paymentIntentId,
+              normalizedStripePaymentIntentId,
+            ),
+          );
+      } catch (err) {
+        console.error("Failed to clear pending order snapshot", err);
+      }
+    }
+
     await serverCapture(authResult.user.id, "order_placed", {
       order_id: createdOrderId,
       tenant_id: tenantId,
@@ -448,7 +523,7 @@ export async function POST(req: NextRequest) {
       // PostHog revenue even though the charge and persisted order are correct.
       total: verifiedTotals.total,
       subtotal: verifiedTotals.subtotal,
-      item_count: lines.length,
+      item_count: persistedLines.length,
       $set: { email: normalizedParentEmail },
     });
 
