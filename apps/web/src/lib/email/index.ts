@@ -7,15 +7,38 @@ import { OrderReadyEmail } from "./templates/OrderReady";
 import { OrderHold } from "./templates/OrderHold";
 import { OrderRefund } from "./templates/OrderRefund";
 import { enqueueNotification, type EnqueueResult } from "./dispatch";
+import { serverCaptureException } from "@/lib/analytics/server";
 import React from "react";
 
 function requireAppUrl(): string {
   const url = process.env.NEXT_PUBLIC_APP_URL;
   if (!url) {
-    throw new Error("NEXT_PUBLIC_APP_URL is required to render email links");
+    throw new PermanentEmailError(
+      "NEXT_PUBLIC_APP_URL is required to render email links",
+    );
   }
   return url;
 }
+
+/**
+ * A failure that retrying cannot fix: missing config, an unrenderable template,
+ * a malformed recipient, or a provider 4xx. Callers stamp a terminal
+ * `failed` marker for these instead of releasing the claim for another attempt.
+ */
+export class PermanentEmailError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentEmailError";
+  }
+}
+
+/**
+ * How many times a *transient* confirmation send may be retried across Stripe
+ * webhook redeliveries before the slot is marked terminally failed. Without a
+ * cap, a provider that keeps 5xx-ing (or a request that keeps timing out) would
+ * be re-attempted on every redelivery forever with no actionable failed state.
+ */
+const CONFIRMATION_MAX_ATTEMPTS = 5;
 
 /**
  * Helper to fetch order with its line items and tenant information.
@@ -46,17 +69,89 @@ async function getOrderForEmail(orderId: string) {
 }
 
 /**
- * Releases a previously-claimed confirmation slot so a later delivery can retry.
- * Removes the `confirmation` key entirely (back to the un-claimed state).
+ * Marks a claimed confirmation slot as retryable so a later delivery re-claims
+ * it. Keeps the attempt counter so the retry budget is enforced across
+ * deliveries (the slot is never emptied — an empty slot would reset the count).
  */
-async function releaseConfirmationClaim(orderId: string) {
+async function markConfirmationRetry(
+  orderId: string,
+  attempts: number,
+  reason: string,
+) {
   await db
     .update(orders)
     .set({
-      emailsSent: sql`COALESCE(${orders.emailsSent}, '{}'::jsonb) - 'confirmation'`,
+      emailsSent: sql`jsonb_set(
+        COALESCE(${orders.emailsSent}, '{}'::jsonb),
+        '{confirmation}',
+        ${JSON.stringify({
+          status: "retry",
+          attempts,
+          lastError: reason.slice(0, 500),
+          lastAttemptAt: new Date().toISOString(),
+        })}::jsonb
+      )`,
       updatedAt: new Date(),
     })
     .where(eq(orders.id, orderId));
+}
+
+/**
+ * Marks the confirmation slot terminally failed. The slot stays non-null and
+ * non-`retry`, so the atomic claim below will never re-claim it: redeliveries
+ * stop re-attempting a send that cannot succeed, and the admin order card
+ * surfaces a "Confirmation failed" badge for manual follow-up.
+ */
+async function markConfirmationFailed(
+  orderId: string,
+  attempts: number,
+  reason: string,
+) {
+  // Dead-letter signal: every terminal confirmation failure is reported once,
+  // including the paths that do not throw out of the send.
+  await serverCaptureException(
+    "confirmation-email",
+    new Error(`confirmation_email_failed_permanently: ${reason}`),
+    { orderId, attempts },
+  );
+  await db
+    .update(orders)
+    .set({
+      emailsSent: sql`jsonb_set(
+        COALESCE(${orders.emailsSent}, '{}'::jsonb),
+        '{confirmation}',
+        ${JSON.stringify({
+          status: "failed",
+          attempts,
+          reason: reason.slice(0, 500),
+          failedAt: new Date().toISOString(),
+        })}::jsonb
+      )`,
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, orderId));
+}
+
+/**
+ * Records a failed send attempt: terminal for permanent failures or once the
+ * retry budget is spent, retryable otherwise.
+ */
+async function recordConfirmationFailure(
+  orderId: string,
+  attempts: number,
+  err: unknown,
+) {
+  const reason = err instanceof Error ? err.message : String(err);
+  const permanent = err instanceof PermanentEmailError;
+  if (permanent || attempts >= CONFIRMATION_MAX_ATTEMPTS) {
+    await markConfirmationFailed(
+      orderId,
+      attempts,
+      permanent ? reason : `max_attempts_exceeded: ${reason}`,
+    );
+    return;
+  }
+  await markConfirmationRetry(orderId, attempts, reason);
 }
 
 /**
@@ -69,38 +164,88 @@ async function releaseConfirmationClaim(orderId: string) {
  * stamps it, and the parent receives two emails. Instead we ATOMICALLY claim the
  * slot: a single conditional UPDATE flips a still-empty slot to a `pending`
  * marker, and only the caller whose UPDATE actually changed a row (RETURNING
- * non-empty) proceeds to send. On failure the claim is released so the next
- * delivery retries — preserving the prior "retry until sent once" behaviour.
+ * non-empty) proceeds to send.
+ *
+ * Failure handling is state-machined through the same slot so redeliveries stay
+ * bounded (issue #42):
+ *
+ *   absent                                  → claimable
+ *   {status:"pending", attempts}            → a send is in flight
+ *   {status:"retry", attempts, lastError}   → transient failure, re-claimable
+ *                                             while attempts < MAX
+ *   {status:"failed", attempts, reason}     → terminal; never re-claimed
+ *   {sentAt, messageId}                     → sent
+ *
+ * A permanent failure (missing config, unrenderable template, malformed
+ * recipient, provider 4xx) goes straight to `failed`; a transient one burns one
+ * attempt and lands on `failed` once the budget is spent. Either way the slot
+ * stops being re-claimed, so a config-broken deployment no longer re-attempts
+ * on every Stripe redelivery forever, and the failed state is visible to admins.
  */
 export async function sendOrderConfirmationEmail(orderId: string) {
-  // Atomic claim: only one concurrent caller can flip null -> pending.
+  // Atomic claim: only one concurrent caller can take the slot. Claimable when
+  // never attempted, or left `retry` with attempts still under budget. The
+  // attempt counter is carried forward so the budget spans redeliveries.
   const claimed = await db
     .update(orders)
     .set({
-      emailsSent: sql`jsonb_set(COALESCE(${orders.emailsSent}, '{}'::jsonb), '{confirmation}', '{"status":"pending"}'::jsonb)`,
+      emailsSent: sql`jsonb_set(
+        COALESCE(${orders.emailsSent}, '{}'::jsonb),
+        '{confirmation}',
+        jsonb_build_object(
+          'status', 'pending',
+          'attempts',
+          COALESCE((${orders.emailsSent} -> 'confirmation' ->> 'attempts')::int, 0) + 1
+        )
+      )`,
       updatedAt: new Date(),
     })
     .where(
-      sql`${orders.id} = ${orderId} AND (COALESCE(${orders.emailsSent}, '{}'::jsonb) -> 'confirmation') IS NULL`
+      sql`${orders.id} = ${orderId} AND (
+        (COALESCE(${orders.emailsSent}, '{}'::jsonb) -> 'confirmation') IS NULL
+        OR (
+          COALESCE(${orders.emailsSent} -> 'confirmation' ->> 'status', '') = 'retry'
+          AND COALESCE((${orders.emailsSent} -> 'confirmation' ->> 'attempts')::int, 0)
+              < ${CONFIRMATION_MAX_ATTEMPTS}
+        )
+      )`
     )
-    .returning({ id: orders.id });
+    .returning({ emailsSent: orders.emailsSent });
 
   if (claimed.length === 0) {
-    // Already claimed/sent by a concurrent or prior caller — nothing to do.
+    // Already sent, in flight, or terminally failed — nothing to do.
     return;
   }
 
+  const attempts =
+    Number(
+      (claimed[0].emailsSent as { confirmation?: { attempts?: number } })
+        ?.confirmation?.attempts,
+    ) || 1;
+
   const data = await getOrderForEmail(orderId);
   if (!data) {
+    // The order row is gone (or its tenant is): no amount of retrying helps,
+    // and there is no row left to stamp — log and stop.
     console.error(`[email] Order ${orderId} not found for confirmation email`);
-    await releaseConfirmationClaim(orderId);
+    await markConfirmationFailed(orderId, attempts, "order_not_found");
     return;
   }
 
   const { order, tenant, lines } = data;
 
+  // requireAppUrl() throws PermanentEmailError when NEXT_PUBLIC_APP_URL is
+  // unset — a config fault that every redelivery would hit identically.
+  let appUrl: string;
+  try {
+    appUrl = requireAppUrl();
+  } catch (err) {
+    await recordConfirmationFailure(orderId, attempts, err);
+    throw err;
+  }
+
   const refundPolicyUrl = tenant.currentLegalVersionId
-    ? `${requireAppUrl()}/${tenant.id}/refund-policy`
+    ? `${appUrl}/${tenant.id}/refund-policy`
     : null;
 
   const props = {
@@ -119,7 +264,7 @@ export async function sendOrderConfirmationEmail(orderId: string) {
     })),
     totalAmount: Number(order.total),
     shopEmail: tenant.shopEmail,
-    orderUrl: `${requireAppUrl()}/orders/${order.id}`,
+    orderUrl: `${appUrl}/orders/${order.id}`,
     refundPolicyUrl,
   };
 
@@ -131,13 +276,19 @@ export async function sendOrderConfirmationEmail(orderId: string) {
       plainText: true,
     });
   } catch (err) {
-    // Render failed before send — release the claim so a redelivery retries.
-    await releaseConfirmationClaim(orderId);
+    // The template failed to render for this order's data — deterministic, so
+    // retrying the same order would fail the same way. Terminal.
+    const failure = new PermanentEmailError(
+      `render_failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    await recordConfirmationFailure(orderId, attempts, failure);
     throw err;
   }
 
   let result: Awaited<ReturnType<typeof sendEmail>>;
   try {
+    // sendEmail throws only for 5xx / timeout (transient) and returns null for
+    // permanent rejections (malformed recipient, provider 4xx).
     result = await sendEmail({
       to: order.parentEmail,
       subject: `Order Confirmation #${order.id} - ${tenant.name}`,
@@ -145,7 +296,7 @@ export async function sendOrderConfirmationEmail(orderId: string) {
       text,
     });
   } catch (err) {
-    await releaseConfirmationClaim(orderId);
+    await recordConfirmationFailure(orderId, attempts, err);
     throw err;
   }
 
@@ -165,9 +316,14 @@ export async function sendOrderConfirmationEmail(orderId: string) {
       })
       .where(eq(orders.id, orderId));
   } else {
-    // Provider returned no id => not actually delivered. Release the claim so a
-    // later delivery can retry, matching the prior stamp-on-success behaviour.
-    await releaseConfirmationClaim(orderId);
+    // A null result means the provider permanently rejected the send (malformed
+    // recipient or a 4xx) — retrying is futile, so mark the slot failed and
+    // surface it rather than re-attempting on every redelivery.
+    await markConfirmationFailed(
+      orderId,
+      attempts,
+      "provider_rejected: no message id returned",
+    );
   }
 }
 

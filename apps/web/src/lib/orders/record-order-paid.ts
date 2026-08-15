@@ -33,8 +33,12 @@ type RecordOrderPaidArgs = {
  *  - `sendOrderConfirmationEmail` is self-idempotent under concurrency: it
  *    atomically CLAIMS the order's `emailsSent.confirmation` slot (a single
  *    conditional UPDATE flips an empty slot to `pending`), so only one of two
- *    concurrent callers sends. A send that failed on an earlier delivery
- *    releases the claim and is retried on the next, but only ever sends once.
+ *    concurrent callers sends. A transient failure leaves the slot `retry` and
+ *    the next delivery re-claims it, but only ever sends once. Retries are
+ *    bounded: a permanent failure (missing config, unrenderable template,
+ *    provider 4xx) — or exhausting the retry budget — stamps a terminal
+ *    `failed` marker that is never re-claimed, so a broken config cannot drive
+ *    unbounded futile re-sends across Stripe redeliveries.
  */
 export async function recordOrderPaid({
   orderId,

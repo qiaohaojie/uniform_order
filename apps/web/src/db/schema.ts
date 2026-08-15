@@ -173,6 +173,56 @@ export const catalogVariants = pgTable(
   }),
 );
 
+// ─── Pending order snapshots ─────────────────────────────────────────────────
+/**
+ * Server-authoritative per-line price snapshot, written at PaymentIntent
+ * creation and consumed by POST /api/orders when the order is finalised.
+ *
+ * The order TOTAL is Stripe-locked (verified against the PaymentIntent), but
+ * without this table the per-line breakdown could only come from the client
+ * body — letting a caller reshuffle prices across lines (sum unchanged) and
+ * shape the amounts that drive receipts and partial-refund math. The prices
+ * here are the catalog prices `assertTotalsMatch` validated at PI creation, so
+ * they are exactly what backed the charge — and, unlike a live catalog re-read
+ * at order-POST time, they cannot drift if an operator edits a price in between.
+ */
+export type PendingOrderLineSnapshot = {
+  itemId: string;
+  itemName: string;
+  variantLabel: string;
+  size: string | null;
+  qty: number;
+  /** Catalog price in AUD dollars at PI creation. */
+  unitPrice: number;
+};
+
+export const pendingOrderSnapshots = pgTable(
+  "pending_order_snapshots",
+  {
+    paymentIntentId: text("payment_intent_id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => neonAuthUsers.id, {
+      onDelete: "cascade",
+    }),
+    fulfilmentMethod: orderFulfilmentMethodEnum("fulfilment_method").notNull(),
+    subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
+    gst: numeric("gst", { precision: 10, scale: 2 }).notNull(),
+    total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+    linesJson: jsonb("lines_json")
+      .$type<PendingOrderLineSnapshot[]>()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // Abandoned checkouts leave rows behind; index the age so they can be swept.
+    createdAtIdx: index("idx_pending_order_snapshots_created_at").on(t.createdAt),
+  }),
+);
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 export const orders = pgTable(
   "orders",

@@ -45,10 +45,19 @@ export function OrderCard({
 }
 
 function BadgeRow({ order, mode }: { order: BoardOrder; mode: WorkflowMode }) {
-  const emails = (order.emailsSent ?? {}) as Record<
-    string,
-    "queued" | "sent" | "failed" | undefined
-  >;
+  // `ready`/`hold` slots hold a plain status string; `confirmation` holds an
+  // object ({sentAt,messageId} when sent, {status:"failed",…} when terminally
+  // failed — see lib/email/index.ts).
+  const emails = (order.emailsSent ?? {}) as Record<string, unknown>;
+  const status = (key: string): string | undefined => {
+    const slot = emails[key];
+    if (typeof slot === "string") return slot;
+    if (slot && typeof slot === "object" && "status" in slot) {
+      const s = (slot as { status?: unknown }).status;
+      return typeof s === "string" ? s : undefined;
+    }
+    return undefined;
+  };
   return (
     <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
       {order.paymentStatus !== "pending" &&
@@ -57,13 +66,16 @@ function BadgeRow({ order, mode }: { order: BoardOrder; mode: WorkflowMode }) {
           <Badge label="Paid" tone="green" />
         )}
       {order.pickSlipPrintedAt && <Badge label="Printed" tone="muted" />}
-      {mode === "standard" && emails.ready === "sent" && (
+      {status("confirmation") === "failed" && (
+        <Badge label="Confirmation failed" tone="red" />
+      )}
+      {mode === "standard" && status("ready") === "sent" && (
         <Badge label="Email sent" tone="muted" />
       )}
-      {mode === "standard" && emails.ready === "failed" && (
+      {mode === "standard" && status("ready") === "failed" && (
         <Badge label="Email failed" tone="red" />
       )}
-      {mode === "standard" && emails.hold === "sent" && (
+      {mode === "standard" && status("hold") === "sent" && (
         <Badge label="Hold notice sent" tone="amber" />
       )}
       {order.paymentStatus === "refunded" && (

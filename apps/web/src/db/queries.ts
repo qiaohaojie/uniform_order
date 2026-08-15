@@ -994,6 +994,43 @@ export const getCatalogPriceLookup = cache(async (tenantId: string): Promise<Map
 });
 
 /**
+ * Same keying as getCatalogPriceLookup, but also carries the catalog item name
+ * so /api/stripe/payment-intent can persist a fully server-derived per-line
+ * snapshot (price AND display name) rather than trusting the client's copy.
+ */
+export const getCatalogLineLookup = cache(
+  async (
+    tenantId: string,
+  ): Promise<Map<string, { price: number; itemName: string }>> => {
+    const rows = await db
+      .select({
+        itemId: catalogItems.id,
+        itemName: catalogItems.name,
+        varLabel: catalogVariants.label,
+        varPrice: catalogVariants.price,
+      })
+      .from(catalogItems)
+      .innerJoin(catalogVariants, eq(catalogVariants.itemId, catalogItems.id))
+      .where(
+        and(
+          eq(catalogItems.tenantId, tenantId),
+          eq(catalogItems.active, true),
+          eq(catalogVariants.active, true),
+        ),
+      );
+
+    const lookup = new Map<string, { price: number; itemName: string }>();
+    for (const r of rows) {
+      lookup.set(`${r.itemId}::${r.varLabel}`, {
+        price: Number(r.varPrice),
+        itemName: r.itemName,
+      });
+    }
+    return lookup;
+  },
+);
+
+/**
  * Single catalog item in the parent UI's `CatalogItem` shape, or null if
  * not found / inactive. Re-uses getActiveCatalog for request-scoped dedup.
  */
