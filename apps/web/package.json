@@ -8,6 +8,7 @@
     "start": "next start",
     "check-types": "tsc --noEmit",
     "print-qa": "node tests/print/print-qa.mjs",
+    "test:m03-intake-stock": "playwright test -c playwright.config.ts tests/preloved/m03-intake-stock.spec.ts",
     "demo:seed:dry": "node ../../demo/demo_data/run.mjs seed --dry-run",
     "demo:seed": "node ../../demo/demo_data/run.mjs seed",
     "demo:cleanup": "node ../../demo/demo_data/run.mjs cleanup",

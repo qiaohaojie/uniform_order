@@ -283,3 +283,185 @@
 - **Evidence:** apps/web/src/lib/gst-report.ts GST_REPORT_HEADERS; apps/web/src/app/admin/[tenant]/reports/page.tsx (RSC) + apps/web/src/components/export-csv-button.tsx (client).
 - **Links:** specs/milestones/M02-mixed-cart-gst.md
 
+## On neon-http, pair a qty upsert with an audit insert in one db.batch using INSERT…SELECT of the eligible unique-key row, not VALUES from INSERT RETURNING.
+- **ID:** ed514699-bd3e-4a96-a49e-49fdb5d7fcf8
+- **Date:** 2026-09-06T17:33:18Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2; @neondatabase/serverless neon-http (no db.transaction)
+- **Detail:** Batch queries are composed before INSERT…RETURNING is available. A VALUES event insert still writes when ON CONFLICT setWhere no-ops. Sequential upsert-then-event can leave a qty increment if the event write fails and a retry increments again. Gate the event SELECT with the same canAcceptOntoSku predicate as setWhere; empty upsert RETURNING is the refuse signal.
+- **Evidence:** apps/web/src/db/preloved-queries.ts acceptAndPool; decisions/M03.md bbe4b22a
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## On neon-http, a qty UPDATE followed by an audit INSERT can commit the first write and 409 the retry if already-zero is treated as ineligible; do not db.batch an ungated INSERT with a CAS UPDATE.
+- **ID:** b147633a-855c-463f-bbd1-a94a35ebf4ff
+- **Date:** 2026-09-06T17:33:18Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm 0.45.2, @neondatabase/serverless 1.1.0, neon-http
+- **Detail:** db.batch is a pipeline: the INSERT is not gated on UPDATE RETURNING, so a CAS miss still inserts and can duplicate the audit row under concurrency. Heal when the row is already in the post-update state and the listing-scoped audit event is missing, or use one SQL CTE. Reconstruct heal qty from accepted events since listedAt rather than treating qty<=0 as a hard reject.
+- **Evidence:** writeOffPrelovedSku in apps/web/src/db/preloved-queries.ts: update qtyOnHand to 0 then insertPrelovedIntakeEvent; retry hit qtyOnHand<=0 → PrelovedWriteOffNotEligibleError (409).
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## drizzle-orm 0.45 onConflictDoUpdate uses setWhere (not where) for UPDATE WHERE; a false predicate returns no row instead of throwing.
+- **ID:** 7f988378-2625-4157-ae55-7cac1c43372c
+- **Date:** 2026-09-06T17:33:18Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2
+- **Detail:** PostgreSQL INSERT … ON CONFLICT DO UPDATE SET … WHERE <false> does not update and RETURNING is empty. Treat empty returning as the refuse signal (here: expired in-stock SKU → PrelovedExpiredStockError / 409) rather than assuming the upsert always persisted.
+- **Evidence:** acceptAndPool setWhere on expired in-stock SKUs; apps/web/src/db/preloved-queries.ts
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## ON CONFLICT DO UPDATE that always assigns listing fields (price, notes) reprices pooled inventory on every qty increment.
+- **ID:** 8ff832d5-501b-4039-a804-b9e125201b88
+- **Date:** 2026-09-06T17:33:18Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2, Postgres numeric(10,2), neon-http
+- **Detail:** For pooled rows keyed by (item, size, condition), restock/listing fields must CASE WHEN qty_on_hand = 0; the increment itself is qty_on_hand + 1. Bound numerics interpolated as strings need ::numeric so CASE types match the column. Apply operator price and optional defect note only on empty-qty restock, not on every accept onto in-stock qty.
+- **Evidence:** apps/web/src/db/preloved-queries.ts acceptAndPool conflictSet; M03 second-accept of same item+size+Good
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## HeroUI v3 Tabs.Tab render props are typed as HTMLDivElement, so spreading onto next/link fails tsc.
+- **ID:** 3e904c64-be64-4119-99ee-fe31d677cce6
+- **Date:** 2026-09-06T17:33:18Z
+- **DocId:** 0600
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** @heroui/react ^3.1.0, next ^16.2.4
+- **Detail:** Official docs use render={(domProps: any) => <Link {...domProps} />}. Without any, tsc errors because onError/ref are HTMLDivElement handlers. Cast domProps as unknown as ComponentProps<typeof Link> and set href after the spread.
+- **Evidence:** pnpm check-types:web failed on Tabs.Tab render, then passed after the cast (preloved-section-tabs / admin-shell).
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## Read-only admin lists can stay RSC plus existing Tailwind table chrome; do not pull HeroUI Table just to list rows.
+- **ID:** 3fe8b07c-4a7a-4ae3-99eb-ed46fb96d2b1
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2 + @heroui/react ^3.1.0 + Tailwind v4; HeroUI OSS-only repo exception
+- **Detail:** HeroUI Table needs a client boundary. A stock list with no in-page actions matches reports/catalog semantic tables (parchment/rule/.tnum). New interactive desks can still use HeroUI OSS form primitives on a paper card.
+- **Evidence:** apps/web/src/app/admin/[tenant]/preloved/stock/page.tsx; intake desk uses Select/RadioGroup/TextField; write-offs kept the parchment table.
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## Child pages under a section layout that already renders AdminTopbar plus tabs will double the chrome if they also mount a per-page topbar.
+- **ID:** 3950cb2e-55f8-4853-aa8a-cfffebd9a8dd
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0600
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router nested layouts; admin AdminTopbar
+- **Detail:** Nested layouts own shared section title, feature-off notFound(), and in-section tabs. Catalog-style per-page AdminTopbar is only for routes without that layout. Children should render a padding-only body. Drop the extra topbar; do not invent a second title variant.
+- **Evidence:** apps/web/src/app/admin/[tenant]/preloved/layout.tsx owns title Preloved + Intake/Stock/Write-offs tabs; stock/page.tsx stacked a second AdminTopbar until removed; intake and write-offs were already children-only.
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## HeroUI v3 OSS Select on an admin form is a labelled button plus a listbox dialog of role=option, not a native select.
+- **ID:** 74b5bc50-5b55-4b97-ad84-7eb7c40c9c47
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** @heroui/react ^3.1.0; playwright-cli 0.1.9; Next.js 16.2.4
+- **Detail:** Trigger accessible name is placeholder + Label (e.g. Select a catalogue item Catalogue item). Playwright: click the trigger button, then getByRole('option', { name }). data-testid on Button is forwarded (intake-accept / intake-reject).
+- **Evidence:** playwright-cli session m03t5 against /admin/demo-academy/preloved/intake; snapshots 2026-09-06T16-25-20 through 16-26-46
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## A client PATCH that changes a server-layout flag needs router.refresh() or the shell keeps the old props until a full reload.
+- **ID:** 5bfb3358-cefb-41c9-85f2-85742e5b8105
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** Next.js ^16.2.4 App Router, RSC layout + client companion
+- **Detail:** Admin layout reads feature flags and passes them into a client shell. fetch() updates Neon but does not re-run the layout RSC. useRouter().refresh() rebuilds nav in place. Do not auto-push to the newly enabled section: disable would 404, and unrelated field saves should stay on the settings page.
+- **Evidence:** M03: enable persisted, Preloved nav stayed hidden until reload. Fix: router.refresh() after res.ok in preloved-settings-section.tsx. Same pattern already used in write-offs-client and order-detail-actions.
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## Feature-only client chrome in a shared shell client module ships on every page that imports the shell.
+- **ID:** c1c32730-ccea-4cd9-83a5-6d0534ed43f5
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4, HeroUI OSS 3.1.0
+- **Detail:** Next.js App Router bundles a use client module with all of its importers. HeroUI Tabs for Preloved lived in AdminShell, so dashboard/orders/catalog paid for that UI. Colocate section tabs next to the feature layout; keep the shared shell as nav-only.
+- **Evidence:** PrelovedSectionTabs moved to apps/web/src/app/admin/[tenant]/preloved/preloved-section-tabs.tsx; admin-shell.tsx dropped @heroui/react; typecheck stayed green.
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## Bind this worktree's Next origin; a listener on another localhost port may be a different repo.
+- **ID:** a7e0d8c0-d43d-4f02-932f-bf952a8417a0
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0100
+- **Kind:** note
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** playwright-cli 0.1.9; Next.js 16.2.4
+- **Detail:** lsof showed next-server on :3001 with cwd greatjob-marketplace. This worktree was started on :3000. Dev login cookie uo_dev_email works for admin if the email is shopEmail or PLATFORM_ADMIN_EMAILS. Do not drive Playwright against a foreign listener.
+- **Evidence:** ps/lsof cwd /Volumes/T7/georgeqiao/dev/greatjob-marketplace/apps/web vs this repo next on :3000
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## Web Playwright must not boot Next.js; resolve an already-running origin and use workers:1 for pooled-qty assertions.
+- **ID:** 5a97c43f-ef74-483e-b730-907d1328a2e0
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0100
+- **Kind:** note
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** playwright ^1.59.1; Next.js 16.2; pnpm workspace apps/web
+- **Detail:** resolveBaseURL prefers PLAYWRIGHT_BASE_URL, then .dev-local/web.url, then PORT. fullyParallel false and workers 1 so parallel accepts cannot race the same unique-key row. Assert qty = before+n, not a hardcoded empty-rack 1 then 2. Running playwright test against a missing server is not a product fail. Mint the operator session via GET /api/dev/login in development rather than Neon Auth UI or storage-state secrets.
+- **Evidence:** apps/web/playwright.config.ts; apps/web/tests/preloved/m03-intake-stock.spec.ts; package.json test:m03-intake-stock
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## In development, mint the operator session with GET /api/dev/login instead of Neon Auth UI or committed storage-state.
+- **ID:** 2a2fd5fe-bc1d-4dca-937e-4f3a45e35965
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0200
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4; Neon Auth; playwright ^1.59.1
+- **Detail:** This repo already has a uo_dev_email fallback. Spec hits /api/dev/login?email=… then Settings → Intake → Stock. Fails if NODE_ENV is not development; do not use it as a production e2e path.
+- **Evidence:** apps/web/tests/preloved/m03-intake-stock.spec.ts; playwright-cli m03t5 logged in as platformadmin against demo-academy
+- **Links:** specs/milestones/M03-operator-intake.md
+
+## drizzle-orm insert().select() requires selected fields in the same order as the table definition, including defaulted columns.
+- **ID:** fe2c4c6f-1fdc-444e-9e8b-733e7e66866b
+- **Date:** 2026-09-06T17:33:19Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M03
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2; neon-http
+- **Detail:** Omitting id, createdAt, or nullable rejectReason from an INSERT…SELECT into preloved_intake_events throws at runtime: selected fields are not the same or are in a different order compared to the table definition. List every column in schema.ts order; use gen_random_uuid()/now()/null for defaults.
+- **Evidence:** M03 accept POST 500 until acceptAndPool select listed id, rejectReason, createdAt. Playwright then passed: pnpm test:m03-intake-stock on nsbh polo size 10 Good twice.
+- **Links:** specs/milestones/M03-operator-intake.md
+

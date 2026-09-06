@@ -10,7 +10,8 @@
     "preview:landing": "pnpm --filter landing preview",
     "check-types": "pnpm -r check-types",
     "check-types:web": "pnpm --filter web check-types",
-    "print-qa": "pnpm --filter web print-qa"
+    "print-qa": "pnpm --filter web print-qa",
+    "test:m03-intake-stock": "pnpm --filter web test:m03-intake-stock"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

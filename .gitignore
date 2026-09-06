@@ -56,6 +56,12 @@ repomix-output.xml
 apps/web/tests/print/.storage.json
 apps/web/tests/print/output/
 
+# M03 preloved Playwright — reports / local storage state
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/tests/preloved/.storage.json
+
 # Demo assets — generated artifacts and secrets
 demo/launch_video/
 demo/product_demo/recordings/output/

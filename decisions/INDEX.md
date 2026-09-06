@@ -34,5 +34,13 @@
 - 2026-09-06 · c047df59 · build:M02 · Shared GstReportRow + GST_REPORT_HEADERS in lib/gst-report.ts (drift from client-local CsvRow)
 - 2026-09-06 · 23ee3c5b · build:M02 · Fail-closed PaymentIntent creation if the pending snapshot insert fails; plain insert, no onConflict
 
+## M03  ([decisions/M03.md](M03.md)) — 6
+- 2026-09-06 · bbe4b22a · build:M03 · Accept SKU upsert and accepted event run in one db.batch via INSERT…SELECT
+- 2026-09-06 · 7ef0c42e · build:M03 · Refuse accept onto expired in-stock SKUs until write-off zeros qty
+- 2026-09-06 · 3426375d · build:M03 · Hand-write SQL migration 0019 defect_note + journal idx 19; no drizzle snapshot
+- 2026-09-06 · 1363642b · build:M03 · Skip SKU photos on M03; defect note is the inspection record
+- 2026-09-06 · 349ef46e · build:M03 · Write-off records preloved_intake_events written_off only; no audit_events row
+- 2026-09-06 · 4e507191 · build:M03 · drizzle insert().select() for intake events must list every table column in schema order
+
 ## Misc  ([decisions/misc.md](misc.md)) — 1
 - 2026-09-06 · 2f31cd1c · onboard · HeroUI OSS only — this repo is open source

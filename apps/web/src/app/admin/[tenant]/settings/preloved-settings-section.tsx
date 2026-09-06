@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
   isPersistablePriceFractionOfNew,
@@ -39,6 +40,7 @@ export function PrelovedSettingsSection({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const router = useRouter();
 
   const parsedFraction = Number(priceFraction);
   const showFractionWarning =
@@ -79,6 +81,7 @@ export function PrelovedSettingsSection({
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Failed to save preloved settings.");
       }
+      router.refresh();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {

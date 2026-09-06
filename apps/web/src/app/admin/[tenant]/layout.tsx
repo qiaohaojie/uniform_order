@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { getTenant, countToPrepare } from "@/db/queries";
+import { getPrelovedSettings } from "@/db/preloved-queries";
 import {
   getSessionUser,
   isPlatformAdminEmail,
@@ -34,7 +35,10 @@ export default async function AdminTenantLayout({
     redirect(`/${tenant}`);
   }
 
-  const newOrderCount = await countToPrepare(tenant);
+  const [newOrderCount, prelovedSettings] = await Promise.all([
+    countToPrepare(tenant),
+    getPrelovedSettings(tenantRecord.id),
+  ]);
 
   return (
     <AdminShell
@@ -43,6 +47,7 @@ export default async function AdminTenantLayout({
       userName={user.name}
       userEmail={user.email}
       newOrderCount={newOrderCount}
+      prelovedEnabled={prelovedSettings.prelovedEnabled}
     >
       {children}
     </AdminShell>

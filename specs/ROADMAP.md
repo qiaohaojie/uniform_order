@@ -92,7 +92,7 @@ graph TD
 
 ### Wave 2
 - [x] [M02 — Mixed-cart GST](./milestones/M02-mixed-cart-gst.md) — deps: M01
-- [ ] [M03 — Operator intake and write-off](./milestones/M03-operator-intake.md) — deps: M01
+- [x] [M03 — Operator intake and write-off](./milestones/M03-operator-intake.md) — deps: M01
 - [ ] [M04 — Donate page and refund policy](./milestones/M04-donate-and-refund-policy.md) — deps: M01
 
 ### Wave 3
@@ -104,7 +104,7 @@ graph TD
 ## Project Definition of Done
 
 - [x] A tenant can opt in to a donation-only preloved rack and configure price fraction, hold days, refuse list, and GST-free declaration (default off).
-- [ ] Operators accept/reject donated garments, pool qty by source item + size + condition, price from the new variant (default 50%, warn above cap), and write off expired stock to charity.
+- [x] Operators accept/reject donated garments, pool qty by source item + size + condition, price from the new variant (default 50%, warn above cap), and write off expired stock to charity.
 - [ ] Parents see donate instructions (drop-off, not self-listing), browse preloved next to new, add mixed carts with stock caps, and pay the school’s Stripe Connect account.
 - [x] Donated preloved lines are GST-free only when the tenant declared `donatedGstFree`; reports CSV splits GST-free preloved vs taxable sales.
 - [ ] Paid preloved qty decrements; pick slips mark PRELOVED; oversell fails PaymentIntent creation.

@@ -242,6 +242,7 @@ export const prelovedSkus = pgTable(
     gstFree: boolean("gst_free").notNull().default(false),
     active: boolean("active").notNull().default(true),
     imageUrl: text("image_url"),
+    defectNote: text("defect_note"),
     listedAt: timestamp("listed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

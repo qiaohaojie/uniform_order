@@ -1,13 +1,21 @@
 /**
  * Phase 1 preloved domain types and in-code defaults.
  * Donation-only: no consignment or commission fields on the public settings type.
+ * This module must not import the DB client.
  */
+import { round2 } from "./order-totals";
 
 export const PRELOVED_INTAKE_MODE = "donation_only" as const;
 export type PrelovedIntakeMode = typeof PRELOVED_INTAKE_MODE;
 
 export const PRELOVED_CONDITIONS = ["good", "fair"] as const;
 export type PrelovedCondition = (typeof PRELOVED_CONDITIONS)[number];
+
+export function formatPrelovedCondition(condition: PrelovedCondition): string {
+  if (condition === "good") return "Good";
+  if (condition === "fair") return "Fair";
+  return condition;
+}
 
 export const PRELOVED_INTAKE_KINDS = ["accepted", "rejected", "written_off"] as const;
 export type PrelovedIntakeKind = (typeof PRELOVED_INTAKE_KINDS)[number];
@@ -21,9 +29,6 @@ export const DEFAULT_PRICE_FRACTION_OF_NEW = 0.5;
 export const MIN_PRICE_FRACTION_OF_NEW = 0.01;
 export const MAX_PRICE_FRACTION_OF_NEW = 2;
 export const DEFAULT_HOLD_DAYS = 365;
-
-export const PRELOVED_SKU_UNIQUE_CONSTRAINT =
-  "preloved_skus_tenant_item_size_condition_unique";
 
 export type PrelovedSettings = {
   tenantId: string;
@@ -44,17 +49,42 @@ export type PrelovedSettingsPatch = {
   refuseList?: string[];
 };
 
-export type InsertPrelovedSkuInput = {
+export type AcceptAndPoolInput = {
   tenantId: string;
   sourceItemId: string;
   size: string;
   condition: PrelovedCondition;
+  price?: number;
+  defectNote?: string | null;
+  actorId?: string | null;
+};
+
+export type RejectPrelovedIntakeInput = {
+  tenantId: string;
+  actorId?: string | null;
+  sourceItemId?: string | null;
+  size?: string | null;
+  condition?: PrelovedCondition | null;
+  rejectReason: string;
+};
+
+export type WriteOffPrelovedSkuInput = {
+  tenantId: string;
+  skuId: string;
+  actorId?: string | null;
+};
+
+export type PrelovedStockListItem = {
+  id: string;
+  sourceItemId: string;
+  itemName: string;
+  size: string;
+  condition: PrelovedCondition;
   price: number;
   qtyOnHand: number;
-  gstFree?: boolean;
-  active?: boolean;
-  imageUrl?: string | null;
-  expiresAt?: Date | null;
+  listedAt: Date;
+  expiresAt: Date | null;
+  defectNote: string | null;
 };
 
 export type InsertPrelovedIntakeEventInput = {
@@ -109,17 +139,72 @@ export function parseRefuseList(value: unknown): string[] {
   return [...DEFAULT_REFUSE_LIST];
 }
 
-export class PrelovedSkuConflictError extends Error {
-  readonly code = "23505";
-  readonly constraint = PRELOVED_SKU_UNIQUE_CONSTRAINT;
+export class PrelovedCatalogMatchError extends Error {
+  readonly code = "catalog_mismatch";
 
-  constructor(cause?: unknown) {
-    super(
-      "A preloved SKU already exists for this tenant, item, size, and condition.",
-    );
-    this.name = "PrelovedSkuConflictError";
-    if (cause !== undefined) {
-      this.cause = cause;
-    }
+  constructor(message = "No active catalog item with that size for this tenant.") {
+    super(message);
+    this.name = "PrelovedCatalogMatchError";
   }
+}
+
+export class PrelovedWriteOffNotEligibleError extends Error {
+  readonly code = "write_off_not_eligible";
+
+  constructor(message = "SKU is not eligible for write-off.") {
+    super(message);
+    this.name = "PrelovedWriteOffNotEligibleError";
+  }
+}
+
+export class PrelovedExpiredStockError extends Error {
+  readonly code = "expired_stock";
+
+  constructor(
+    message = "Write off expired stock for this item, size, and condition before accepting another garment.",
+  ) {
+    super(message);
+    this.name = "PrelovedExpiredStockError";
+  }
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Same 2dp rounding as checkout `round2`. */
+export function roundPrelovedPrice(value: number): number {
+  return round2(value);
+}
+
+/** Default preloved price: round2(new variant × tenant fraction). */
+export function defaultPrelovedPrice(
+  newVariantPrice: number,
+  priceFractionOfNew: number = DEFAULT_PRICE_FRACTION_OF_NEW,
+): number {
+  return roundPrelovedPrice(newVariantPrice * priceFractionOfNew);
+}
+
+/** Soft cap: operator price above default is allowed, but flagged. */
+export function isPrelovedPriceAboveCap(
+  operatorPrice: number,
+  newVariantPrice: number,
+  priceFractionOfNew: number = DEFAULT_PRICE_FRACTION_OF_NEW,
+): boolean {
+  return (
+    roundPrelovedPrice(operatorPrice) >
+    defaultPrelovedPrice(newVariantPrice, priceFractionOfNew)
+  );
+}
+
+export function prelovedExpiresAt(listedAt: Date, holdDays: number): Date {
+  const days = Number.isFinite(holdDays) ? holdDays : DEFAULT_HOLD_DAYS;
+  return new Date(listedAt.getTime() + days * MS_PER_DAY);
+}
+
+/** Persist actor_id only when the session id is a UUID; dev- fallback ids become null. */
+export function parseActorId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return UUID_RE.test(trimmed) ? trimmed : null;
 }

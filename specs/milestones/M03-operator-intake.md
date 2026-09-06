@@ -5,7 +5,7 @@
      Plan must not silently redesign WHAT/WHY from the approved source spec. -->
 
 ## Status
-pending            <!-- pending | in-progress | complete -->
+complete            <!-- pending | in-progress | complete -->
 
 ## Wave
 2
@@ -50,15 +50,15 @@ Give the P&C volunteer the paper-form intake desk: accept or reject a donated ga
 - `apps/web/src/index.css` — existing parchment/navy tokens
 
 ## Acceptance criteria
-- [ ] With preloved enabled, admin shows Preloved → Intake, stock, write-offs
-- [ ] Accepting a washed size-10 polo Good pools onto one SKU and increments qty
-- [ ] A second accept of the same item+size+Good increments the same SKU, not a second row
-- [ ] Default price is 50% (or configured fraction) of the matching new variant; warning shown if operator types above the cap
-- [ ] Reject with reason does not increase qty and does not create a parent-visible listing
-- [ ] Write-off of an expired SKU sets qty to 0 and records an audit/intake event; no parent payout
-- [ ] Consignment controls are absent
-- [ ] `pnpm check-types:web` passes
-- [ ] Playwright or equivalent: operator can complete accept → stock list shows qty (admin desktop viewport)
+- [x] With preloved enabled, admin shows Preloved → Intake, stock, write-offs
+- [x] Accepting a washed size-10 polo Good pools onto one SKU and increments qty
+- [x] A second accept of the same item+size+Good increments the same SKU, not a second row
+- [x] Default price is 50% (or configured fraction) of the matching new variant; warning shown if operator types above the cap
+- [x] Reject with reason does not increase qty and does not create a parent-visible listing
+- [x] Write-off of an expired SKU sets qty to 0 and records an audit/intake event; no parent payout
+- [x] Consignment controls are absent
+- [x] `pnpm check-types:web` passes
+- [x] Playwright or equivalent: operator can complete accept → stock list shows qty (admin desktop viewport)
 
 ## Verification
 - **Commands:** not configured · `pnpm check-types:web` · no test suite

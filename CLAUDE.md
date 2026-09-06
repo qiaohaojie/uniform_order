@@ -39,7 +39,7 @@ pnpm monorepo with one app: `apps/web` (Next.js 16, App Router, RSC + server act
 ### Portals
 
 - **Parent shop** — `app/[tenant]/` — mobile-first via `MobileShell` (max 430px): catalog → item → cart → checkout → confirmation.
-- **School admin** — `app/admin/[tenant]/` — desktop sidebar via `AdminShell`. Dashboard, Orders (Kanban), Catalog, Bulk Upload, Reports, Settings.
+- **School admin** — `app/admin/[tenant]/` — desktop sidebar via `AdminShell`. Dashboard, Orders (Kanban), Catalog, Preloved (Intake, stock, write-offs), Bulk Upload, Reports, Settings.
 - **Platform console** *(in design — `docs/superpowers/specs/2026-05-09-platform-portal-design.md`)* — `/platform`, gated to platform-admin emails.
 
 `app/page.tsx` is the parent home / school picker.

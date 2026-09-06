@@ -12,6 +12,7 @@ function AdminIcon({ kind, size = 16, color = "currentColor" }: { kind: string; 
   if (kind === "home") return <svg {...p}><path d="M3 9.5 L12 3 L21 9.5 V20 H15 V15 H9 V20 H3 Z" /></svg>;
   if (kind === "orders") return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M8 8 H16 M8 12 H16 M8 16 H12" /></svg>;
   if (kind === "catalog") return <svg {...p}><rect x="2" y="3" width="9" height="9" rx="1" /><rect x="13" y="3" width="9" height="9" rx="1" /><rect x="2" y="14" width="9" height="7" rx="1" /><rect x="13" y="14" width="9" height="7" rx="1" /></svg>;
+  if (kind === "preloved") return <svg {...p}><path d="M9 7a3 3 0 0 1 6 0" /><path d="M4 11 L12 7.5 L20 11" /><path d="M8 11.5 V19 a1 1 0 0 0 1 1 h6 a1 1 0 0 0 1 -1 v-7.5" /></svg>;
   if (kind === "upload") return <svg {...p}><path d="M21 15 V19 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 V15" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>;
   if (kind === "chart") return <svg {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>;
   if (kind === "settings") return <svg {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
@@ -19,14 +20,34 @@ function AdminIcon({ kind, size = 16, color = "currentColor" }: { kind: string; 
   return null;
 }
 
-const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", icon: "home" },
-  { id: "orders", label: "Orders", icon: "orders" },
-  { id: "catalog", label: "Catalog", icon: "catalog" },
-  { id: "upload", label: "Bulk upload", icon: "upload" },
-  { id: "reports", label: "Reports", icon: "chart" },
-  { id: "settings", label: "Settings", icon: "settings" },
-] as const;
+type AdminNavItem = {
+  id: string;
+  label: string;
+  icon: string;
+  href: string;
+};
+
+function adminNavItems(tenantId: string, prelovedEnabled: boolean): AdminNavItem[] {
+  const items: AdminNavItem[] = [
+    { id: "dashboard", label: "Dashboard", icon: "home", href: `/admin/${tenantId}/dashboard` },
+    { id: "orders", label: "Orders", icon: "orders", href: `/admin/${tenantId}/orders` },
+    { id: "catalog", label: "Catalog", icon: "catalog", href: `/admin/${tenantId}/catalog` },
+  ];
+  if (prelovedEnabled) {
+    items.push({
+      id: "preloved",
+      label: "Preloved",
+      icon: "preloved",
+      href: `/admin/${tenantId}/preloved/intake`,
+    });
+  }
+  items.push(
+    { id: "upload", label: "Bulk upload", icon: "upload", href: `/admin/${tenantId}/upload` },
+    { id: "reports", label: "Reports", icon: "chart", href: `/admin/${tenantId}/reports` },
+    { id: "settings", label: "Settings", icon: "settings", href: `/admin/${tenantId}/settings` },
+  );
+  return items;
+}
 
 type TenantBrand = { id: string; name: string; short: string; accent: string };
 
@@ -36,6 +57,7 @@ export function AdminShell({
   userName,
   userEmail,
   newOrderCount,
+  prelovedEnabled = false,
   children,
 }: {
   tenantId: string;
@@ -43,12 +65,14 @@ export function AdminShell({
   userName?: string | null;
   userEmail: string;
   newOrderCount?: number;
+  prelovedEnabled?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const navItems = adminNavItems(tenantId, prelovedEnabled);
 
-  const activeId = NAV_ITEMS.find((n) => pathname.includes(`/admin/${tenantId}/${n.id}`))?.id ?? "dashboard";
+  const activeId = navItems.find((n) => pathname.includes(`/admin/${tenantId}/${n.id}`))?.id ?? "dashboard";
   const displayName = userName?.trim() || userEmail;
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -118,9 +142,9 @@ export function AdminShell({
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3.5">
-          {NAV_ITEMS.map((n) => {
+          {navItems.map((n) => {
             const on = n.id === activeId;
-            const href = `/admin/${tenantId}/${n.id}`;
+            const href = n.href;
             const badge = n.id === "orders" && (newOrderCount ?? 0) > 0
               ? `${newOrderCount} to prepare`
               : undefined;
@@ -198,16 +222,18 @@ export function AdminTopbar({
   title,
   kicker,
   right,
+  flush = false,
 }: {
   title: string;
   kicker?: string;
   right?: ReactNode;
+  flush?: boolean;
 }) {
   return (
     <div
       data-no-print
       className="h-[68px] px-7 flex items-center gap-4 flex-shrink-0 bg-white"
-      style={{ borderBottom: "1px solid var(--color-rule)" }}
+      style={flush ? undefined : { borderBottom: "1px solid var(--color-rule)" }}
     >
       <div className="flex-1 min-w-0">
         {kicker && (
