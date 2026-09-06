@@ -18,6 +18,13 @@ Welcome to the **UniformOrder** documentation directory.
 
 ---
 
+## Plans (not yet built)
+
+- [**Second-hand / preloved uniforms**](second-hand/README.md)  
+  Research of the common Australian P&C preloved shop, plus a plan to copy that model. **Phase 1 approved: donation-only rack** (shop lists, same pickup). Consignment later. Not a parent-to-parent marketplace.
+
+---
+
 ## Primary Guides
 
 - [**Technical overview**](TECHNICAL.md)  
