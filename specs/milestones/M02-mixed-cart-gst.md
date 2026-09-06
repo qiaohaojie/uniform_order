@@ -5,7 +5,7 @@
      Plan must not silently redesign WHAT/WHY from the approved source spec. -->
 
 ## Status
-pending            <!-- pending | in-progress | complete -->
+complete            <!-- pending | in-progress | complete -->
 
 ## Wave
 2
@@ -48,12 +48,12 @@ Stop treating every dollar of an order as GST-inclusive 1/11. New lines stay tax
 - `apps/web/src/db/queries.ts` — GST month rollups (do not also take on M03 intake queries)
 
 ## Acceptance criteria
-- [ ] Cart of only new items: GST still 1/11 of (subtotal + shipping), same as today
-- [ ] Mixed cart with `donatedGstFree = false`: preloved lines taxable; GST = 1/11 of full taxable total
-- [ ] Mixed cart with `donatedGstFree = true`: preloved line amounts excluded from the GST 1/11 base; order `gst` column matches
-- [ ] PaymentIntent creation rejects mismatched client GST/total using the new formula
-- [ ] Reports CSV exposes GST-free preloved sales vs taxable sales
-- [ ] `pnpm check-types:web` passes
+- [x] Cart of only new items: GST still 1/11 of (subtotal + shipping), same as today
+- [x] Mixed cart with `donatedGstFree = false`: preloved lines taxable; GST = 1/11 of full taxable total
+- [x] Mixed cart with `donatedGstFree = true`: preloved line amounts excluded from the GST 1/11 base; order `gst` column matches
+- [x] PaymentIntent creation rejects mismatched client GST/total using the new formula
+- [x] Reports CSV exposes GST-free preloved sales vs taxable sales
+- [x] `pnpm check-types:web` passes
 
 ## Verification
 - **Commands:** not configured · `pnpm check-types:web` · no test suite

@@ -1,16 +1,85 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { and, eq, inArray } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe";
 import { getCatalogLineLookup, getTenant } from "@/db/queries";
-import { db, pendingOrderSnapshots } from "@/db";
+import { getPrelovedSettings } from "@/db/preloved-queries";
+import { catalogItems, db, pendingOrderSnapshots, prelovedSkus } from "@/db";
 import type { PendingOrderLineSnapshot } from "@/db/schema";
 import {
   assertTotalsMatch,
+  prelovedPriceLookupKey,
   priceLookupKey,
   TotalsMismatchError,
+  type LineInput,
 } from "@/lib/order-totals";
 import { requireSessionUser } from "@/lib/auth/authorization";
 import { applyRateLimit } from "@/lib/rate-limit";
+
+const PRELOVED_SKU_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type ClientOrderLine = {
+  itemId: string;
+  variantLabel: string;
+  unitPrice: number;
+  qty: number;
+  size?: unknown;
+  prelovedSkuId?: unknown;
+};
+
+type PrelovedLineLookup = {
+  price: number;
+  itemName: string;
+  sourceItemId: string;
+  size: string;
+  condition: "good" | "fair";
+};
+
+function readPrelovedSkuId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function getPrelovedLineLookup(
+  tenantId: string,
+  skuIds: string[],
+): Promise<Map<string, PrelovedLineLookup>> {
+  const lookup = new Map<string, PrelovedLineLookup>();
+  const queryIds = [...new Set(skuIds.filter((id) => PRELOVED_SKU_ID_RE.test(id)))];
+  if (queryIds.length === 0) return lookup;
+
+  const rows = await db
+    .select({
+      id: prelovedSkus.id,
+      price: prelovedSkus.price,
+      condition: prelovedSkus.condition,
+      sourceItemId: prelovedSkus.sourceItemId,
+      size: prelovedSkus.size,
+      itemName: catalogItems.name,
+    })
+    .from(prelovedSkus)
+    .innerJoin(catalogItems, eq(catalogItems.id, prelovedSkus.sourceItemId))
+    .where(
+      and(
+        eq(prelovedSkus.tenantId, tenantId),
+        eq(prelovedSkus.active, true),
+        inArray(prelovedSkus.id, queryIds),
+      ),
+    );
+
+  for (const row of rows) {
+    lookup.set(row.id, {
+      price: Number(row.price),
+      itemName: row.itemName,
+      sourceItemId: row.sourceItemId,
+      size: row.size,
+      condition: row.condition,
+    });
+  }
+  return lookup;
+}
 
 // TODO(refunds): When a refund route is added (e.g. POST /api/stripe/refund),
 // it MUST pass `reverse_transfer: true` (and usually `refund_application_fee: true`)
@@ -88,24 +157,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build catalog price lookup and assert server-authoritative totals.
+    // Build catalog + preloved price lookup and assert server-authoritative totals.
+    // Client `gstFree` is never trusted: new lines are taxable; preloved lines
+    // inherit the tenant `donatedGstFree` flag at PI creation.
+    const clientLines = lines as ClientOrderLine[];
+    const prelovedSkuIds = clientLines
+      .map((line) => readPrelovedSkuId(line.prelovedSkuId))
+      .filter((id): id is string => id !== undefined);
+
     const catalogLookup = await getCatalogLineLookup(tenantId);
+    const [prelovedSettings, prelovedLookup] =
+      prelovedSkuIds.length > 0
+        ? await Promise.all([
+            getPrelovedSettings(tenantId),
+            getPrelovedLineLookup(tenantId, prelovedSkuIds),
+          ])
+        : [null, new Map<string, PrelovedLineLookup>()];
+    const donatedGstFree = prelovedSettings?.donatedGstFree === true;
+
     const priceLookup = new Map(
       Array.from(catalogLookup, ([key, value]) => [key, value.price]),
     );
+    for (const [skuId, sku] of prelovedLookup) {
+      priceLookup.set(prelovedPriceLookupKey(skuId), sku.price);
+    }
 
-    const clientLines = lines as Array<{
-      itemId: string;
-      variantLabel: string;
-      unitPrice: number;
-      qty: number;
-      size?: unknown;
-    }>;
+    const pricedLines: LineInput[] = clientLines.map((line) => {
+      const prelovedSkuId = readPrelovedSkuId(line.prelovedSkuId);
+      const sku = prelovedSkuId ? prelovedLookup.get(prelovedSkuId) : undefined;
+      return {
+        itemId: line.itemId,
+        variantLabel: line.variantLabel,
+        unitPrice: line.unitPrice,
+        qty: line.qty,
+        prelovedSkuId,
+        gstFree: sku !== undefined && donatedGstFree,
+      };
+    });
 
     let verified;
     try {
       verified = assertTotalsMatch({
-        lines: clientLines,
+        lines: pricedLines,
         delivery: delivery === "ship" ? "ship" : "pickup",
         received: { subtotal, gst, total: amountNumber },
         priceLookup,
@@ -172,16 +265,37 @@ export async function POST(req: NextRequest) {
     // Persist the server-authoritative per-line snapshot, keyed by the
     // PaymentIntent. POST /api/orders reads this instead of trusting the client
     // `lines` it is handed after payment: the total is Stripe-locked, but
-    // without a stored snapshot the per-line breakdown (which drives receipts
-    // and partial-refund math) could be reshuffled by the client with the sum
-    // left intact. Prices/names come from the catalog rows just validated by
-    // `assertTotalsMatch`, so they are exactly what backed the charge — and,
-    // unlike a live re-read at order-POST time, they cannot drift if an
-    // operator edits a price in between.
+    // without a stored snapshot the per-line breakdown (which drives receipts,
+    // partial-refund math, and GST-free preloved flags) could be reshuffled
+    // by the client with the sum left intact. Prices/names come from the
+    // catalog rows just validated by `assertTotalsMatch`, so they are exactly
+    // what backed the charge — and, unlike a live re-read at order-POST time,
+    // they cannot drift if an operator edits a price in between.
     //
-    // `size` is a non-price-bearing display field with no catalog counterpart,
-    // so it is carried through from the client as-is.
+    // Snapshot insert is required: if it fails we cancel the PI and return
+    // 500. Swallowing the failure used to leave a payable clientSecret whose
+    // order POST forced gstFree: false and inflated GST on mixed carts.
+    //
+    // `size` is a non-price-bearing display field with no catalog counterpart
+    // for new lines, so it is carried through from the client as-is. Preloved
+    // size/condition/itemName come from the SKU row that backed the charge.
     const lineSnapshot: PendingOrderLineSnapshot[] = clientLines.map((line) => {
+      const prelovedSkuId = readPrelovedSkuId(line.prelovedSkuId);
+      if (prelovedSkuId) {
+        // Non-null: assertTotalsMatch already threw 'unknown_variant' otherwise.
+        const sku = prelovedLookup.get(prelovedSkuId)!;
+        return {
+          itemId: sku.sourceItemId,
+          itemName: sku.itemName,
+          variantLabel: line.variantLabel,
+          size: sku.size,
+          qty: line.qty,
+          unitPrice: sku.price,
+          gstFree: donatedGstFree,
+          prelovedSkuId,
+          condition: sku.condition,
+        };
+      }
       // Non-null: assertTotalsMatch already threw 'unknown_variant' otherwise.
       const catalogLine = catalogLookup.get(
         priceLookupKey(line.itemId, line.variantLabel),
@@ -194,31 +308,43 @@ export async function POST(req: NextRequest) {
         size: size.length > 0 ? size : null,
         qty: line.qty,
         unitPrice: catalogLine.price,
+        gstFree: false,
       };
     });
 
     try {
-      await db
-        .insert(pendingOrderSnapshots)
-        .values({
-          paymentIntentId: paymentIntent.id,
-          tenantId,
-          userId: authResult.user.id,
-          fulfilmentMethod,
-          subtotal: String(verified.subtotal),
-          gst: String(verified.gst),
-          total: String(verified.total),
-          linesJson: lineSnapshot,
-        })
-        .onConflictDoNothing({ target: pendingOrderSnapshots.paymentIntentId });
+      // Stripe PaymentIntent ids are unique, so this insert cannot conflict.
+      // Any thrown insert (constraint, connectivity, etc.) hits the cancel path.
+      await db.insert(pendingOrderSnapshots).values({
+        paymentIntentId: paymentIntent.id,
+        tenantId,
+        userId: authResult.user.id,
+        fulfilmentMethod,
+        subtotal: String(verified.subtotal),
+        gst: String(verified.gst),
+        total: String(verified.total),
+        linesJson: lineSnapshot,
+      });
     } catch (err) {
-      // Never fail PI creation over the snapshot: the parent would be blocked
-      // from paying. The order POST falls back to the client lines (with drift
-      // logging) when no snapshot row exists.
       console.error(
         "Failed to persist pending order snapshot for",
         paymentIntent.id,
         err,
+      );
+      try {
+        await stripe.paymentIntents.cancel(paymentIntent.id, {
+          cancellation_reason: "abandoned",
+        });
+      } catch (cancelErr) {
+        console.error(
+          "Failed to cancel PaymentIntent after snapshot failure",
+          paymentIntent.id,
+          cancelErr,
+        );
+      }
+      return NextResponse.json(
+        { error: "Failed to create payment intent" },
+        { status: 500 },
       );
     }
 

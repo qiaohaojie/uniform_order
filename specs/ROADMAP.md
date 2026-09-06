@@ -91,7 +91,7 @@ graph TD
 - [x] [M01 — Preloved schema and tenant settings](./milestones/M01-preloved-foundation.md) — deps: none
 
 ### Wave 2
-- [ ] [M02 — Mixed-cart GST](./milestones/M02-mixed-cart-gst.md) — deps: M01
+- [x] [M02 — Mixed-cart GST](./milestones/M02-mixed-cart-gst.md) — deps: M01
 - [ ] [M03 — Operator intake and write-off](./milestones/M03-operator-intake.md) — deps: M01
 - [ ] [M04 — Donate page and refund policy](./milestones/M04-donate-and-refund-policy.md) — deps: M01
 
@@ -106,7 +106,7 @@ graph TD
 - [x] A tenant can opt in to a donation-only preloved rack and configure price fraction, hold days, refuse list, and GST-free declaration (default off).
 - [ ] Operators accept/reject donated garments, pool qty by source item + size + condition, price from the new variant (default 50%, warn above cap), and write off expired stock to charity.
 - [ ] Parents see donate instructions (drop-off, not self-listing), browse preloved next to new, add mixed carts with stock caps, and pay the school’s Stripe Connect account.
-- [ ] Donated preloved lines are GST-free only when the tenant declared `donatedGstFree`; reports CSV splits GST-free preloved vs taxable sales.
+- [x] Donated preloved lines are GST-free only when the tenant declared `donatedGstFree`; reports CSV splits GST-free preloved vs taxable sales.
 - [ ] Paid preloved qty decrements; pick slips mark PRELOVED; oversell fails PaymentIntent creation.
 - [ ] Refund policy states sold-as-worn / no change-of-mind / ACL still applies. No C2C listings, consignment, escrow, or inventory on new catalogue.
 - [ ] `pnpm check-types:web` passes. Parent/admin UI slices proven with playwright-cli on `pnpm dev:web`.

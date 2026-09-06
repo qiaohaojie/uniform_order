@@ -74,6 +74,8 @@ export type LiveCategoryRevenue = {
 export type LiveGstRow = {
   period: string;
   gross: number;
+  taxableSales: number;
+  gstFreePrelovedSales: number;
   gst: number;
   net: number;
   fees: number;
@@ -373,28 +375,23 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
     label: monthLabel(month),
     revenue: money(monthlyTotals.get(monthKey(month)) ?? 0),
   }));
-  const gstRows = [...months].reverse().map((month) => {
-    const gross = money(monthlyTotals.get(monthKey(month)) ?? 0);
-    const rowGst = money(gstTotals.get(monthKey(month)) ?? 0);
-    const net = money(gross - rowGst);
-    const fees = estimateStripeFees(gross);
-    return {
-      period: monthPeriod(month),
-      gross,
-      gst: rowGst,
-      net,
-      fees,
-      payout: money(net - fees),
-    };
-  });
 
   const orderIds = orderRows.map((order) => order.id);
+  const orderMonthById = new Map<string, string>();
+  for (const order of orderRows) {
+    if (!order.createdAt) continue;
+    orderMonthById.set(order.id, monthKey(order.createdAt));
+  }
   const categoryTotals = new Map<string, number>();
+  const gstFreePrelovedTotals = new Map(months.map((month) => [monthKey(month), 0]));
   if (orderIds.length > 0) {
     const lineRows = await db
       .select({
+        orderId: orderLines.orderId,
         category: catalogItems.category,
         lineTotal: orderLines.lineTotal,
+        gstFree: orderLines.gstFree,
+        prelovedSkuId: orderLines.prelovedSkuId,
       })
       .from(orderLines)
       .leftJoin(
@@ -406,8 +403,32 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
     for (const line of lineRows) {
       const category = line.category ?? "Uncategorised";
       categoryTotals.set(category, money((categoryTotals.get(category) ?? 0) + money(line.lineTotal)));
+      if (line.gstFree === true && line.prelovedSkuId != null) {
+        const key = orderMonthById.get(line.orderId);
+        if (!key) continue;
+        gstFreePrelovedTotals.set(key, money((gstFreePrelovedTotals.get(key) ?? 0) + money(line.lineTotal)));
+      }
     }
   }
+
+  const gstRows = [...months].reverse().map((month) => {
+    const gross = money(monthlyTotals.get(monthKey(month)) ?? 0);
+    const rowGst = money(gstTotals.get(monthKey(month)) ?? 0);
+    const gstFreePrelovedSales = money(gstFreePrelovedTotals.get(monthKey(month)) ?? 0);
+    const taxableSales = money(gross - gstFreePrelovedSales);
+    const net = money(gross - rowGst);
+    const fees = estimateStripeFees(gross);
+    return {
+      period: monthPeriod(month),
+      gross,
+      taxableSales,
+      gstFreePrelovedSales,
+      gst: rowGst,
+      net,
+      fees,
+      payout: money(net - fees),
+    };
+  });
 
   const categoryTotal = money(
     Array.from(categoryTotals.values()).reduce((sum, value) => sum + value, 0)

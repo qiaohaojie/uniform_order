@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getLiveReportsData, getTenant, toTenantBrand } from "@/db/queries";
 import { AdminTopbar } from "@/components/admin-shell";
 import { ExportCsvButton } from "@/components/export-csv-button";
+import { GST_REPORT_HEADERS } from "@/lib/gst-report";
 
 export default async function AdminReportsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant: tid } = await params;
@@ -146,7 +147,7 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
           <table className="w-full border-collapse text-[13px]">
             <thead>
               <tr className="text-[10.5px] uppercase tracking-[0.6px]" style={{ color: "var(--color-ink-dim)" }}>
-                {["Period", "Gross sales", "GST collected", "Net (ex-GST)", "Stripe fees", "Net payout"].map((h) => (
+                {GST_REPORT_HEADERS.map((h) => (
                   <th key={h} className="text-right py-2 font-bold border-b first:text-left" style={{ borderColor: "var(--color-rule)" }}>
                     {h}
                   </th>
@@ -157,7 +158,7 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
               {reports.gstRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={GST_REPORT_HEADERS.length}
                     className="py-4 text-center text-[12px]"
                     style={{ color: "var(--color-ink-dim)" }}
                   >
@@ -169,6 +170,8 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
                   <tr key={r.period} className="border-b" style={{ borderColor: i < reports.gstRows.length - 1 ? "var(--color-rule)" : "transparent" }}>
                     <td className="py-2.5 font-medium" style={{ color: "var(--color-ink)" }}>{r.period}</td>
                     <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.gross.toLocaleString()}</td>
+                    <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.taxableSales.toLocaleString()}</td>
+                    <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.gstFreePrelovedSales.toLocaleString()}</td>
                     <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.gst.toFixed(2)}</td>
                     <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink)" }}>${r.net.toFixed(2)}</td>
                     <td className="py-2.5 text-right tnum" style={{ color: "var(--color-ink-dim)" }}>−${r.fees.toFixed(2)}</td>

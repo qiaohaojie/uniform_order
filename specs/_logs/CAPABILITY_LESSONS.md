@@ -166,3 +166,120 @@
 - **Evidence:** preloved-settings-section.tsx GST_FREE_COPY next to donatedGstFree; no intakeMode/commissionBps controls; copy states donation-only; UI warns above 0.50 while API allows 0.01–2.
 - **Links:** specs/milestones/M01-preloved-foundation.md
 
+## For GST-inclusive AUD carts, Stripe charges the total; remittable GST is 1/11 of the taxable base, not amount/11.
+- **ID:** 6c14b796-20c0-4ca6-a840-2d08d01ddfb8
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0400
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2 / stripe ^22.1.0 / PaymentIntent amount in cents
+- **Detail:** GST-free donated lines still add to subtotal/total. computeTotals uses gst = round2((taxableSubtotal + shipping) / 11) and omits only gstFree===true from the base; missing gstFree stays taxable so legacy carts match total/11. Shipping stays in the taxable base. After payment, orders.total/subtotal come from PaymentIntent.amount minus shipping; orders.gst is recomputed from snapshot line flags, not snapshot.gst and not authoritativeTotal/11.
+- **Evidence:** apps/web/src/lib/order-totals.ts computeTotals; apps/web/src/app/api/orders/route.ts verifiedTotals; PI snapshot gstFree. Static AC: new-only gst=(subtotal+shipping)/11; mixed gstFree excluded from the 1/11 base.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Stamp tax-exempt flags server-side at PaymentIntent creation from the live operator setting plus a resolved SKU; cancel the PI if the pending snapshot insert fails.
+- **ID:** ef411b1f-7b68-4c6f-b15e-e042d510e26c
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0400
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** stripe ^22.1.0; Next.js 16 App Router
+- **Detail:** Client gstFree is ignored and should not appear on the request line type. A line is GST-free only when prelovedSkuId resolves to an active tenant SKU and donatedGstFree is true at charge time — not a listing-time sku.gstFree copy. Persist gstFree/prelovedSkuId on pending_order_snapshots so POST /api/orders can recompute GST without a catalog re-read. If snapshot insert throws, cancel the PI (cancellation_reason abandoned) and return 500 without clientSecret. Swallowing insert failure left a payable PI whose order POST forced gstFree:false and GST=total/11.
+- **Evidence:** apps/web/src/app/api/stripe/payment-intent/route.ts pricedLines + snapshot insert/cancel; apps/web/src/app/api/orders/route.ts computeTotals from snapshot. ClientOrderLine has no gstFree field.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Stripe PaymentIntent metadata is not a reliable GST-free line carrier.
+- **ID:** d2f70944-370e-4045-a45b-894898c325fa
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0400
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** stripe ^22.1.0, Next.js 16.2.4
+- **Detail:** Metadata values cap at 500 characters and 50 keys. A full pending-order line snapshot (item names, SKU UUIDs, gstFree, condition) overflows typical mixed carts. A flag-only encoding misaligns if the client reorders lines or omits SKU ids. Keep the DB snapshot as the single tax-flag carrier and fail closed on insert.
+- **Evidence:** M02 mixed-cart GST: payment-intent route previously caught snapshot insert errors and still returned clientSecret; POST /api/orders then set gstFree:false and GST=total/11.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Newly minted Stripe PaymentIntent ids are unique; insert the pending snapshot without onConflict and cancel the PI on any thrown error.
+- **ID:** 7e535389-cb37-46d9-92a9-3349fcee1225
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0400
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** stripe ^22.1.0; drizzle-orm ^0.45.2; neon-http
+- **Detail:** payment_intent_id is the PK and Stripe does not reuse PI ids, so onConflictDoNothing().returning() plus a follow-up SELECT is dead weight. A thrown insert already reaches fail-closed cancel+500. A leftover-row 500 is acceptable.
+- **Evidence:** apps/web/src/app/api/stripe/payment-intent/route.ts; pending_order_snapshots.payment_intent_id PK.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Pending snapshot jsonb can grow new fields without a SQL migration; coerce missing gstFree to false on read.
+- **ID:** ff5f18d9-9b16-4a6a-90c6-535918e2bc4e
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0300
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2 jsonb $type
+- **Detail:** Drizzle $type on jsonb does not require a drizzle SQL file. Make gstFree required on the TypeScript write type so new inserts include it; keep prelovedSkuId/condition optional. Readers use gstFree === true so legacy rows stay all-taxable (historical 1/11).
+- **Evidence:** PendingOrderLineSnapshot in apps/web/src/db/schema.ts; orders fallback gstFree: false; no new file in apps/web/drizzle/.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Keep GST-free donated sales in gross (turnover); reports sum persisted order.gst and split GST-free line totals from taxable sales.
+- **ID:** 489f7b1e-9f6d-43e0-8820-b3c8ba847572
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2; neon-http; order_lines.gstFree / prelovedSkuId
+- **Detail:** Do not recompute header GST as 1/11 of taxable in reports. gstFreePrelovedSales = sum of order_lines.lineTotal where gstFree && prelovedSkuId is not null for that month; taxableSales = gross minus that overlay (shipping stays in taxable). A gstFree line without prelovedSkuId stays in taxableSales. Fold the split into the existing category line query rather than a second SUM round-trip.
+- **Evidence:** getLiveReportsData in apps/web/src/db/queries.ts; apps/web/src/lib/gst-report.ts; apps/web/src/components/export-csv-button.tsx.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## After mapping no-snapshot fallback rows onto the snapshot line shape, persist and total from the normalized fields — do not re-branch on whether a snapshot existed.
+- **ID:** 50819b52-e98f-427d-8815-28400f56c994
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0300
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router order POST; neon-http db.batch insert
+- **Detail:** === true / non-empty string / enum membership already implement missing=default. Extra snapshotLines ternaries hid that the fallback already wrote gstFree: false. Paid legacy PIs without a snapshot stay all-taxable and must not copy client prelovedSkuId.
+- **Evidence:** apps/web/src/app/api/orders/route.ts persistedLines mapper plus computeTotals/order_lines insert.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Drizzle onConflictDoNothing().returning() is empty on skip; empty returning is inconclusive unless you SELECT.
+- **ID:** 1d94268c-3291-4ad6-b8e2-ad48a2b40177
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0300
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2, neon-http
+- **Detail:** Postgres RETURNING yields no rows when ON CONFLICT DO NOTHING skips. Treat empty returning as maybe-already-there: select by PK, then fail closed if the row is still missing. For a PK that cannot collide, skip onConflict and fail closed on a thrown insert instead.
+- **Evidence:** Mid-run payment-intent snapshot persist used onConflict+SELECT; later simplified to plain insert because Stripe PI ids cannot conflict.
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+
+## Shared table/CSV header constants used by a Server Component and a Client Component must live in a module without "use client" and without importing db/queries at runtime.
+- **ID:** 6262cc65-5693-4f9f-a9d7-ac4728605d28
+- **Date:** 2026-09-06T15:43:59Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M02
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4 App Router
+- **Detail:** Next.js App Router rejects importing a non-component value from a Client Component into a Server Component. A client exporter must not import queries.ts (Drizzle). One plain TS module can alias the row type and export the header array so empty-state colSpan and CSV stay in the same column order.
+- **Evidence:** apps/web/src/lib/gst-report.ts GST_REPORT_HEADERS; apps/web/src/app/admin/[tenant]/reports/page.tsx (RSC) + apps/web/src/components/export-csv-button.tsx (client).
+- **Links:** specs/milestones/M02-mixed-cart-gst.md
+

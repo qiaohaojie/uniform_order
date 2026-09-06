@@ -18,7 +18,7 @@ import { applyRateLimit } from "@/lib/rate-limit";
 import { serverCapture, serverCaptureException } from "@/lib/analytics/server";
 import { recordOrderPaid } from "@/lib/orders/record-order-paid";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
-import { round2 } from "@/lib/order-totals";
+import { computeTotals, round2 } from "@/lib/order-totals";
 import { SHIP_FEE_AUD } from "@/lib/shipping";
 import { getStripe } from "@/lib/stripe";
 
@@ -295,12 +295,8 @@ export async function POST(req: NextRequest) {
       );
     }
     const shipping = fulfilmentMethod === "shipping" ? SHIP_FEE_AUD : 0;
-    const verifiedTotals = {
-      subtotal: round2(authoritativeTotal - shipping),
-      shipping,
-      gst: round2(authoritativeTotal / 11),
-      total: round2(authoritativeTotal),
-    };
+    const stripeSubtotal = round2(authoritativeTotal - shipping);
+    const stripeTotal = round2(authoritativeTotal);
 
     // ─── Per-line price snapshot ──────────────────────────────────────────
     //
@@ -311,10 +307,12 @@ export async function POST(req: NextRequest) {
     // longer reshuffle prices across lines with the sum left intact and shape
     // the amounts that drive receipts and partial-refund math.
     //
-    // Fallback: a PaymentIntent created before this table existed (or whose
-    // snapshot insert failed) has no row. Those orders are already paid, so we
-    // keep the previous behaviour — persist the client PI-snapshot prices and
-    // soft-assert Σ(line) ≈ subtotal — rather than rejecting a paid order.
+    // Fallback: a PaymentIntent created before this table existed has no row.
+    // Snapshot insert failure now fails PI creation (the PI is cancelled and
+    // no clientSecret is returned), so a mixed GST-free cart cannot be charged
+    // without this carrier. Legacy no-snapshot PIs are already paid, so we
+    // keep the previous behaviour — persist the client prices as all-taxable
+    // and soft-assert Σ(line) ≈ subtotal — rather than rejecting a paid order.
     const [snapshot] = await db
       .select({
         linesJson: pendingOrderSnapshots.linesJson,
@@ -361,8 +359,31 @@ export async function POST(req: NextRequest) {
         size: typeof l.size === "string" && l.size.trim() ? l.size.trim() : null,
         qty: l.qty,
         unitPrice: l.unitPrice,
+        // Legacy no-snapshot PIs (pre-snapshot-table) stay all-taxable; do not
+        // copy client gstFree. New PIs cannot reach here without a snapshot.
+        gstFree: false,
       }),
     );
+
+    // Stripe total still wins for subtotal/total. GST is reporting-only and
+    // comes from computeTotals on snapshot lines (gstFree preloved excluded
+    // from the 1/11 base). No-snapshot fallback is all-taxable, matching
+    // the historical authoritativeTotal/11 formula used before GST-free
+    // donated stock. New mixed carts cannot be charged without a snapshot.
+    const computed = computeTotals({
+      lines: persistedLines.map((l) => ({
+        unitPrice: l.unitPrice,
+        qty: l.qty,
+        gstFree: l.gstFree === true,
+      })),
+      delivery: fulfilmentMethod === "shipping" ? "ship" : "pickup",
+    });
+    const verifiedTotals = {
+      subtotal: stripeSubtotal,
+      shipping,
+      gst: computed.gst,
+      total: stripeTotal,
+    };
 
     const lineSubtotal = round2(
       persistedLines.reduce((s, l) => s + l.unitPrice * l.qty, 0)
@@ -449,6 +470,15 @@ export async function POST(req: NextRequest) {
           qty: line.qty,
           unitPrice: String(line.unitPrice),
           lineTotal: String(round2(line.unitPrice * line.qty)),
+          gstFree: line.gstFree === true,
+          prelovedSkuId:
+            typeof line.prelovedSkuId === "string" && line.prelovedSkuId
+              ? line.prelovedSkuId
+              : null,
+          condition:
+            line.condition === "good" || line.condition === "fair"
+              ? line.condition
+              : null,
         }))
       );
       await db.batch([orderInsert, linesInsert]);

@@ -1,29 +1,23 @@
 "use client";
 
-export interface CsvRow {
-  period: string;
-  gross: number;
-  gst: number;
-  net: number;
-  fees: number;
-  payout: number;
-}
+import { GST_REPORT_HEADERS, type GstReportRow } from "@/lib/gst-report";
 
 export function ExportCsvButton({
   rows,
   filename = "report.csv",
 }: {
-  rows: CsvRow[];
+  rows: GstReportRow[];
   filename?: string;
 }) {
   const handleExport = () => {
-    const headers = ["Period", "Gross sales", "GST collected", "Net (ex-GST)", "Stripe fees", "Net payout"];
     const lines = [
-      headers.join(","),
+      GST_REPORT_HEADERS.join(","),
       ...rows.map((r) =>
         [
           r.period,
           r.gross.toFixed(2),
+          r.taxableSales.toFixed(2),
+          r.gstFreePrelovedSales.toFixed(2),
           r.gst.toFixed(2),
           r.net.toFixed(2),
           r.fees.toFixed(2),

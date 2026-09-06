@@ -24,5 +24,15 @@
 - 2026-09-06 · 8f116a7c · build:M01 · Price fraction warns above 0.50, hard-bounds 0.01–2 after round-to-2dp, shared helper across Zod/upsert/UI
 - 2026-09-06 · 7c16c268 · build:M01 · upsertPrelovedSettings is a single insert().onConflictDoUpdate(); neon-http db.batch not needed for one row
 
+## M02  ([decisions/M02.md](M02.md)) — 8
+- 2026-09-06 · 0a07f8ba · build:M02 · Sale-time gstFree is live donatedGstFree AND a valid donated preloved SKU; never the client flag
+- 2026-09-06 · a4d0101e · build:M02 · Extend PendingOrderLineSnapshot JSON with gstFree; no SQL migration
+- 2026-09-06 · 68a3e6c5 · build:M02 · POST /api/orders recomputes gst from snapshot line flags; Stripe amount remains the total lock
+- 2026-09-06 · cd2a2d73 · build:M02 · Reports add taxable + GST-free preloved columns; gross still includes GST-free sales
+- 2026-09-06 · 419297f4 · build:M02 · M02 does not edit parent checkout UI or preloved-queries.ts
+- 2026-09-06 · 4e203e56 · build:M02 · Preloved SKU price/name lookup is inlined in the PaymentIntent route
+- 2026-09-06 · c047df59 · build:M02 · Shared GstReportRow + GST_REPORT_HEADERS in lib/gst-report.ts (drift from client-local CsvRow)
+- 2026-09-06 · 23ee3c5b · build:M02 · Fail-closed PaymentIntent creation if the pending snapshot insert fails; plain insert, no onConflict
+
 ## Misc  ([decisions/misc.md](misc.md)) — 1
 - 2026-09-06 · 2f31cd1c · onboard · HeroUI OSS only — this repo is open source

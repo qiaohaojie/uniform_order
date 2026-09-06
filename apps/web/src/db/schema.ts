@@ -309,9 +309,11 @@ export const prelovedIntakeEvents = pgTable(
  * without this table the per-line breakdown could only come from the client
  * body — letting a caller reshuffle prices across lines (sum unchanged) and
  * shape the amounts that drive receipts and partial-refund math. The prices
- * here are the catalog prices `assertTotalsMatch` validated at PI creation, so
- * they are exactly what backed the charge — and, unlike a live catalog re-read
- * at order-POST time, they cannot drift if an operator edits a price in between.
+ * here are the catalog / preloved SKU prices `assertTotalsMatch` validated at
+ * PI creation, so they are exactly what backed the charge — and, unlike a live
+ * catalog re-read at order-POST time, they cannot drift if an operator edits a
+ * price in between. `gstFree` is required on new writes; legacy JSON without it
+ * is treated as taxable. No new SQL — this is jsonb shape only.
  */
 export type PendingOrderLineSnapshot = {
   itemId: string;
@@ -319,8 +321,12 @@ export type PendingOrderLineSnapshot = {
   variantLabel: string;
   size: string | null;
   qty: number;
-  /** Catalog price in AUD dollars at PI creation. */
+  /** Catalog or preloved SKU price in AUD dollars at PI creation. */
   unitPrice: number;
+  /** Server-authored. Required on new writes; missing on legacy snapshots means taxable. */
+  gstFree: boolean;
+  prelovedSkuId?: string | null;
+  condition?: "good" | "fair" | null;
 };
 
 export const pendingOrderSnapshots = pgTable(
