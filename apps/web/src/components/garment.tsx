@@ -26,6 +26,29 @@ const ITEM_TO_SHAPE: Record<string, string> = {
   "exercise-book-a4": "misc", "exercise-book-math": "misc", "ring-binder": "misc",
 };
 
+function inferShape(itemId?: string) {
+  if (!itemId) return undefined;
+
+  const mapped = ITEM_TO_SHAPE[itemId];
+  if (mapped) return mapped;
+
+  // Live catalog IDs are tenant-defined, so infer familiar garment names from
+  // stable ID fragments before falling back to the generic non-garment tile.
+  const id = itemId.toLowerCase();
+  if (/polo|shirt|jersey/.test(id)) return "shirt";
+  if (/dress/.test(id)) return "dress";
+  if (/jumper|hoodie|jacket/.test(id)) return "jumper";
+  if (/trouser|short|track|brief/.test(id)) return "pants";
+  if (/bucket|hat/.test(id)) return "bucket-hat";
+  if (/cap/.test(id)) return "cap";
+  if (/sock/.test(id)) return "sock";
+  if (/backpack|sportsbag|\bbag\b/.test(id)) return "bag";
+  if (/blazer/.test(id)) return "blazer";
+  if (/tie|scarf/.test(id)) return "tie";
+  if (/belt/.test(id)) return "belt";
+  return undefined;
+}
+
 const CATEGORY_DEFAULT: Record<ItemCategory, React.FC<{ accent: string; stroke: string; size: number }>> = {
   Summer: SummerDefault,
   Winter: WinterDefault,
@@ -50,7 +73,7 @@ export function GarmentVector({
 }) {
   const a = accent;
   const stroke = shade(a, -18);
-  const shape = itemId ? ITEM_TO_SHAPE[itemId] : undefined;
+  const shape = inferShape(itemId);
 
   // Specific id-keyed illustration takes priority for the seeded items.
   // Otherwise, if a category is supplied, render its default glyph.
@@ -78,6 +101,13 @@ export function GarmentVector({
           <circle cx="60" cy="52" r="1.2" fill={stroke} />
         </g>
       )}
+      {resolvedShape === "dress" && (
+        <g>
+          <path d="M42 18 L52 13 Q60 21 68 13 L78 18 L88 36 L77 43 L84 103 H36 L43 43 L32 36 Z" fill={a} stroke={stroke} strokeWidth="1.4" />
+          <path d="M52 13 Q60 29 68 13 M43 43 H77" fill="none" stroke={stroke} strokeWidth="1.3" />
+          <path d="M48 48 L43 94 M60 48 V98 M72 48 L77 94" fill="none" stroke={stroke} strokeWidth="0.9" opacity="0.7" />
+        </g>
+      )}
       {resolvedShape === "jumper" && (
         <g>
           <path d="M28 24 L48 16 Q60 30 72 16 L92 24 L100 44 L86 50 L86 102 L34 102 L34 50 L20 44 Z" fill={a} stroke={stroke} strokeWidth="1.4" />
@@ -95,6 +125,13 @@ export function GarmentVector({
           <path d="M22 70 Q60 30 98 70 L98 78 L22 78 Z" fill={a} stroke={stroke} strokeWidth="1.4" />
           <path d="M22 78 Q60 92 98 78" stroke={stroke} strokeWidth="1.4" fill="none" />
           <circle cx="60" cy="46" r="3" fill={stroke} />
+        </g>
+      )}
+      {resolvedShape === "bucket-hat" && (
+        <g>
+          <path d="M36 56 Q39 29 60 24 Q81 29 84 56 Z" fill={a} stroke={stroke} strokeWidth="1.4" />
+          <path d="M27 55 Q60 47 93 55 L101 72 Q60 84 19 72 Z" fill={a} stroke={stroke} strokeWidth="1.4" />
+          <path d="M26 67 Q60 76 94 67" fill="none" stroke={stroke} strokeWidth="1" />
         </g>
       )}
       {resolvedShape === "sock" && (
