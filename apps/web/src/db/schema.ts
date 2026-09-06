@@ -11,6 +11,7 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { neonAuthUsers } from "./external-schema";
 
@@ -71,6 +72,26 @@ export const orderEventTypeEnum = pgEnum("order_event_type", [
 ]);
 
 export const policyModeEnum = pgEnum("policy_mode", ["text", "url"]);
+
+export const prelovedIntakeModeEnum = pgEnum("preloved_intake_mode", [
+  "donation_only",
+  "donation_and_consignment",
+]);
+
+export const prelovedConditionEnum = pgEnum("preloved_condition", [
+  "good",
+  "fair",
+]);
+
+export const prelovedIntakeSourceEnum = pgEnum("preloved_intake_source", [
+  "donation",
+]);
+
+export const prelovedIntakeActionEnum = pgEnum("preloved_intake_action", [
+  "accepted",
+  "rejected",
+  "written_off",
+]);
 
 // ─── Tenant legal versions ───────────────────────────────────────────────────
 // IMPORTANT: defined before `tenants` because `tenants.current_legal_version_id`
@@ -170,6 +191,112 @@ export const catalogVariants = pgTable(
     itemLabelActiveUnique: uniqueIndex("catalog_variants_item_label_active_unique")
       .on(t.itemId, t.label)
       .where(sql`${t.active} = true`),
+  }),
+);
+
+// ─── Preloved (donation rack) ────────────────────────────────────────────────
+// Qty lives only on preloved SKUs. Do not add inventory to catalog_variants.
+export const tenantPrelovedSettings = pgTable("tenant_preloved_settings", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  prelovedEnabled: boolean("preloved_enabled").notNull().default(false),
+  intakeMode: prelovedIntakeModeEnum("intake_mode")
+    .notNull()
+    .default("donation_only"),
+  priceFractionOfNew: numeric("price_fraction_of_new", {
+    precision: 4,
+    scale: 2,
+  })
+    .notNull()
+    .default("0.50"),
+  holdDays: integer("hold_days").notNull().default(365),
+  donatedGstFree: boolean("donated_gst_free").notNull().default(false),
+  refuseList: jsonb("refuse_list")
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'["socks","swimwear","hats"]'::jsonb`),
+  commissionBps: integer("commission_bps").notNull().default(5000),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const prelovedSkus = pgTable(
+  "preloved_skus",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    sourceItemId: text("source_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    size: text("size").notNull(),
+    condition: prelovedConditionEnum("condition").notNull(),
+    price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+    qtyOnHand: integer("qty_on_hand").notNull().default(0),
+    gstFree: boolean("gst_free").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    imageUrl: text("image_url"),
+    listedAt: timestamp("listed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => ({
+    tenantItemSizeConditionUnique: uniqueIndex(
+      "preloved_skus_tenant_item_size_condition_unique",
+    ).on(t.tenantId, t.sourceItemId, t.size, t.condition),
+    tenantExpiresAtIdx: index("idx_preloved_skus_tenant_expires_at").on(
+      t.tenantId,
+      t.expiresAt,
+    ),
+    qtyOnHandNonNegative: check(
+      "preloved_skus_qty_on_hand_non_negative",
+      sql`${t.qtyOnHand} >= 0`,
+    ),
+  }),
+);
+
+export const prelovedIntakeEvents = pgTable(
+  "preloved_intake_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    prelovedSkuId: uuid("preloved_sku_id").references(() => prelovedSkus.id, {
+      onDelete: "set null",
+    }),
+    sourceItemId: text("source_item_id").references(() => catalogItems.id, {
+      onDelete: "set null",
+    }),
+    size: text("size"),
+    condition: prelovedConditionEnum("condition"),
+    source: prelovedIntakeSourceEnum("source").notNull().default("donation"),
+    action: prelovedIntakeActionEnum("action").notNull(),
+    qty: integer("qty").notNull(),
+    rejectReason: text("reject_reason"),
+    actorId: uuid("actor_id").references(() => neonAuthUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    tenantTimeIdx: index("idx_preloved_intake_events_tenant_time").on(
+      t.tenantId,
+      t.createdAt,
+    ),
+    skuTimeIdx: index("idx_preloved_intake_events_sku_time").on(
+      t.prelovedSkuId,
+      t.createdAt,
+    ),
   }),
 );
 
@@ -310,6 +437,11 @@ export const orderLines = pgTable(
     qty: integer("qty").notNull().default(1),
     unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
     lineTotal: numeric("line_total", { precision: 10, scale: 2 }).notNull(),
+    prelovedSkuId: uuid("preloved_sku_id").references(() => prelovedSkus.id, {
+      onDelete: "restrict",
+    }),
+    gstFree: boolean("gst_free").notNull().default(false),
+    condition: prelovedConditionEnum("condition"),
   },
   (t) => ({
     orderItemIdx: index("idx_order_lines_order_id_item_id").on(t.orderId, t.itemId),
@@ -483,3 +615,6 @@ export const auditEvents = pgTable(
 
 export type TenantRow = typeof tenants.$inferSelect;
 export type TenantLegalVersionRow = typeof tenantLegalVersions.$inferSelect;
+export type TenantPrelovedSettingsRow = typeof tenantPrelovedSettings.$inferSelect;
+export type PrelovedSkuRow = typeof prelovedSkus.$inferSelect;
+export type PrelovedIntakeEventRow = typeof prelovedIntakeEvents.$inferSelect;

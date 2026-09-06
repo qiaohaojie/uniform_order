@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Tenant } from "@/lib/data";
 import type { getTenantSettings } from "@/db/queries";
+import type { PrelovedSettings } from "@/lib/preloved";
+import { PrelovedSettingsSection } from "./preloved-settings-section";
 
 type WorkflowSettings = Awaited<ReturnType<typeof getTenantSettings>>;
 
@@ -24,10 +26,12 @@ export function SettingsClient({
   tenantId,
   tenant,
   workflowSettings,
+  prelovedSettings,
 }: {
   tenantId: string;
   tenant: Tenant;
   workflowSettings: WorkflowSettings;
+  prelovedSettings: PrelovedSettings;
 }) {
   const searchParams = useSearchParams();
   const stripeResult = searchParams.get("stripe"); // "success" | "refresh" | null
@@ -218,6 +222,12 @@ export function SettingsClient({
             </div>
           </div>
         </section>
+
+        <PrelovedSettingsSection
+          tenantId={tenantId}
+          accent={tenant.accent}
+          settings={prelovedSettings}
+        />
 
         {/* Fulfilment */}
         <section className="bg-white rounded-xl border p-6" style={{ borderColor: "var(--color-rule)" }}>

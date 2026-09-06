@@ -5,7 +5,7 @@
      Plan must not silently redesign WHAT/WHY from the approved source spec. -->
 
 ## Status
-pending            <!-- pending | in-progress | complete -->
+complete            <!-- pending | in-progress | complete -->
 
 ## Wave
 1
@@ -53,14 +53,14 @@ Add the donation-only preloved data model and tenant opt-in settings so later mi
 - `apps/web/src/lib/data.ts` — `CATEGORIES` unchanged in this milestone
 
 ## Acceptance criteria
-- [ ] Migration applies on Neon/Drizzle: preloved settings, pooled SKU table, intake events, `order_lines` extra columns
-- [ ] New tenants and existing tenants have `prelovedEnabled = false` and `donatedGstFree = false`
-- [ ] Operator can enable preloved and save price fraction, hold days, refuse list, GST-free flag
-- [ ] GST-free control shows the accountant / s 38-255 confirmation copy from the spec
-- [ ] Settings UI does not offer consignment intake or commission
-- [ ] Preloved SKU rows can be inserted in DB keyed by tenant + source catalog item + size + condition, with `qtyOnHand`
-- [ ] New catalogue variants still have no inventory column
-- [ ] `pnpm check-types:web` passes
+- [x] Migration applies on Neon/Drizzle: preloved settings, pooled SKU table, intake events, `order_lines` extra columns
+- [x] New tenants and existing tenants have `prelovedEnabled = false` and `donatedGstFree = false`
+- [x] Operator can enable preloved and save price fraction, hold days, refuse list, GST-free flag
+- [x] GST-free control shows the accountant / s 38-255 confirmation copy from the spec
+- [x] Settings UI does not offer consignment intake or commission
+- [x] Preloved SKU rows can be inserted in DB keyed by tenant + source catalog item + size + condition, with `qtyOnHand`
+- [x] New catalogue variants still have no inventory column
+- [x] `pnpm check-types:web` passes
 
 ## Verification
 - **Commands:** not configured · `pnpm check-types:web` · no test suite

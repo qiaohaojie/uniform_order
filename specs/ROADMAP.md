@@ -88,7 +88,7 @@ graph TD
 ## Milestones (to-do)
 
 ### Wave 1
-- [ ] [M01 — Preloved schema and tenant settings](./milestones/M01-preloved-foundation.md) — deps: none
+- [x] [M01 — Preloved schema and tenant settings](./milestones/M01-preloved-foundation.md) — deps: none
 
 ### Wave 2
 - [ ] [M02 — Mixed-cart GST](./milestones/M02-mixed-cart-gst.md) — deps: M01
@@ -103,7 +103,7 @@ graph TD
 
 ## Project Definition of Done
 
-- [ ] A tenant can opt in to a donation-only preloved rack and configure price fraction, hold days, refuse list, and GST-free declaration (default off).
+- [x] A tenant can opt in to a donation-only preloved rack and configure price fraction, hold days, refuse list, and GST-free declaration (default off).
 - [ ] Operators accept/reject donated garments, pool qty by source item + size + condition, price from the new variant (default 50%, warn above cap), and write off expired stock to charity.
 - [ ] Parents see donate instructions (drop-off, not self-listing), browse preloved next to new, add mixed carts with stock caps, and pay the school’s Stripe Connect account.
 - [ ] Donated preloved lines are GST-free only when the tenant declared `donatedGstFree`; reports CSV splits GST-free preloved vs taxable sales.
