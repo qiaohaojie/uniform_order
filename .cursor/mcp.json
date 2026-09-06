@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "heroui-pro": {
+      "type": "http",
+      "url": "https://mcp.heroui.pro/mcp",
+      "headers": {
+        "x-heroui-personal-token": "${env:HEROUI_PERSONAL_TOKEN}"
+      }
+    }
+  }
+}

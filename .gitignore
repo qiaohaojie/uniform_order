@@ -65,5 +65,23 @@ demo/demo_data/.env.demo
 # Launch-video generated and captured assets; keep the editable source files
 
 
+# Local Hostinger deploy archives — do not commit
+.deploy/
+
 # mcp
 .mcp.json
+
+# Machine-local GQ pins (one absolute path line each)
+.gq-spec/capability-docs-path
+.gq-spec/master-app-dev-process-path
+
+# HeroUI credentials — keep local only
+HEROUI_PERSONAL_TOKEN.txt
+**/HEROUI_PERSONAL_TOKEN.txt
+
+# Self-ver live captures (host via process 1300, then wipe — not a repo archive)
+.self-ver/
+
+# Skill junk
+**/__pycache__/
+**/*.pyc

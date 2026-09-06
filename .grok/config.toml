@@ -1,0 +1,8 @@
+# Project-scoped Grok Build MCP. Secrets stay in the environment.
+# See docs/runbooks/heroui-pro-mcp.md
+
+[mcp_servers.heroui-pro]
+type = "http"
+url = "https://mcp.heroui.pro/mcp"
+enabled = true
+headers = { "x-heroui-personal-token" = "${HEROUI_PERSONAL_TOKEN}" }

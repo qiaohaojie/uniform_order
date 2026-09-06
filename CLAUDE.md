@@ -2,6 +2,15 @@
 
 Guidance for Claude Code working in this repo.
 
+## Project exception — HeroUI OSS only
+
+This repo is **open source**. Use **HeroUI OSS** (`@heroui/react`) only.
+
+- Do not install `@heroui-pro/react` or any `@heroui-pro/*` package.
+- Do not require the `heroui-pro` MCP. Process `0200` Step 3a does **not** apply here.
+- For component docs, use OSS HeroUI sources (`heroui-react` skill / `@heroui/react` docs).
+- New interactive UI: OSS primitives plus the existing Tailwind tokens. Do not pull Pro components.
+
 ## Commands
 
 ```bash
@@ -69,7 +78,7 @@ Tailwind CSS v4 (`@import "tailwindcss"`) with custom tokens in `src/index.css` 
 
 `.tnum` class for numeric/price displays. `GarmentVector` (`components/garment.tsx`) renders product SVGs keyed by item ID — no raster images.
 
-HeroUI v3 (`@heroui/react`) is installed; current UI is mostly bespoke Tailwind. Use HeroUI for new interactive elements.
+HeroUI v3 OSS (`@heroui/react`) is installed; current UI is mostly bespoke Tailwind. Use HeroUI OSS for new interactive elements. **Pro is forbidden in this repo** (open-source exception; see top of this file).
 
 ### TypeScript
 
@@ -82,3 +91,47 @@ Path alias `@/*` → `apps/web/src/*`. `LayoutProps<"/[tenant]">` and `PageProps
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — design specs + implementation plans
 - Synthetic UI prototype references (`parent.jsx`, `operator.jsx`, `superadmin.jsx`; see `apps/landing/src/components/landing.jsx` and `apps/landing/src/lib/tokens.jsx`)
 - Synthetic uniform order paper form reference (catalog model in `apps/web/src/lib/data.ts`)
+
+<!-- app-master-process:start -->
+## App master development process — automatic
+
+This repo must be **bound** before any app work. Bound means the gitignored
+pins `.gq-spec/master-app-dev-process-path` and
+`.gq-spec/capability-docs-path` point at the app libraries
+(`0010 - Master App Development Process Index.md` and
+`0600 - UI Adapter.md`). If unbound, run `bash .gq-spec/bootstrap.sh` and
+stop on failure. Do not treat a Unity/game vault as bound.
+
+For every web, mobile, or app implementation, fix, refactor, debug, test,
+UI, API, deploy, or process-documentation task, resolve the process library
+from the valid process pin, then from the valid
+`GQ_MASTER_APP_DEV_PROCESS_DIR` fallback. A valid library contains readable
+processes `0000` and `0010` plus every document indexed by `0010`. If still
+unbound, stop and ask the user to read
+`PimSpace/220_Dev_Project/Starter_Kit/Starter_Kit.md` or run process `0000`.
+
+Before acting, read `0010` in full, use its task router, and read every selected
+process document in full. The user does not need to mention the library or a
+process ID. Verify `package.json` / lockfile, Expo SDK when native, and live
+CLI/MCP capabilities before relying on version-sensitive guidance. HeroUI +
+Tailwind v4 is the UI baseline; Expo is the native runtime. Preserve the
+project's declared versions; add labelled notes for verified differences. UI
+edits require a live `heroui-pro` MCP (`0200` Step 3a). Web drive and self-ver
+require `playwright-cli` (`0200` Step 3b).
+
+Name *pair* or *handoff* from `0010` §1, then finish at that depth. Visual
+*handoff* is self-ver (`0800` live chrome + `1300` hosted proof). *Pair*
+completes on typecheck/lint plus one runtime oracle; persist `1300`/`1400`
+when the user asks or on the next handoff. *Handoff* completes through `1300`
+and then `1400`: keep project-only choices in project decisions/logs; add
+reusable works/fails/notes to the owning process; update canonical guidance
+only from reusable evidence with its version, changelog, and Implementation
+log. If no existing process owns an activity, use `1400` to extend the
+correct document or create a new process in an unused numbering gap, then
+update `0010`. Ask only when the change would alter library-wide safety,
+authority, or numbering policy.
+<!-- app-master-process:end -->
+
+## Project override of the managed block
+
+Ignore the managed-block line “UI edits require a live `heroui-pro` MCP”. This repo is HeroUI OSS only (see **Project exception — HeroUI OSS only** at the top of this file). Web drive / self-ver still require `playwright-cli` (`0200` Step 3b).
