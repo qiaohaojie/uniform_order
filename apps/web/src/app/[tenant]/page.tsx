@@ -57,6 +57,7 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
           tenant={tenantRecord}
           popularItems={popularItems}
           accent={tenant.accent}
+          footer={<TenantFooter tenant={tenantRecord} />}
         />
       </MobileShell>
     );

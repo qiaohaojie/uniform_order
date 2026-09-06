@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { getTenant } from "@/db/queries";
-import { upsertPrelovedSettings } from "@/db/preloved-queries";
-import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization";
+import {
+  ensurePrelovedRefundClauseOnLegalVersion,
+  upsertPrelovedSettings,
+} from "@/db/preloved-queries";
+import {
+  ensureTenantAccess,
+  isPlatformAdminEmail,
+  requireSessionUser,
+} from "@/lib/auth/authorization";
 import {
   isPersistablePriceFractionOfNew,
   roundPriceFractionOfNew,
@@ -71,6 +79,22 @@ export async function PATCH(
     }
 
     const settings = await upsertPrelovedSettings(tenantId, patch);
+    if (settings.prelovedEnabled) {
+      const bumped = await ensurePrelovedRefundClauseOnLegalVersion({
+        tenantId,
+        actorEmail: authResult.user.email,
+        actorUserId: authResult.user.id,
+        actorRole: isPlatformAdminEmail(authResult.user.email)
+          ? "platform_admin"
+          : "operator",
+      });
+      if (bumped) {
+        revalidatePath(`/${tenantId}/refund-policy`);
+        if (tenant.platformApprovalStatus === "approved") {
+          revalidatePath(`/${tenantId}`, "layout");
+        }
+      }
+    }
     return NextResponse.json({ ok: true, ...settings });
   } catch (err) {
     console.error("PATCH /api/tenant/[tenantId]/preloved error:", err);

@@ -93,7 +93,7 @@ graph TD
 ### Wave 2
 - [x] [M02 — Mixed-cart GST](./milestones/M02-mixed-cart-gst.md) — deps: M01
 - [x] [M03 — Operator intake and write-off](./milestones/M03-operator-intake.md) — deps: M01
-- [ ] [M04 — Donate page and refund policy](./milestones/M04-donate-and-refund-policy.md) — deps: M01
+- [x] [M04 — Donate page and refund policy](./milestones/M04-donate-and-refund-policy.md) — deps: M01
 
 ### Wave 3
 - [ ] [M05 — Parent preloved catalogue and cart](./milestones/M05-parent-preloved-shop.md) — deps: M01, M02, M03, M04

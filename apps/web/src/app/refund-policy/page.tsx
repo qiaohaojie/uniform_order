@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PRELOVED_REFUND_CLAUSE } from "@/lib/preloved-refund-policy";
 
 /**
  * Generic platform refund-policy template for the managed cloud and open-source
@@ -37,6 +38,9 @@ export default function RefundPolicyPage() {
           <li><b>Change of mind:</b> at the school&apos;s discretion; many shops do not offer change-of-mind refunds on personalised or final-sale items.</li>
         </ul>
 
+        <h2 className="font-serif text-xl mt-6">Preloved items</h2>
+        <p>{PRELOVED_REFUND_CLAUSE}</p>
+
         <h2 className="font-serif text-xl mt-6">Payments</h2>
         <p>
           Card payments are processed by Stripe on behalf of the school&apos;s connected Stripe account.
@@ -63,7 +67,7 @@ export default function RefundPolicyPage() {
         </p>
 
         <p className="mt-8 text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
-          Last updated: 12 August 2026.
+          Last updated: 7 September 2026.
         </p>
       </div>
       <div className="mt-6">

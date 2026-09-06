@@ -20,7 +20,7 @@
       "settings": { "workflowMode": "standard", "pickupEnabled": true, "shippingEnabled": false },
       "legal": {
         "policyMode": "text",
-        "policyText": "Refunds available within 14 days of collection for unworn, unwashed items with original packaging. Custom-embroidered name labels are non-refundable.",
+        "policyText": "Refunds available within 14 days of collection for unworn, unwashed items with original packaging. Custom-embroidered name labels are non-refundable. Preloved items are sold as worn, at a reduced price, with the stated condition. Change of mind is not offered. If an item is not as described, or is not of acceptable quality for a used garment at that price, the shop will repair, replace, or refund as Australian Consumer Law requires.",
         "aclAcknowledged": true,
         "sellerOfRecordAcknowledged": true,
         "declarantName": "Demo Operator",
@@ -55,7 +55,7 @@
       "settings": { "workflowMode": "standard", "pickupEnabled": true, "shippingEnabled": false },
       "legal": {
         "policyMode": "text",
-        "policyText": "Refunds available within 14 days for unworn, unwashed items with tags. Custom items (name labels, embroidered house shirts) are non-refundable.",
+        "policyText": "Refunds available within 14 days for unworn, unwashed items with tags. Custom items (name labels, embroidered house shirts) are non-refundable. Preloved items are sold as worn, at a reduced price, with the stated condition. Change of mind is not offered. If an item is not as described, or is not of acceptable quality for a used garment at that price, the shop will repair, replace, or refund as Australian Consumer Law requires.",
         "aclAcknowledged": true,
         "sellerOfRecordAcknowledged": true,
         "declarantName": "Demo Operator",

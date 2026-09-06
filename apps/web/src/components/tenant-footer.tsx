@@ -1,17 +1,28 @@
 import Link from "next/link";
 import type { TenantRow } from "@/db/schema";
+import { getPrelovedSettings } from "@/db/preloved-queries";
 
-export function TenantFooter({
+export async function TenantFooter({
   tenant,
   hideContact,
 }: {
   tenant: TenantRow;
   hideContact?: boolean;
 }) {
+  const { prelovedEnabled } = await getPrelovedSettings(tenant.id);
   const showRefund = tenant.currentLegalVersionId !== null;
   return (
     <footer className="border-t border-rule bg-parchment px-5 py-4 text-[12px] leading-relaxed text-ink-dim">
       <nav aria-label="Tenant policies" className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {prelovedEnabled && (
+          <Link
+            className="underline hover:text-ink"
+            href={`/${tenant.id}/preloved/donate`}
+            data-testid="footer-donate-link"
+          >
+            Donate
+          </Link>
+        )}
         {showRefund && (
           <Link className="underline hover:text-ink" href={`/${tenant.id}/refund-policy`}>
             Refund policy

@@ -2,6 +2,7 @@
  * Preloved settings / SKU / intake helpers.
  * Kept out of queries.ts so M02 can own GST/report changes without merge conflict.
  */
+import { cache } from "react";
 import { and, asc, desc, eq, gt, gte, isNotNull, lt, sql } from "drizzle-orm";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
@@ -29,16 +30,27 @@ import {
   type RejectPrelovedIntakeInput,
   type WriteOffPrelovedSkuInput,
 } from "@/lib/preloved";
+import { type InsertDonationNoteInput } from "@/lib/preloved-donate";
+import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
+import { logAuditEvent } from "@/lib/audit/log";
+import type { AuditActorRole } from "@/lib/audit/types";
 import { db } from "./index";
 import {
   catalogItems,
   catalogVariants,
+  prelovedDonationNotes,
   prelovedIntakeEvents,
   prelovedSkus,
   tenantPrelovedSettings,
+  type PrelovedDonationNoteRow,
   type PrelovedIntakeEventRow,
   type PrelovedSkuRow,
 } from "./schema";
+import {
+  getTenant,
+  getTenantLegalVersion,
+  insertNextTenantLegalVersion,
+} from "./queries";
 
 function mapSettingsRow(
   tenantId: string,
@@ -60,14 +72,14 @@ function toNumeric2(value: number, fallback = DEFAULT_PRICE_FRACTION_OF_NEW): st
   return Number.isFinite(value) ? value.toFixed(2) : fallback.toFixed(2);
 }
 
-export async function getPrelovedSettings(tenantId: string): Promise<PrelovedSettings> {
+export const getPrelovedSettings = cache(async (tenantId: string): Promise<PrelovedSettings> => {
   const [row] = await db
     .select()
     .from(tenantPrelovedSettings)
     .where(eq(tenantPrelovedSettings.tenantId, tenantId))
     .limit(1);
   return mapSettingsRow(tenantId, row);
-}
+});
 
 /**
  * Insert or update tenant preloved settings.
@@ -114,6 +126,61 @@ export async function upsertPrelovedSettings(
   return mapSettingsRow(tenantId, row);
 }
 
+/**
+ * When preloved is on, persist the ACL-safe clause on the current text-mode
+ * legal version (new row + pointer flip). URL-mode rows cannot store
+ * policy_text (check constraint); those tenants keep URL mode and the tenant
+ * refund-policy route shows the canonical paragraph instead of redirecting.
+ *
+ * enteredByUserId must be a real neon_auth UUID. Dev-session ids fall back to
+ * the previous version's enteredByUserId.
+ */
+export async function ensurePrelovedRefundClauseOnLegalVersion(opts: {
+  tenantId: string;
+  actorEmail: string;
+  actorUserId: string;
+  actorRole: AuditActorRole;
+}): Promise<{ id: string; version: number } | null> {
+  const tenant = await getTenant(opts.tenantId);
+  if (!tenant?.currentLegalVersionId) return null;
+
+  const current = await getTenantLegalVersion(tenant.currentLegalVersionId);
+  if (!current || current.policyMode !== "text") return null;
+
+  const nextText = policyTextWithPrelovedRefundClause(current.policyText);
+  if (nextText === (current.policyText ?? "")) return null;
+
+  const enteredByUserId = parseActorId(opts.actorUserId) ?? current.enteredByUserId;
+  const inserted = await insertNextTenantLegalVersion({
+    tenantId: opts.tenantId,
+    policyMode: "text",
+    policyText: nextText,
+    policyUrl: null,
+    aclAcknowledged: current.aclAcknowledged,
+    sellerOfRecordAcknowledged: current.sellerOfRecordAcknowledged,
+    declarantName: current.declarantName,
+    declarantRole: current.declarantRole,
+    enteredByUserId,
+    enteredByEmail: opts.actorEmail,
+  });
+  if (!inserted) return null;
+
+  await logAuditEvent({
+    tenantId: opts.tenantId,
+    actorEmail: opts.actorEmail,
+    actorRole: opts.actorRole,
+    action: "tenant.legal_updated",
+    targetType: "tenant_legal_version",
+    targetId: inserted.id,
+    payload: {
+      version: inserted.version,
+      mode: "text",
+      changedFields: ["preloved_refund_clause"],
+    },
+  });
+  return inserted;
+}
+
 export async function insertPrelovedIntakeEvent(
   input: InsertPrelovedIntakeEventInput,
 ): Promise<PrelovedIntakeEventRow> {
@@ -130,6 +197,25 @@ export async function insertPrelovedIntakeEvent(
       qty: input.qty,
       rejectReason: input.rejectReason ?? null,
       actorId: parseActorId(input.actorId),
+    })
+    .returning();
+  return row;
+}
+
+/**
+ * Persist one parent drop-off bag note. Does not insert preloved_skus
+ * or preloved_intake_events.
+ */
+export async function insertDonationNote(
+  input: InsertDonationNoteInput,
+): Promise<PrelovedDonationNoteRow> {
+  const [row] = await db
+    .insert(prelovedDonationNotes)
+    .values({
+      tenantId: input.tenantId,
+      parentName: input.parentName,
+      studentName: input.studentName,
+      bagCount: input.bagCount,
     })
     .returning();
   return row;

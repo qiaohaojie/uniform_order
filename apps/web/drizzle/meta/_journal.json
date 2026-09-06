@@ -141,6 +141,13 @@
       "when": 1788740000000,
       "tag": "0019_preloved_sku_defect_note",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0020_preloved_donation_notes",
+      "breakpoints": true
     }
   ]
 }

@@ -465,3 +465,198 @@
 - **Evidence:** M03 accept POST 500 until acceptAndPool select listed id, rejectReason, createdAt. Playwright then passed: pnpm test:m03-intake-stock on nsbh polo size 10 Good twice.
 - **Links:** specs/milestones/M03-operator-intake.md
 
+## When Drizzle snapshots stopped, hand-write SQL plus a journal idx; do not drizzle-kit generate a snapshot for one additive migration.
+- **ID:** 77cb11ce-8fc1-43a5-911a-584f05573a5d
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** drizzle-kit 0.31.10, drizzle-orm 0.45.2, neon-http
+- **Detail:** Snapshots ended at 0012; later additive tables (0018–0020) are SQL files plus meta/_journal.json only. Generate churns unrelated snapshot JSON and can recreate objects. Journal `when` must be strictly after the previous idx (Date.now() can sort before a rounded prior timestamp). Forgetting the journal row means the migrator skips the file.
+- **Evidence:** apps/web/drizzle/0020_preloved_donation_notes.sql; drizzle/meta/_journal.json idx 20; snapshots 0000–0012 only
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Render-time legal overlays desync versioned consent; persist a new immutable version instead of appending at read time.
+- **ID:** 4d24c44d-59f0-4848-a843-bc340fc95b4f
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 + Drizzle + neon-http
+- **Detail:** If checkout stores currentLegalVersionId and admin UI reads stored policyText, a parent-page addendum makes those sources lie. Exclusive policy_mode checks (text XOR url) also block storing overlay text on URL rows. Do not UPDATE historical version rows. Idempotent substring-detect (whitespace-normalized) before insert. A leftover display helper that ignores the feature flag is a trap.
+- **Evidence:** apps/web/src/lib/preloved-refund-policy.ts displayRefundPolicyText; insertNextTenantLegalVersion; tenant_legal_versions check constraint
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## When a legal mode cannot store body text, skip the outbound redirect and show the required clause on the tenant route with a link out.
+- **ID:** 2b926ebd-4b5c-4800-9d08-0ed0ad52f024
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router redirect()
+- **Detail:** URL-mode rows keep policy_url and null policy_text. Redirecting before the display-time (or persist) path skips the tenant-surface AC. You cannot inspect a remote hosted policy. Keep URL mode valid; do not auto-convert URL→text.
+- **Evidence:** apps/web/src/app/[tenant]/refund-policy/page.tsx; ensurePrelovedRefundClauseOnLegalVersion no-ops unless policyMode is text
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Persisting a derived clause only on the next settings save leaves already-enabled tenants without it; tests that always PATCH hide the gap.
+- **ID:** 8cff5005-838a-49ab-a07d-7ad0dea7d39e
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 + Drizzle tenant_legal_versions
+- **Detail:** ensure-on-enable with no backfill means a tenant that turned the feature on earlier can show the nav link while stored policy text still lacks the required paragraph. E2E that toggles the flag as setup never exercises the stale-on path. Backfill by inserting the next version (never UPDATE) on read or deploy.
+- **Evidence:** apps/web/src/db/preloved-queries.ts ensurePrelovedRefundClauseOnLegalVersion; PATCH /api/tenant/:id/preloved; m04-donate-refund.spec.ts always enables via UI
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## A parent message-to-operator belongs on its own table with no inventory/SKU FK; do not extend intake/event enums.
+- **ID:** 76c049c0-0dc5-43dc-8a63-375bca7ae609
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm 0.45.2, neon-http
+- **Detail:** Reusing stock events or attaching a SKU makes a drop-off note look like a listing and fights parallel enum work. Keep CHECK bounds on the DB; the public POST returns 201 { ok: true } with no sku/note id so clients cannot treat it as a listing.
+- **Evidence:** apps/web/src/db/schema.ts preloved_donation_notes; insertDonationNote; POST donate 201 body
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Do not copy a helper RangeError→400 mapper onto a route whose insert never throws RangeError; keep Zod plus the DB CHECK.
+- **ID:** 0b272f17-9d9d-454f-ac6d-c7b00f19dd4b
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4, Zod 4, drizzle-orm 0.45.2, neon-http
+- **Detail:** Postgres check-constraint failures are not RangeError. If the only caller already ran schema.safeParse with the same min/max, a throw/catch on that path is dead. Drop both layers unless another caller skips parse.
+- **Evidence:** insertDonationNote is db.insert().values(); DonateSchema.int().min().max(); donate POST catch is 500-only
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## HeroUI v3 compound Card and Chip can be imported into a Next 16 RSC page without a local use-client wrapper.
+- **ID:** 5169b0e9-c1a9-45c8-956d-47aea74b29d6
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** @heroui/react ^3.1.0, next ^16.2.4
+- **Detail:** Card.Header/Title/Description/Content and Chip (size sm, variant secondary) typecheck in an async server page that also calls notFound() and DB helpers. Client boundary stays inside the library. This repo is OSS @heroui/react only.
+- **Evidence:** apps/web/src/app/[tenant]/preloved/donate/page.tsx
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Client screens cannot import async RSCs; pass the server chrome as a ReactNode slot.
+- **ID:** 10eb9ad9-1e01-4e8a-ae6f-ac4361845cd6
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4, React 19.2.5
+- **Detail:** An async footer that reads settings cannot be imported from a "use client" landing/layout. The server page renders <Footer /> and passes it as footer={...}. If a future client file imports the async footer directly, the build should fail rather than silently hide the link.
+- **Evidence:** apps/web/src/components/tenant-footer.tsx; apps/web/src/app/[tenant]/landing-screen.tsx footer slot
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## A default-false feature flag on shared chrome silently hides the control on every call site that forgets the prop.
+- **ID:** b46281d6-a9e6-4af3-9bff-0abe372cac2e
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0600
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js App Router shared footer
+- **Detail:** Landing/catalogue showed Donate while cart/checkout/item/donate/refund stayed dark. Prefer resolving the flag in layout/chrome (or requiring the prop) over optional default-false. Tradeoff: fetching settings inside a shared component pulls the query layer into UI; a layout-level cache() read plus a required prop is cleaner.
+- **Evidence:** TenantFooter originally defaulted prelovedEnabled=false; later became async getPrelovedSettings(tenant.id)
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Next 16 PageProps<"/new-route"> fails tsc until typegen AppRoutes includes that path; use inline Promise params until then.
+- **ID:** 3d7cfea7-f221-4818-b343-2663bd4d7dfb
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0600
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4 App Router; tsc --noEmit
+- **Detail:** PageProps<"/[tenant]/preloved/donate"> was TS2344 and params became unknown. Inline { params: Promise<{ tenant: string }> } plus await params typechecks. Existing routes can use PageProps only because they are already in generated AppRoutes. After `next typegen`, switching is optional cleanup.
+- **Evidence:** pnpm check-types:web failed donate/page.tsx TS2344, then passed after Wave 1 inline params
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Do not assert copy via a shared Tailwind class; put a unique data-testid on the document body.
+- **ID:** e137f874-f995-4159-9e92-df24994774bf
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0600
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Playwright ^1.59.1, Next.js 16, Tailwind v4
+- **Detail:** page.locator('.whitespace-pre-wrap') matched both refund-policy text and footer shop hours; Playwright toContainText is a single-element/strict-mode assertion. Heading following-sibling xpath is also brittle. Testids stay unique if layout classes are reused.
+- **Evidence:** apps/web/src/app/[tenant]/refund-policy/page.tsx data-testid=refund-policy-text; tenant-footer.tsx shopHours also whitespace-pre-wrap
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## A parent MobileShell max-w ~430px still looks like a phone card at a 1440 desktop viewport.
+- **ID:** 7ad0dc15-cce6-4443-9e0f-bf7ece5d7a39
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0600
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 parent shop MobileShell
+- **Detail:** Visual proof should resize to ~430 and 1440, but expect the same narrow shell on both. Do not treat a wide viewport as a desktop layout for this chrome.
+- **Evidence:** apps/web/src/components/mobile-shell.tsx; m04 spec MOBILE_VIEWPORT/DESKTOP_VIEWPORT
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## A page-level public-listing 404 does not stop unauthenticated writes on a sibling API that only checks tenant existence.
+- **ID:** 2ea17d39-df12-4cbb-856d-fd3df8cb7b77
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0200
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router; Neon Auth getSessionUser
+- **Detail:** Match GET and POST: same isPubliclyListed && platformApprovalStatus === 'approved' gate, 404 (not 403) to avoid existence leaks, and the same platform-admin preview exception if the form is visible to admins. Rate-limit the public POST (IP, per-tenant, in-memory limiter resets on cold start).
+- **Evidence:** donate/page.tsx vs POST /api/tenant/[tenantId]/preloved/donate; applyRateLimit 10/min; getSessionUser + isPlatformAdminEmail
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Dev-session actor ids are not neon_auth UUIDs; copy enteredByUserId from the current row when parseActorId fails.
+- **ID:** 4c940976-8d08-4c36-a347-62d93658d391
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0200
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Neon Auth; NODE_ENV=development /api/dev/login
+- **Detail:** entered_by_user_id is a UUID FK. Dev login ids like `dev-${email}` fail the insert. Fallback to the previous version's user id and record the operator email on enteredByEmail. Do not invent a nil UUID.
+- **Evidence:** ensurePrelovedRefundClauseOnLegalVersion parseActorId(actorUserId) ?? current.enteredByUserId
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Preloved Playwright binds a live Next instance (no webServer); workers stay 1; NODE_ENV=development is required for /api/dev/login.
+- **ID:** 83df1d04-44ee-422d-af92-cc1053390918
+- **Date:** 2026-09-06T23:39:17Z
+- **DocId:** 0100
+- **Kind:** note
+- **Status:** verified
+- **Milestone:** M04
+- **Project:** uniform_order
+- **Version scope:** Playwright ^1.59.1; Next.js 16
+- **Detail:** baseURL: PLAYWRIGHT_BASE_URL, then .dev-local/web.url, then PORT. Specs do not boot the app. Feature-flagged routes: serial tests each set Enable preloved via the operator UI rather than a direct PATCH or one mega-test, so they do not race the shared tenant flag.
+- **Evidence:** apps/web/playwright.config.ts; apps/web/tests/preloved/m04-donate-refund.spec.ts; pnpm test:m04-donate-refund
+- **Links:** specs/milestones/M04-donate-and-refund-policy.md
+

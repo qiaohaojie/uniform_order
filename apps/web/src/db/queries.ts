@@ -2,6 +2,7 @@ import { db, orders, orderLines, catalogItems, catalogVariants, tenants, orderRe
 import { tenantSettings, tenantSettingEvents, orderEvents, orderNotificationEvents } from "./schema";
 import { and, eq, desc, or, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import { randomUUID } from "node:crypto";
 import { cache } from "react";
 import type { CatalogItem, SizeGuide, Tenant } from "@/lib/data";
 import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
@@ -1218,6 +1219,62 @@ export async function getMaxLegalVersionForTenant(tenantId: string): Promise<num
     .from(tenantLegalVersions)
     .where(eq(tenantLegalVersions.tenantId, tenantId));
   return row?.max ?? 0;
+}
+
+export type InsertNextTenantLegalVersionInput = {
+  tenantId: string;
+  policyMode: "text" | "url";
+  policyText: string | null;
+  policyUrl: string | null;
+  aclAcknowledged: boolean;
+  sellerOfRecordAcknowledged: boolean;
+  declarantName: string;
+  declarantRole: string;
+  enteredByUserId: string;
+  enteredByEmail: string;
+};
+
+/**
+ * Insert a new tenant_legal_versions row and point tenants.currentLegalVersionId
+ * at it. Uses db.batch (neon-http has no interactive transactions). Retries the
+ * (tenant_id, version) unique constraint a few times.
+ */
+export async function insertNextTenantLegalVersion(
+  input: InsertNextTenantLegalVersionInput,
+): Promise<{ id: string; version: number } | null> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const nextVersion = (await getMaxLegalVersionForTenant(input.tenantId)) + 1;
+    const newId = randomUUID();
+    try {
+      await db.batch([
+        db.insert(tenantLegalVersions).values({
+          id: newId,
+          tenantId: input.tenantId,
+          version: nextVersion,
+          policyMode: input.policyMode,
+          policyText: input.policyText,
+          policyUrl: input.policyUrl,
+          aclAcknowledged: input.aclAcknowledged,
+          sellerOfRecordAcknowledged: input.sellerOfRecordAcknowledged,
+          declarantName: input.declarantName,
+          declarantRole: input.declarantRole,
+          enteredByUserId: input.enteredByUserId,
+          enteredByEmail: input.enteredByEmail,
+        }),
+        db
+          .update(tenants)
+          .set({ currentLegalVersionId: newId, updatedAt: new Date() })
+          .where(eq(tenants.id, input.tenantId)),
+      ]);
+      return { id: newId, version: nextVersion };
+    } catch (e) {
+      if (isUniqueConstraintError(e, "tenant_legal_versions_tenant_version_unique")) {
+        continue;
+      }
+      throw e;
+    }
+  }
+  return null;
 }
 
 export async function getPopularItems(

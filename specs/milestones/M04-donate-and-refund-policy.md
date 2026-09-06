@@ -5,7 +5,7 @@
      Plan must not silently redesign WHAT/WHY from the approved source spec. -->
 
 ## Status
-pending            <!-- pending | in-progress | complete -->
+complete            <!-- pending | in-progress | complete -->
 
 ## Wave
 2
@@ -49,13 +49,13 @@ Parents get the real-world donate instructions: drop a washed bag at the shop, d
 - Tenant footer / `landing-screen.tsx` for the donate link
 
 ## Acceptance criteria
-- [ ] With preloved off, donate route is not offered in nav/footer (404 or hidden)
-- [ ] With preloved on, donate page shows wash/current-uniform rules, refuse list (default includes hats/socks/swimwear), hours, address, and reject-to-charity copy
-- [ ] Optional bag note can be submitted without creating a SKU or listing
-- [ ] No parent photo upload, price field, or Stripe on this page
-- [ ] Tenant refund policy includes sold-as-worn, no change-of-mind, ACL for not-as-described / not acceptable quality for a used garment
-- [ ] `pnpm check-types:web` passes
-- [ ] Playwright: open donate page on mobile viewport (~430px) and desktop; submit bag note
+- [x] With preloved off, donate route is not offered in nav/footer (404 or hidden)
+- [x] With preloved on, donate page shows wash/current-uniform rules, refuse list (default includes hats/socks/swimwear), hours, address, and reject-to-charity copy
+- [x] Optional bag note can be submitted without creating a SKU or listing
+- [x] No parent photo upload, price field, or Stripe on this page
+- [x] Tenant refund policy includes sold-as-worn, no change-of-mind, ACL for not-as-described / not acceptable quality for a used garment
+- [x] `pnpm check-types:web` passes
+- [x] Playwright: open donate page on mobile viewport (~430px) and desktop; submit bag note
 
 ## Verification
 - **Commands:** not configured · `pnpm check-types:web` · no test suite

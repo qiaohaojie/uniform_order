@@ -1,10 +1,10 @@
 // apps/web/src/app/[tenant]/landing-screen.tsx
 "use client";
 
+import { type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
-import { TenantFooter } from "@/components/tenant-footer";
 import { BottomNav } from "@/components/bottom-nav";
 import { setVisitedCookie } from "@/lib/landing-visit.client";
 import { type TenantRow } from "@/db/schema";
@@ -14,10 +14,12 @@ export function LandingScreen({
   tenant,
   popularItems,
   accent,
+  footer,
 }: {
   tenant: TenantRow;
   popularItems: PopularItem[];
   accent: string;
+  footer: ReactNode;
 }) {
   const router = useRouter();
 
@@ -177,7 +179,7 @@ export function LandingScreen({
 
       </div>
 
-      <TenantFooter tenant={tenant} />
+      {footer}
       <div className="pb-16" />
       <BottomNav active="shop" shopHref={`/${tenant.id}`} accent={accent} />
     </>

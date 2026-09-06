@@ -42,5 +42,12 @@
 - 2026-09-06 · 349ef46e · build:M03 · Write-off records preloved_intake_events written_off only; no audit_events row
 - 2026-09-06 · 4e507191 · build:M03 · drizzle insert().select() for intake events must list every table column in schema order
 
+## M04  ([decisions/M04.md](M04.md)) — 5
+- 2026-09-06 · 8b41c8d4 · build:M04 · Optional bag notes live in preloved_donation_notes; no SKU, listing, or operator inbox in M04
+- 2026-09-06 · 693a7356 · build:M04 · Hand-write SQL 0020 + journal idx 20; no drizzle snapshot
+- 2026-09-06 · bdc9d463 · build:M04 · TenantFooter is an async RSC that reads prelovedEnabled itself (drift from optional prop)
+- 2026-09-06 · 891e6af9 · build:M04 · ACL preloved clause persists on a new legal version when preloved is on, with display-time fallback
+- 2026-09-06 · 9eb26846 · build:M04 · Donate POST is public, visibility-gated, and IP-limited; no login, photo, price, or Stripe
+
 ## Misc  ([decisions/misc.md](misc.md)) — 1
 - 2026-09-06 · 2f31cd1c · onboard · HeroUI OSS only — this repo is open source

@@ -1,14 +1,14 @@
 "use server";
 import { db } from "@/db";
-import { tenants, tenantLegalVersions } from "@/db/schema";
+import { tenants } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { randomUUID } from "node:crypto";
 import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
 import { brandingEditSchema, tenantLegalSchema } from "@/lib/platform/schema";
 import { logAuditEvent } from "@/lib/audit/log";
-import { getTenantLegalVersion, getMaxLegalVersionForTenant } from "@/db/queries";
-import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
+import { getTenantLegalVersion, insertNextTenantLegalVersion } from "@/db/queries";
+import { getPrelovedSettings } from "@/db/preloved-queries";
+import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
@@ -137,14 +137,21 @@ export async function editTenantLegal(id: string, input: unknown) {
   const current = tenant.currentLegalVersionId
     ? await getTenantLegalVersion(tenant.currentLegalVersionId)
     : null;
+  const settings = await getPrelovedSettings(id);
   const next = parsed.data;
+  const nextPolicyText =
+    next.mode === "text"
+      ? settings.prelovedEnabled
+        ? policyTextWithPrelovedRefundClause(next.policyText)
+        : next.policyText
+      : null;
 
   // Diff against current to short-circuit no-op saves (mirrors editTenantBranding).
   const sameMode = current?.policyMode === next.mode;
   const sameContent =
     sameMode &&
     (next.mode === "text"
-      ? current?.policyText === next.policyText
+      ? current?.policyText === nextPolicyText
       : current?.policyUrl === next.policyUrl);
   const sameDeclarant =
     current?.declarantName === next.declarantName &&
@@ -162,49 +169,18 @@ export async function editTenantLegal(id: string, input: unknown) {
         ...(sameDeclarant ? [] : ["declarant"]),
       ];
 
-  // Insert new version + flip tenants pointer atomically in one db.batch
-  // round-trip (project rule: never db.transaction; neon-http doesn't support
-  // it). Generate the row id client-side so both statements can reference it
-  // without an interleaved RETURNING. Same pattern db/queries.ts:600/651/700
-  // uses for catalog INSERT-then-related-writes.
-  //
-  // Retry loop guards the (tenant_id, version) unique constraint — narrows
-  // the SELECT-MAX/INSERT race but doesn't eliminate it (see queries.ts
-  // race-window note above).
-  let inserted: { id: string; version: number } | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const nextVersion = (await getMaxLegalVersionForTenant(id)) + 1;
-    const newId = randomUUID();
-    try {
-      await db.batch([
-        db.insert(tenantLegalVersions).values({
-          id: newId,
-          tenantId: id,
-          version: nextVersion,
-          policyMode: next.mode,
-          policyText: next.mode === "text" ? next.policyText : null,
-          policyUrl: next.mode === "url" ? next.policyUrl : null,
-          aclAcknowledged: next.aclAcknowledged,
-          sellerOfRecordAcknowledged: next.sellerOfRecordAcknowledged,
-          declarantName: next.declarantName,
-          declarantRole: next.declarantRole,
-          enteredByUserId: user.id,
-          enteredByEmail: user.email,
-        }),
-        db
-          .update(tenants)
-          .set({ currentLegalVersionId: newId, updatedAt: new Date() })
-          .where(eq(tenants.id, id)),
-      ]);
-      inserted = { id: newId, version: nextVersion };
-      break;
-    } catch (e) {
-      if (isUniqueConstraintError(e, "tenant_legal_versions_tenant_version_unique")) {
-        continue;
-      }
-      throw e;
-    }
-  }
+  const inserted = await insertNextTenantLegalVersion({
+    tenantId: id,
+    policyMode: next.mode,
+    policyText: next.mode === "text" ? nextPolicyText : null,
+    policyUrl: next.mode === "url" ? next.policyUrl : null,
+    aclAcknowledged: next.aclAcknowledged,
+    sellerOfRecordAcknowledged: next.sellerOfRecordAcknowledged,
+    declarantName: next.declarantName,
+    declarantRole: next.declarantRole,
+    enteredByUserId: user.id,
+    enteredByEmail: user.email,
+  });
   if (!inserted) {
     return { ok: false as const, error: "Could not allocate a version number; please retry" };
   }
@@ -224,6 +200,7 @@ export async function editTenantLegal(id: string, input: unknown) {
   // layout cache when the tenant is actually approved.
   if (tenant.platformApprovalStatus === "approved") {
     revalidatePath(`/${id}`, "layout");
+    revalidatePath(`/${id}/refund-policy`);
   }
 
   return { ok: true as const, version: inserted.version };

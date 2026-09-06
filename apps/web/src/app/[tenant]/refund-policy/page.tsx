@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import { getPrelovedSettings } from "@/db/preloved-queries";
 import { getTenant, getTenantLegalVersion } from "@/db/queries";
 import { MobileShell } from "@/components/mobile-shell";
 import { TenantFooter } from "@/components/tenant-footer";
+import {
+  displayRefundPolicyText,
+  PRELOVED_REFUND_CLAUSE,
+} from "@/lib/preloved-refund-policy";
 
 // Tenant-internal document, not an SEO target.
 export const metadata: Metadata = {
@@ -26,10 +31,32 @@ export default async function RefundPolicyPage({
     : null;
   if (!version) notFound();
 
-  if (version.policyMode === "url") {
-    if (!version.policyUrl) notFound(); // belt-and-braces; check constraint guarantees this
-    redirect(version.policyUrl);
+  const settings = await getPrelovedSettings(tenantId);
+  const prelovedEnabled = settings.prelovedEnabled;
+  const externalPolicyUrl =
+    version.policyMode === "url" ? version.policyUrl : null;
+
+  // URL mode normally sends parents to the school's hosted policy. Preloved
+  // still needs the ACL-safe clause on this tenant route, so skip the redirect
+  // and link out instead. We cannot inspect the remote page for the clause.
+  if (externalPolicyUrl) {
+    if (!prelovedEnabled) {
+      redirect(externalPolicyUrl);
+    }
+  } else if (version.policyMode === "url") {
+    notFound(); // belt-and-braces; check constraint guarantees a URL
   }
+
+  const storedText = displayRefundPolicyText(
+    version.policyText,
+    prelovedEnabled,
+  );
+  // URL-mode rows cannot store policy_text (check constraint). Show the
+  // canonical paragraph locally instead of injecting onto a text-mode version.
+  const policyText =
+    prelovedEnabled && !storedText.trim() && externalPolicyUrl
+      ? PRELOVED_REFUND_CLAUSE
+      : storedText;
 
   return (
     <MobileShell logoUrl={tenant.logoUrl ?? undefined}>
@@ -40,9 +67,24 @@ export default async function RefundPolicyPage({
         >
           Refund policy
         </h1>
-        <div className="text-sm leading-6 text-ink whitespace-pre-wrap">
-          {version.policyText}
+        <div
+          className="text-sm leading-6 text-ink whitespace-pre-wrap"
+          data-testid="refund-policy-text"
+        >
+          {policyText}
         </div>
+        {prelovedEnabled && externalPolicyUrl ? (
+          <p className="mt-4 text-sm leading-6">
+            <a
+              className="underline hover:text-ink"
+              href={externalPolicyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              School refund policy
+            </a>
+          </p>
+        ) : null}
         <div className="mt-6 pt-4 border-t border-rule text-xs text-ink-dim">
           Declared by {version.declarantName}, {version.declarantRole} ·{" "}
           {new Date(version.createdAt).toLocaleDateString("en-AU", {

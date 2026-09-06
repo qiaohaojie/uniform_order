@@ -20,7 +20,7 @@ pnpm check-types:web  # TypeScript check (apps/web)
 pnpm check-types      # TypeScript check (all packages)
 ```
 
-No test suite or linter — `check-types` is the correctness gate.
+Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`) need `pnpm dev:web` first.
 
 ## Deployment
 

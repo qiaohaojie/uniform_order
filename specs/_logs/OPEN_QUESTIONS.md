@@ -22,3 +22,6 @@
 
 - [ ] **(plan)** School-fee credit as a payout option — raised: 2026-09-06, by: plan
       context: Phase 2 only. Not in M01–M06.
+
+- [ ] **(M04)** Operators have no inbox to read `preloved_donation_notes` — raised: 2026-09-07, by: build:M04
+      context: Bag notes persist without creating a SKU (AC met). Spec calls them a message to operators; M04 did not add a SELECT/admin list. Non-blocking for donate/refund copy. Resolve in a later admin slice if P&Cs need to see drop-off notes.

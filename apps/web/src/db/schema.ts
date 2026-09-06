@@ -301,6 +301,30 @@ export const prelovedIntakeEvents = pgTable(
   }),
 );
 
+// Parent drop-off bag note. A message to operators — not a listing.
+// No preloved_sku_id; intake_action is unchanged.
+export const prelovedDonationNotes = pgTable(
+  "preloved_donation_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parentName: text("parent_name").notNull(),
+    studentName: text("student_name").notNull(),
+    bagCount: integer("bag_count").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    bagCountRange: check(
+      "preloved_donation_notes_bag_count_range",
+      sql`${t.bagCount} >= 1 AND ${t.bagCount} <= 20`,
+    ),
+  }),
+);
+
 // ─── Pending order snapshots ─────────────────────────────────────────────────
 /**
  * Server-authoritative per-line price snapshot, written at PaymentIntent
@@ -625,3 +649,4 @@ export type TenantLegalVersionRow = typeof tenantLegalVersions.$inferSelect;
 export type TenantPrelovedSettingsRow = typeof tenantPrelovedSettings.$inferSelect;
 export type PrelovedSkuRow = typeof prelovedSkus.$inferSelect;
 export type PrelovedIntakeEventRow = typeof prelovedIntakeEvents.$inferSelect;
+export type PrelovedDonationNoteRow = typeof prelovedDonationNotes.$inferSelect;
