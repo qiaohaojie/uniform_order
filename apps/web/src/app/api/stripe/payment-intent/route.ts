@@ -34,6 +34,7 @@ type PrelovedLineLookup = {
   sourceItemId: string;
   size: string;
   condition: "good" | "fair";
+  qtyOnHand: number;
 };
 
 function readPrelovedSkuId(value: unknown): string | undefined {
@@ -57,6 +58,7 @@ async function getPrelovedLineLookup(
       condition: prelovedSkus.condition,
       sourceItemId: prelovedSkus.sourceItemId,
       size: prelovedSkus.size,
+      qtyOnHand: prelovedSkus.qtyOnHand,
       itemName: catalogItems.name,
     })
     .from(prelovedSkus)
@@ -76,6 +78,7 @@ async function getPrelovedLineLookup(
       sourceItemId: row.sourceItemId,
       size: row.size,
       condition: row.condition,
+      qtyOnHand: row.qtyOnHand,
     });
   }
   return lookup;
@@ -173,6 +176,14 @@ export async function POST(req: NextRequest) {
             getPrelovedLineLookup(tenantId, prelovedSkuIds),
           ])
         : [null, new Map<string, PrelovedLineLookup>()];
+    // Donate/intake/write-off 404 when the flag is off; leftover carts and
+    // crafted prelovedSkuId must not still be priced or charged.
+    if (prelovedSkuIds.length > 0 && !prelovedSettings?.prelovedEnabled) {
+      return NextResponse.json(
+        { error: "Preloved is not enabled" },
+        { status: 404 },
+      );
+    }
     const donatedGstFree = prelovedSettings?.donatedGstFree === true;
 
     const priceLookup = new Map(
@@ -217,6 +228,20 @@ export async function POST(req: NextRequest) {
         );
       }
       throw err;
+    }
+
+    const qtyBySku = new Map<string, number>();
+    for (const line of clientLines) {
+      const prelovedSkuId = readPrelovedSkuId(line.prelovedSkuId);
+      if (!prelovedSkuId) continue;
+      qtyBySku.set(prelovedSkuId, (qtyBySku.get(prelovedSkuId) ?? 0) + line.qty);
+    }
+    for (const [skuId, qty] of qtyBySku) {
+      const sku = prelovedLookup.get(skuId);
+      if (!sku) continue;
+      if (qty > sku.qtyOnHand) {
+        return NextResponse.json({ error: "insufficient_qty" }, { status: 409 });
+      }
     }
 
     const amountInCents = Math.round(verified.total * 100);

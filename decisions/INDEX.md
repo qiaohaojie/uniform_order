@@ -49,5 +49,15 @@
 - 2026-09-06 · 891e6af9 · build:M04 · ACL preloved clause persists on a new legal version when preloved is on, with display-time fallback
 - 2026-09-06 · 9eb26846 · build:M04 · Donate POST is public, visibility-gated, and IP-limited; no login, photo, price, or Stripe
 
+## M05  ([decisions/M05.md](M05.md)) — 8
+- 2026-09-07 · 7692e138 · build:M05 · Preloved PDP is /[tenant]/preloved/[skuId], not the new-item page.
+- 2026-09-07 · 0315f28c · build:M05 · Preloved is a shop filter, not an ItemCategory.
+- 2026-09-07 · ef9d09b6 · build:M05 · CartLine gains optional prelovedSkuId, condition, and qtyOnHand; merge and cap live in cart-store.
+- 2026-09-07 · d13f715f · build:M05 · Parent shop SKU reads live in preloved-queries; admin listInStockPrelovedSkus stays as-is.
+- 2026-09-07 · 565198f3 · build:M05 · GST display is derived from RSC donatedGstFree; never persist gstFree on CartLine.
+- 2026-09-07 · d9ea0b05 · build:M05 · Playwright persists prelovedEnabled via PATCH, not the admin switch click.
+- 2026-09-07 · b89ff2f1 · build:M05 · Dev CSP connect-src allows ws/wss; middleware skips /_next/.
+- 2026-09-07 · a8708d49 · build:M05 · Allow 127.0.0.1 as a Next.js allowedDevOrigin so Playwright hydrates
+
 ## Misc  ([decisions/misc.md](misc.md)) — 1
 - 2026-09-06 · 2f31cd1c · onboard · HeroUI OSS only — this repo is open source

@@ -117,12 +117,13 @@ export function PrelovedSettingsSection({
             role="switch"
             aria-checked={enabled}
             aria-label="Enable preloved"
+            data-testid="preloved-enabled-switch"
             onClick={() => setEnabled((on) => !on)}
             className="w-10 h-6 rounded-full relative flex-shrink-0 transition-colors"
             style={{ background: enabled ? accent : "var(--color-rule)" }}
           >
             <div
-              className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+              className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all pointer-events-none"
               style={{ left: enabled ? "calc(100% - 20px)" : 4 }}
             />
           </button>

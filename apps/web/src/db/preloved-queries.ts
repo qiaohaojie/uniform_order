@@ -1,6 +1,6 @@
 /**
- * Preloved settings / SKU / intake helpers.
- * Kept out of queries.ts so M02 can own GST/report changes without merge conflict.
+ * Preloved settings / SKU / intake / parent-shop helpers.
+ * Kept out of queries.ts so GST/report work in queries.ts does not clash.
  */
 import { cache } from "react";
 import { and, asc, desc, eq, gt, gte, isNotNull, lt, sql } from "drizzle-orm";
@@ -28,6 +28,7 @@ import {
   type PrelovedSettingsPatch,
   type PrelovedStockListItem,
   type RejectPrelovedIntakeInput,
+  type ShopPrelovedSku,
   type WriteOffPrelovedSkuInput,
 } from "@/lib/preloved";
 import { type InsertDonationNoteInput } from "@/lib/preloved-donate";
@@ -607,6 +608,89 @@ export async function listInStockPrelovedSkus(
     .orderBy(desc(prelovedSkus.listedAt));
   return rows.map(mapStockListItem);
 }
+
+const shopSkuSelect = {
+  id: prelovedSkus.id,
+  sourceItemId: prelovedSkus.sourceItemId,
+  itemName: catalogItems.name,
+  category: catalogItems.category,
+  size: prelovedSkus.size,
+  condition: prelovedSkus.condition,
+  price: prelovedSkus.price,
+  qtyOnHand: prelovedSkus.qtyOnHand,
+  defectNote: prelovedSkus.defectNote,
+  imageUrl: prelovedSkus.imageUrl,
+};
+
+function mapShopPrelovedSku(row: {
+  id: string;
+  sourceItemId: string;
+  itemName: string;
+  category: string;
+  size: string;
+  condition: PrelovedCondition;
+  price: string;
+  qtyOnHand: number;
+  defectNote: string | null;
+  imageUrl: string | null;
+}): ShopPrelovedSku {
+  return {
+    id: row.id,
+    sourceItemId: row.sourceItemId,
+    itemName: row.itemName,
+    category: row.category,
+    size: row.size,
+    condition: row.condition,
+    price: toMoney(row.price),
+    qtyOnHand: row.qtyOnHand,
+    defectNote: row.defectNote,
+    imageUrl: row.imageUrl && row.imageUrl.length > 0 ? row.imageUrl : null,
+  };
+}
+
+const SHOP_SKU_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const shopInStockWhere = (tenantId: string) =>
+  and(
+    eq(prelovedSkus.tenantId, tenantId),
+    eq(prelovedSkus.active, true),
+    gt(prelovedSkus.qtyOnHand, 0),
+    eq(catalogItems.tenantId, tenantId),
+    eq(catalogItems.active, true),
+  );
+
+/** Active in-stock SKUs whose source catalog item is live. Admin stock listing is unchanged. */
+export const listShopPrelovedSkus = cache(
+  async (tenantId: string): Promise<ShopPrelovedSku[]> => {
+    const rows = await db
+      .select(shopSkuSelect)
+      .from(prelovedSkus)
+      .innerJoin(catalogItems, eq(catalogItems.id, prelovedSkus.sourceItemId))
+      .where(shopInStockWhere(tenantId))
+      .orderBy(
+        asc(catalogItems.sortOrder),
+        asc(catalogItems.name),
+        asc(prelovedSkus.size),
+        asc(prelovedSkus.condition),
+      );
+    return rows.map(mapShopPrelovedSku);
+  },
+);
+
+/** One shop DTO, or null when missing, inactive, qty 0, unpublished catalog, or wrong tenant. */
+export const getShopPrelovedSku = cache(
+  async (tenantId: string, skuId: string): Promise<ShopPrelovedSku | null> => {
+    if (!SHOP_SKU_ID_RE.test(skuId)) return null;
+    const [row] = await db
+      .select(shopSkuSelect)
+      .from(prelovedSkus)
+      .innerJoin(catalogItems, eq(catalogItems.id, prelovedSkus.sourceItemId))
+      .where(and(eq(prelovedSkus.id, skuId), shopInStockWhere(tenantId)))
+      .limit(1);
+    return row ? mapShopPrelovedSku(row) : null;
+  },
+);
 
 export async function listExpiredPrelovedSkus(
   tenantId: string,

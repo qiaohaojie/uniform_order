@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { CatalogItem } from "@/lib/data";
-import { CATEGORIES } from "@/lib/data";
+import { CATEGORIES, SHOP_FILTERS, parseItemCategory } from "@/lib/data";
+import {
+  formatPrelovedCondition,
+  prelovedSkuPath,
+  type ShopPrelovedSku,
+} from "@/lib/preloved";
 import { GarmentVector } from "@/components/garment";
 import { SearchIcon, ClearIcon } from "@/components/icons";
 
@@ -14,9 +19,32 @@ type CatalogGridProps = {
   activeCat: string;
   tenantId: string;
   accent: string;
+  prelovedEnabled?: boolean;
+  prelovedSkus?: ShopPrelovedSku[];
 };
 
-export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridProps) {
+function skuMatchesQuery(sku: ShopPrelovedSku, query: string): boolean {
+  return (
+    sku.itemName +
+    " " +
+    sku.category +
+    " " +
+    sku.size +
+    " " +
+    formatPrelovedCondition(sku.condition)
+  )
+    .toLowerCase()
+    .includes(query);
+}
+
+export function CatalogGrid({
+  items,
+  activeCat,
+  tenantId,
+  accent,
+  prelovedEnabled = false,
+  prelovedSkus = [],
+}: CatalogGridProps) {
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -25,17 +53,33 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
     inputRef.current?.focus();
   };
   const query = q.trim().toLowerCase();
-  const visible = query
+  const chips = prelovedEnabled ? SHOP_FILTERS : CATEGORIES;
+  const skus = prelovedEnabled ? prelovedSkus : [];
+
+  const matchingNew = query
     ? items.filter((it) => (it.name + " " + it.cat).toLowerCase().includes(query))
-    : items.filter((i) => i.cat === activeCat);
+    : activeCat === "Preloved"
+      ? []
+      : items.filter((i) => i.cat === activeCat);
+
+  const matchingPreloved = query
+    ? skus.filter((sku) => skuMatchesQuery(sku, query))
+    : activeCat === "Preloved"
+      ? skus
+      : skus.filter((sku) => sku.category === activeCat);
+
+  const visibleCount = matchingNew.length + matchingPreloved.length;
+  const emptyPrelovedFilter =
+    query === "" && activeCat === "Preloved" && matchingPreloved.length === 0;
+  const emptySearch = query !== "" && visibleCount === 0;
 
   const [announced, setAnnounced] = useState("");
   useEffect(() => {
     const t = setTimeout(() => {
-      setAnnounced(query === "" ? "" : `${visible.length} results for ${q.trim()}`);
+      setAnnounced(query === "" ? "" : `${visibleCount} results for ${q.trim()}`);
     }, 300);
     return () => clearTimeout(t);
-  }, [q, query, visible.length]);
+  }, [q, query, visibleCount]);
 
   return (
     <>
@@ -84,12 +128,14 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
         className="px-4 pt-2.5 pb-1 flex gap-2 overflow-x-auto flex-shrink-0 [&::-webkit-scrollbar]:hidden transition-opacity"
         style={{ opacity: q.length > 0 ? 0.5 : 1 }}
       >
-        {CATEGORIES.map((c) => {
+        {chips.map((c) => {
           const on = !query && c === activeCat;
           return (
             <button
               key={c}
               type="button"
+              data-testid={c === "Preloved" ? "preloved-filter-chip" : "shop-filter-chip"}
+              data-filter={c}
               onClick={() => {
                 setQ("");
                 router.push(`/${tenantId}?cat=${c}`, { scroll: false });
@@ -108,20 +154,20 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
       </div>
 
       {/* Result-count line (suppressed on empty-match — the empty state below carries the message) */}
-      {!(query && visible.length === 0) && (
+      {!emptySearch && (
         <div className="px-4 pt-3 pb-2 flex-shrink-0 flex items-baseline gap-2">
           <h3 className="font-serif text-[18px] font-medium m-0">
             {query ? `Results for "${q.trim()}"` : `${activeCat} Uniform`}
           </h3>
           <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-            · {visible.length} {visible.length === 1 ? "item" : "items"}
+            · {visibleCount} {visibleCount === 1 ? "item" : "items"}
             {query ? " in all categories" : ""}
           </span>
         </div>
       )}
 
       {/* Grid or empty state */}
-      {visible.length === 0 && query ? (
+      {emptySearch ? (
         <div className="flex-1 px-4 pb-3 flex flex-col items-start gap-3 pt-2">
           <p className="text-[13px] m-0" style={{ color: "var(--color-ink)" }}>
             No items match &ldquo;{q.trim()}&rdquo;.
@@ -135,9 +181,25 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
             Clear search
           </button>
         </div>
+      ) : emptyPrelovedFilter ? (
+        <div
+          className="flex-1 px-4 pb-3 flex flex-col items-start gap-3 pt-2"
+          data-testid="preloved-empty"
+        >
+          <p className="text-[13px] m-0" style={{ color: "var(--color-ink)" }}>
+            No preloved in this size right now.{" "}
+            <Link
+              href={`/${tenantId}/preloved/donate`}
+              className="underline font-semibold"
+            >
+              Donate outgrown items
+            </Link>
+            , or buy new.
+          </p>
+        </div>
       ) : (
         <div className="flex-1 px-4 pb-3 grid grid-cols-2 gap-3 content-start">
-          {visible.map((it) => {
+          {matchingNew.map((it) => {
             const prices = it.variants.map((v) => v.price);
             const minP = prices.length > 0 ? Math.min(...prices) : 0;
             const maxP = prices.length > 0 ? Math.max(...prices) : 0;
@@ -175,8 +237,80 @@ export function CatalogGrid({ items, activeCat, tenantId, accent }: CatalogGridP
               </Link>
             );
           })}
+          {matchingPreloved.map((sku) => (
+            <PrelovedCard key={sku.id} sku={sku} tenantId={tenantId} accent={accent} />
+          ))}
         </div>
       )}
     </>
+  );
+}
+
+function PrelovedCard({
+  sku,
+  tenantId,
+  accent,
+}: {
+  sku: ShopPrelovedSku;
+  tenantId: string;
+  accent: string;
+}) {
+  const category = parseItemCategory(sku.category);
+  return (
+    <Link
+      href={prelovedSkuPath(tenantId, sku.id)}
+      className="bg-white rounded-[10px] border overflow-hidden block"
+      style={{ borderColor: "var(--color-rule)" }}
+      data-testid="preloved-card"
+      data-sku-id={sku.id}
+      data-source-item-id={sku.sourceItemId}
+      data-size={sku.size}
+      data-condition={sku.condition}
+    >
+      <div className="relative">
+        {sku.imageUrl ? (
+          <div className="relative w-full aspect-square" style={{ background: "var(--color-parchment)" }}>
+            <Image
+              src={sku.imageUrl}
+              alt={sku.itemName}
+              fill
+              className="object-contain"
+              sizes="(max-width: 430px) 50vw, 200px"
+            />
+          </div>
+        ) : (
+          <GarmentVector
+            itemId={sku.sourceItemId}
+            category={category}
+            accent={accent}
+            size={120}
+            className="w-full h-auto block"
+          />
+        )}
+        <span
+          className="absolute top-2 left-2 z-10 h-5 px-1.5 rounded-full text-[10px] font-semibold inline-flex items-center"
+          style={{ background: "var(--color-gold)", color: "#fff" }}
+          data-testid="preloved-badge"
+        >
+          Preloved
+        </span>
+      </div>
+      <div className="px-2.5 pt-2 pb-2.5">
+        <div className="font-serif text-[13px] font-medium leading-[1.2] line-clamp-2 min-h-8" style={{ color: "var(--color-ink)" }}>
+          {sku.itemName}
+        </div>
+        <div className="mt-1 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+          Size {sku.size} · {formatPrelovedCondition(sku.condition)}
+        </div>
+        <div className="mt-1.5 flex items-baseline justify-between gap-2">
+          <div className="text-[12px] font-semibold tnum" style={{ color: "var(--color-ink)" }}>
+            ${sku.price}
+          </div>
+          <div className="text-[11px] tnum" style={{ color: "var(--color-ink-dim)" }}>
+            {sku.qtyOnHand} left
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }

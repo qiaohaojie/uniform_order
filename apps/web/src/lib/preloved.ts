@@ -87,6 +87,26 @@ export type PrelovedStockListItem = {
   defectNote: string | null;
 };
 
+/** Parent-shop DTO for an in-stock preloved SKU. imageUrl is the SKU photo or null. */
+export type ShopPrelovedSku = {
+  id: string;
+  sourceItemId: string;
+  itemName: string;
+  category: string;
+  size: string;
+  condition: PrelovedCondition;
+  price: number;
+  qtyOnHand: number;
+  defectNote: string | null;
+  imageUrl: string | null;
+};
+
+export const PRELOVED_VARIANT_LABEL = "Preloved";
+
+export function prelovedSkuPath(tenantId: string, skuId: string): string {
+  return `/${tenantId}/preloved/${skuId}`;
+}
+
 export type InsertPrelovedIntakeEventInput = {
   tenantId: string;
   actorId?: string | null;

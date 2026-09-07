@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getTenant, toTenantBrand } from "@/db/queries";
+import { getPrelovedSettings } from "@/db/preloved-queries";
 import { MobileShell } from "@/components/mobile-shell";
 import { TenantFooter } from "@/components/tenant-footer";
 import { CartScreen } from "./cart-screen";
@@ -10,14 +11,21 @@ export default async function CartPage({ params }: PageProps<"/[tenant]/cart">) 
   const tenantRecord = await getTenant(slug);
   if (!tenantRecord) notFound();
   const tenant = toTenantBrand(tenantRecord);
-  const active = await getActiveChild();
+  const [active, prelovedSettings] = await Promise.all([
+    getActiveChild(),
+    getPrelovedSettings(tenantRecord.id),
+  ]);
   const activeChild =
     active && active.tenantId === tenant.id
       ? { name: active.name, year: `Year ${active.year}` }
       : null;
   return (
     <MobileShell bg="var(--color-paper)" logoUrl={tenantRecord.logoUrl ?? undefined}>
-      <CartScreen tenant={tenant} activeChild={activeChild} />
+      <CartScreen
+        tenant={tenant}
+        activeChild={activeChild}
+        donatedGstFree={prelovedSettings.donatedGstFree}
+      />
       <TenantFooter tenant={tenantRecord} />
     </MobileShell>
   );

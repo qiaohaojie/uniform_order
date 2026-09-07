@@ -12,7 +12,8 @@
     "check-types:web": "pnpm --filter web check-types",
     "print-qa": "pnpm --filter web print-qa",
     "test:m03-intake-stock": "pnpm --filter web test:m03-intake-stock",
-    "test:m04-donate-refund": "pnpm --filter web test:m04-donate-refund"
+    "test:m04-donate-refund": "pnpm --filter web test:m04-donate-refund",
+    "test:m05-parent-preloved-shop": "pnpm --filter web test:m05-parent-preloved-shop"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

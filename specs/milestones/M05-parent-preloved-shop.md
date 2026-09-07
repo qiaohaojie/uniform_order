@@ -5,7 +5,7 @@
      Plan must not silently redesign WHAT/WHY from the approved source spec. -->
 
 ## Status
-pending            <!-- pending | in-progress | complete -->
+complete            <!-- pending | in-progress | complete -->
 
 ## Wave
 3
@@ -52,19 +52,21 @@ Parents browse preloved next to new, see condition and stock, add a mixed cart c
 - `apps/web/src/components/garment.tsx`
 
 ## Acceptance criteria
-- [ ] Preloved filter lists only in-stock preloved SKUs for that tenant
-- [ ] Preloved badge appears on cards in the matching new category
-- [ ] Item page shows condition, defects, ACL sentence; qty cannot exceed `qtyOnHand`
-- [ ] Mixed cart of new polo + preloved jumper checks out; Stripe total is the sum; GST follows M02
-- [ ] Adding qty above stock is impossible in UI
+- [x] Preloved filter lists only in-stock preloved SKUs for that tenant
+- [x] Preloved badge appears on cards in the matching new category
+- [x] Item page shows condition, defects, ACL sentence; qty cannot exceed `qtyOnHand`
+- [x] Mixed cart of new polo + preloved jumper checks out; Stripe total is the sum; GST follows M02
+- [x] Adding qty above stock is impossible in UI
 - [ ] Empty preloved filter shows donate + buy-new copy linking to `/{tenant}/preloved/donate`
-- [ ] With preloved disabled, no preloved filter or SKUs
-- [ ] `pnpm check-types:web` passes
-- [ ] Playwright mobile (~430px) and desktop: browse → add preloved → mixed cart → checkout page totals
+- [x] With preloved disabled, no preloved filter or SKUs
+- [x] `pnpm check-types:web` passes
+- [x] Playwright mobile (~430px) and desktop: browse → add preloved → mixed cart → checkout page totals
 
 ## Verification
-- **Commands:** not configured · `pnpm check-types:web` · no test suite
-- **Strategy:** seed or intake one SKU via M03; `pnpm dev:web`; playwright-cli parent flow mobile + desktop.
+- **Commands:** not configured · `pnpm check-types:web` · Playwright spec (do not boot Next)
+- **Strategy:** seed or intake one SKU via M03 (admin `/admin/{tenant}/preloved`); `pnpm dev:web`; Playwright parent flow mobile (~430px) + desktop. Specs must **not** boot Next — same as M03/M04: `workers: 1`, `GET /api/dev/login`, `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000`.
+- **Tenants:** synthetic only — `imhs` (Illawarra Modern High School, `polo`) or `rgsh` (Riverside Academy, `rgsh-polo`). Shop emails `uniformshop@imhs.demo.uniformorder.online` / `uniformshop@rghs.demo.uniformorder.online`. Add `apps/web/tests/preloved/m05-parent-preloved-shop.spec.ts` plus `pnpm test:m05-parent-preloved-shop` scripts mirroring M03/M04.
+- **Implement also:** extend `CartLine` with optional `prelovedSkuId` / `condition` without breaking new-item lines; PI price lookup key for preloved is `preloved:<skuId>`; client `gstFree` is ignored (M02 stamps server-side). Empty sizes link to `/{tenant}/preloved/donate` (do not redesign donate). Hide all preloved parent UI when `prelovedEnabled` is false. Preloved helpers stay in `apps/web/src/db/preloved-queries.ts` (do not dump GST/report helpers into `queries.ts`). neon-http: `db.batch`, never `db.transaction`. Do not add qty to `catalog_variants`. Do not decrement paid qty or mark pick slips PRELOVED (M06). HeroUI OSS only (`@heroui/react`); no `@heroui-pro/*`.
 
 ## Architectural invariants
 - Same Stripe Connect destination as new stock
@@ -74,7 +76,7 @@ Parents browse preloved next to new, see condition and stock, add a mixed cart c
 - Path alias `@/*` → `apps/web/src/*`; await Next 16 `params`
 
 ## Manual prerequisites
-- [ ] M01–M04 complete; Stripe test keys; at least one preloved SKU with qty ≥ 1
+- [x] M01–M04 complete; Stripe test keys; at least one preloved SKU with qty ≥ 1 (intake via M03 admin or seed; synthetic tenant `imhs` / `rgsh`)
 
 ## Autonomy contract
 Follow the `autonomy-contract.md` reference shipped with the `gq-spec-build-grok` skill

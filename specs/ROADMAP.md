@@ -96,7 +96,7 @@ graph TD
 - [x] [M04 — Donate page and refund policy](./milestones/M04-donate-and-refund-policy.md) — deps: M01
 
 ### Wave 3
-- [ ] [M05 — Parent preloved catalogue and cart](./milestones/M05-parent-preloved-shop.md) — deps: M01, M02, M03, M04
+- [x] [M05 — Parent preloved catalogue and cart](./milestones/M05-parent-preloved-shop.md) — deps: M01, M02, M03, M04
 
 ### Wave 4
 - [ ] [M06 — Paid decrement and PRELOVED pick slip](./milestones/M06-preloved-fulfilment.md) — deps: M05
@@ -105,7 +105,7 @@ graph TD
 
 - [x] A tenant can opt in to a donation-only preloved rack and configure price fraction, hold days, refuse list, and GST-free declaration (default off).
 - [x] Operators accept/reject donated garments, pool qty by source item + size + condition, price from the new variant (default 50%, warn above cap), and write off expired stock to charity.
-- [ ] Parents see donate instructions (drop-off, not self-listing), browse preloved next to new, add mixed carts with stock caps, and pay the school’s Stripe Connect account.
+- [x] Parents see donate instructions (drop-off, not self-listing), browse preloved next to new, add mixed carts with stock caps, and pay the school’s Stripe Connect account.
 - [x] Donated preloved lines are GST-free only when the tenant declared `donatedGstFree`; reports CSV splits GST-free preloved vs taxable sales.
 - [ ] Paid preloved qty decrements; pick slips mark PRELOVED; oversell fails PaymentIntent creation.
 - [ ] Refund policy states sold-as-worn / no change-of-mind / ACL still applies. No C2C listings, consignment, escrow, or inventory on new catalogue.

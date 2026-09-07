@@ -24,6 +24,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Next 16 treats 127.0.0.1 as a different origin from localhost and
+  // rejects the Turbopack HMR websocket (HTTP/0.9 / INVALID_HTTP_RESPONSE).
+  // Playwright and many agents use http://127.0.0.1:3000; without this,
+  // client islands never hydrate (Add to cart, qty stepper, Browse Catalogue).
+  allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.50.45"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "utfs.io" },
@@ -34,7 +39,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        // Do not attach these to /_next/* (HMR websocket upgrade).
+        source: "/:path((?!_next/).*)",
         headers: securityHeaders,
       },
     ];

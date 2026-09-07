@@ -2,6 +2,8 @@
 // Two demo tenants (IMHS for son Tim, RGHS for daughter Sam), catalog
 // adapted from synthetic sample data, and demo parent (Alex Taylor).
 
+import type { PrelovedCondition } from "./preloved";
+
 export type TenantId = "imhs" | "rgsh";
 
 export interface Tenant {
@@ -305,6 +307,15 @@ export const CATALOG: CatalogItem[] = [
 
 export const CATEGORIES: ItemCategory[] = ["Summer", "Winter", "Sports", "Formal", "Bags", "Stationery"];
 
+/** Catalogue chips: existing garment categories plus the Preloved filter. */
+export const SHOP_FILTERS: (ItemCategory | "Preloved")[] = [...CATEGORIES, "Preloved"];
+
+export function parseItemCategory(value: string): ItemCategory | undefined {
+  return (CATEGORIES as readonly string[]).includes(value)
+    ? (value as ItemCategory)
+    : undefined;
+}
+
 export interface CartLine {
   itemId: string;
   variantLabel: string;
@@ -312,6 +323,9 @@ export interface CartLine {
   qty: number;
   price: number;
   name: string;
+  prelovedSkuId?: string;
+  condition?: PrelovedCondition;
+  qtyOnHand?: number;
 }
 
 // Tim's saved cart (matches the paper form to make the demo feel real).

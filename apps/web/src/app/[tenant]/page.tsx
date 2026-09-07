@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { CATEGORIES } from "@/lib/data";
+import { CATEGORIES, SHOP_FILTERS } from "@/lib/data";
 import { getTenant, getActiveCatalog, toTenantBrand, getPopularItems } from "@/db/queries";
+import { getPrelovedSettings, listShopPrelovedSkus } from "@/db/preloved-queries";
 import { getActiveChild } from "@/lib/active-child.server";
 import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
 import { CartBadge } from "@/components/cart-badge";
@@ -66,9 +67,19 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
   // ── Catalogue branch — catalog already fetched above ──────────────────────────
   const sp = await searchParams;
   const catParam = typeof sp.cat === "string" ? sp.cat : undefined;
-  const activeCat = (catParam && CATEGORIES.includes(catParam as never) ? catParam : DEFAULT_CATEGORY) as string;
 
-  const active = await getActiveChild();
+  const [active, settings] = await Promise.all([
+    getActiveChild(),
+    getPrelovedSettings(tenant.id),
+  ]);
+  const prelovedEnabled = settings.prelovedEnabled;
+  const shopFilters = prelovedEnabled ? SHOP_FILTERS : CATEGORIES;
+  const activeCat =
+    catParam && (shopFilters as readonly string[]).includes(catParam)
+      ? catParam
+      : DEFAULT_CATEGORY;
+  const prelovedSkus = prelovedEnabled ? await listShopPrelovedSkus(tenant.id) : [];
+
   const kid =
     active && active.tenantId === tenant.id
       ? { name: active.name, year: `Year ${active.year}` }
@@ -104,6 +115,8 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
         activeCat={activeCat}
         tenantId={tenant.id}
         accent={tenant.accent}
+        prelovedEnabled={prelovedEnabled}
+        prelovedSkus={prelovedSkus}
       />
 
       <TenantFooter tenant={tenantRecord} />

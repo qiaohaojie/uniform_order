@@ -23,10 +23,26 @@ export function middleware(request: NextRequest) {
     .filter(Boolean)
     .join(" ");
 
+  // 'self' does not cover ws/wss (different scheme). Next HMR and Turbopack
+  // need those in development or client components never finish hydrating.
+  const connectSrc = [
+    "'self'",
+    isDev && "ws:",
+    isDev && "wss:",
+    "https://api.stripe.com",
+    "https://*.posthog.com",
+    "https://us-assets.i.posthog.com",
+    "https://api.resend.com",
+    "https://utfs.io",
+    "https://*.uploadthing.com",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const csp = [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    "connect-src 'self' https://api.stripe.com https://*.posthog.com https://us-assets.i.posthog.com https://api.resend.com https://utfs.io https://*.uploadthing.com",
+    `connect-src ${connectSrc}`,
     "worker-src 'self' blob:",
     "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
     "img-src 'self' data: blob: https:",
@@ -52,6 +68,6 @@ export const config = {
   // minting a CSP nonce there is pure overhead), static assets, and the image
   // optimizer (they don't execute scripts and don't need a per-request nonce).
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff2?)$).*)",
+    "/((?!api|_next/|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff2?)$).*)",
   ],
 };

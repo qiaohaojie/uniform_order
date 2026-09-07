@@ -11,10 +11,12 @@
  * baseURL and workers: 1 come from playwright.config.ts (same as M03).
  */
 import { expect, test, type Page } from "playwright/test";
-
-const TENANT = process.env.PRELOVED_TENANT ?? "imhs";
-const OPERATOR_EMAIL =
-  process.env.OPERATOR_EMAIL ?? "uniformshop@imhs.demo.uniformorder.online";
+import {
+  TENANT,
+  devLogin,
+  ensurePrelovedDisabled,
+  ensurePrelovedEnabled,
+} from "./helpers";
 
 const SOLD_AS_WORN = /sold as worn/i;
 const NO_CHANGE_OF_MIND = /change of mind is not offered/i;
@@ -23,55 +25,6 @@ const CHARITY_RECYCLING = /charity or textile recycling/i;
 
 const MOBILE_VIEWPORT = { width: 430, height: 800 };
 const DESKTOP_VIEWPORT = { width: 1440, height: 900 };
-
-async function devLogin(page: Page, callbackPath: string) {
-  const callbackURL = encodeURIComponent(callbackPath);
-  const email = encodeURIComponent(OPERATOR_EMAIL);
-  await page.goto(`/api/dev/login?email=${email}&callbackURL=${callbackURL}`);
-  await page.waitForURL((url) => !url.pathname.startsWith("/api/dev/login"));
-  if (page.url().includes("/auth/") || page.url().includes("sign-in")) {
-    throw new Error(
-      "Dev login did not establish an admin session. Use pnpm dev:web (NODE_ENV=development) and an operator shop email.",
-    );
-  }
-}
-
-async function openPrelovedSettings(page: Page) {
-  await page.goto(`/admin/${TENANT}/settings`);
-  const toggle = page.getByRole("switch", { name: "Enable preloved" });
-  await expect(toggle).toBeVisible();
-  return toggle;
-}
-
-async function savePrelovedSettings(page: Page) {
-  await page.getByRole("button", { name: "Save preloved settings" }).click();
-  await expect(page.getByRole("button", { name: "Save preloved settings" })).toBeEnabled();
-}
-
-async function ensurePrelovedDisabled(page: Page) {
-  const toggle = await openPrelovedSettings(page);
-  if ((await toggle.getAttribute("aria-checked")) === "true") {
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
-    await savePrelovedSettings(page);
-  }
-  await expect(page.getByRole("link", { name: "Preloved" })).toHaveCount(0, {
-    timeout: 15_000,
-  });
-}
-
-async function ensurePrelovedEnabled(page: Page) {
-  const toggle = await openPrelovedSettings(page);
-  if ((await toggle.getAttribute("aria-checked")) !== "true") {
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-  }
-  // Always PATCH so the ACL clause is persisted on tenant_legal_versions.
-  await savePrelovedSettings(page);
-  await expect(page.getByRole("link", { name: "Preloved" })).toBeVisible({
-    timeout: 15_000,
-  });
-}
 
 async function openShopFooter(page: Page) {
   await page.goto(`/${TENANT}`);

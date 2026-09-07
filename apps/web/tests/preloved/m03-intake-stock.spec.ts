@@ -11,20 +11,13 @@
  * match the tenant shop email (seed default below).
  */
 import { expect, test, type Page } from "playwright/test";
-
-const TENANT = process.env.PRELOVED_TENANT ?? "imhs";
-const OPERATOR_EMAIL =
-  process.env.OPERATOR_EMAIL ?? "uniformshop@imhs.demo.uniformorder.online";
-const ITEM_ID = process.env.PRELOVED_ITEM_ID ?? "polo";
-const ITEM_NAME = process.env.PRELOVED_ITEM_NAME ?? "Sports Polo Shirt";
-const SIZE = process.env.PRELOVED_SIZE ?? "10";
-const CONDITION = "good";
-
-function pooledRow(page: Page) {
-  return page.locator(
-    `[data-testid="stock-row"][data-source-item-id="${ITEM_ID}"][data-size="${SIZE}"][data-condition="${CONDITION}"]`,
-  );
-}
+import {
+  TENANT,
+  acceptSize10PoloGood,
+  devLogin,
+  ensurePrelovedEnabled,
+  pooledRow,
+} from "./helpers";
 
 async function readQty(page: Page): Promise<number> {
   const row = pooledRow(page);
@@ -35,53 +28,6 @@ async function readQty(page: Page): Promise<number> {
     throw new Error(`stock-qty was not a non-negative integer: ${JSON.stringify(text)}`);
   }
   return qty;
-}
-
-async function chooseSelect(page: Page, testId: string, optionName: string | RegExp) {
-  await page.getByTestId(testId).click();
-  const option =
-    typeof optionName === "string"
-      ? page.getByRole("option", { name: optionName, exact: true })
-      : page.getByRole("option", { name: optionName });
-  await expect(option).toBeVisible();
-  await option.click();
-}
-
-async function devLogin(page: Page, callbackPath: string) {
-  const callbackURL = encodeURIComponent(callbackPath);
-  const email = encodeURIComponent(OPERATOR_EMAIL);
-  await page.goto(`/api/dev/login?email=${email}&callbackURL=${callbackURL}`);
-  await page.waitForURL((url) => !url.pathname.startsWith("/api/dev/login"));
-  if (page.url().includes("/auth/") || page.url().includes("sign-in")) {
-    throw new Error(
-      "Dev login did not establish an admin session. Use pnpm dev:web (NODE_ENV=development) and an operator shop email.",
-    );
-  }
-}
-
-async function ensurePrelovedEnabled(page: Page) {
-  await page.goto(`/admin/${TENANT}/settings`);
-  const toggle = page.getByRole("switch", { name: "Enable preloved" });
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute("aria-checked")) !== "true") {
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await page.getByRole("button", { name: "Save preloved settings" }).click();
-  }
-  await expect(page.getByRole("link", { name: "Preloved" })).toBeVisible({
-    timeout: 15_000,
-  });
-}
-
-async function acceptSize10PoloGood(page: Page) {
-  await page.goto(`/admin/${TENANT}/preloved/intake`);
-  await expect(page.getByTestId("intake-desk")).toBeVisible();
-  await chooseSelect(page, "intake-item", ITEM_NAME);
-  await chooseSelect(page, "intake-size", SIZE);
-  await page.getByTestId("intake-condition").getByText("Good", { exact: true }).click();
-  await expect(page.getByTestId("intake-price").locator("input")).not.toHaveValue("");
-  await page.getByTestId("intake-accept").click();
-  await expect(page.getByTestId("intake-success")).toContainText(/Accepted/i);
 }
 
 async function openStock(page: Page) {

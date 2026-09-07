@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import type { Tenant } from "@/lib/data";
-import { cartTotal } from "@/lib/data";
-import { useCart } from "@/lib/cart-store";
+import type { CartLine, Tenant } from "@/lib/data";
+import { cartLinePrelovedSkuId, isAtQtyCap, isPrelovedLine, useCart } from "@/lib/cart-store";
+import { computeTotals } from "@/lib/order-totals";
+import { formatPrelovedCondition, type PrelovedCondition } from "@/lib/preloved";
+import { Chip } from "@/components/chip";
 import { Crest } from "@/components/crest";
 import { GarmentVector } from "@/components/garment";
 import { Btn } from "@/components/btn";
@@ -12,9 +14,29 @@ import { posthog } from "@/lib/analytics/client";
 
 type ActiveChildView = { name: string; year: string } | null;
 
-export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChild: ActiveChildView }) {
+function isPrelovedCondition(value: CartLine["condition"]): value is PrelovedCondition {
+  return value === "good" || value === "fair";
+}
+
+export function CartScreen({
+  tenant,
+  activeChild,
+  donatedGstFree,
+}: {
+  tenant: Tenant;
+  activeChild: ActiveChildView;
+  donatedGstFree: boolean;
+}) {
   const { lines, hydrated, setQty } = useCart();
-  const total = cartTotal(lines);
+  // gstFree is derived from tenant donatedGstFree; never stored on CartLine.
+  const totals = computeTotals({
+    lines: lines.map((line) => ({
+      unitPrice: line.price,
+      qty: line.qty,
+      gstFree: cartLinePrelovedSkuId(line) !== undefined && donatedGstFree,
+    })),
+    delivery: "pickup",
+  });
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const kid = activeChild;
 
@@ -63,11 +85,19 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
             </Link>
           </div>
         ) : (
-          lines.map((line, i) => (
+          lines.map((line, i) => {
+            const preloved = isPrelovedLine(line);
+            const atMax = isAtQtyCap(line);
+            const condition = isPrelovedCondition(line.condition)
+              ? formatPrelovedCondition(line.condition)
+              : null;
+            return (
             <div
-              key={`${line.itemId}-${line.variantLabel}-${line.size}-${i}`}
+              key={preloved ? line.prelovedSkuId : `${line.itemId}-${line.variantLabel}-${line.size}-${i}`}
               className={`flex gap-3 py-3 ${i < lines.length - 1 ? "border-b" : ""}`}
               style={{ borderColor: "var(--color-rule)" }}
+              data-testid="cart-line"
+              data-preloved={preloved ? "true" : "false"}
             >
               <div
                 className="w-14 h-14 rounded-md flex-shrink-0 overflow-hidden"
@@ -76,39 +106,58 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
                 <GarmentVector itemId={line.itemId} accent={tenant.accent} size={56} />
               </div>
               <div className="flex-1 min-w-0">
-                <div
-                  className="font-serif text-[13.5px] font-medium leading-[1.25] mb-0.5"
-                  style={{ color: "var(--color-ink)" }}
-                >
-                  {line.name}
+                <div className="flex items-center gap-1.5 mb-0.5 min-w-0">
+                  <div
+                    className="font-serif text-[13.5px] font-medium leading-[1.25] min-w-0 truncate"
+                    style={{ color: "var(--color-ink)" }}
+                  >
+                    {line.name}
+                  </div>
+                  {preloved ? (
+                    <span className="flex-shrink-0">
+                      <Chip tone="gold" size="sm">Preloved</Chip>
+                    </span>
+                  ) : null}
                 </div>
                 <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-                  {line.variantLabel} · Size {line.size}
+                  {preloved
+                    ? condition
+                      ? `${condition} · Size ${line.size}`
+                      : `Size ${line.size}`
+                    : `${line.variantLabel} · Size ${line.size}`}
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
-                  <div
-                    className="flex items-center border rounded-md h-7"
-                    style={{ borderColor: "var(--color-rule)" }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setQty(i, line.qty - 1)}
-                      className="w-7 h-full text-center text-[13px]"
-                      style={{ color: "var(--color-ink-dim)" }}
-                      aria-label="Decrease"
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="flex items-center border rounded-md h-7"
+                      style={{ borderColor: "var(--color-rule)" }}
                     >
-                      −
-                    </button>
-                    <div className="w-[22px] text-center text-[12px] font-bold">{line.qty}</div>
-                    <button
-                      type="button"
-                      onClick={() => setQty(i, line.qty + 1)}
-                      className="w-7 h-full text-center text-[13px]"
-                      style={{ color: "var(--color-ink-dim)" }}
-                      aria-label="Increase"
-                    >
-                      +
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setQty(i, line.qty - 1)}
+                        className="w-7 h-full text-center text-[13px]"
+                        style={{ color: "var(--color-ink-dim)" }}
+                        aria-label="Decrease"
+                      >
+                        −
+                      </button>
+                      <div className="w-[22px] text-center text-[12px] font-bold">{line.qty}</div>
+                      <button
+                        type="button"
+                        onClick={() => setQty(i, line.qty + 1)}
+                        disabled={atMax}
+                        className="w-7 h-full text-center text-[13px] disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ color: "var(--color-ink-dim)" }}
+                        aria-label={atMax ? "Increase, at maximum stock" : "Increase"}
+                      >
+                        +
+                      </button>
+                    </div>
+                    {atMax ? (
+                      <span className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+                        at max
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-[13px] font-bold tnum" style={{ color: "var(--color-ink)" }}>
                     ${(line.price * line.qty).toFixed(2)}
@@ -116,7 +165,8 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -124,22 +174,22 @@ export function CartScreen({ tenant, activeChild }: { tenant: Tenant; activeChil
         <div className="px-4 pt-3.5 pb-6 border-t bg-white flex-shrink-0" style={{ borderColor: "var(--color-rule)" }}>
           <div className="flex justify-between text-[12px] mb-1" style={{ color: "var(--color-ink-dim)" }}>
             <span>Subtotal · {totalQty} items</span>
-            <span className="tnum">${total.toFixed(2)}</span>
+            <span className="tnum">${totals.subtotal.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-[12px] mb-2" style={{ color: "var(--color-ink-dim)" }}>
             <span>GST included</span>
-            <span className="tnum">${(total / 11).toFixed(2)}</span>
+            <span className="tnum">${totals.gst.toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-baseline mb-3">
             <span className="font-serif text-[18px] font-semibold">Total</span>
-            <span className="font-serif text-[22px] font-semibold tnum">${total.toFixed(2)}</span>
+            <span className="font-serif text-[22px] font-semibold tnum">${totals.total.toFixed(2)}</span>
           </div>
           <Link
             href={`/${tenant.id}/checkout`}
             onClick={() => posthog.capture("checkout_started", {
               tenant_id: tenant.id,
               item_count: totalQty,
-              cart_total: total,
+              cart_total: totals.total,
             })}
           >
             <Btn variant="primary" size="lg" fullWidth accent={tenant.accent}>

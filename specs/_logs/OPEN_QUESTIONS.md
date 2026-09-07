@@ -25,3 +25,9 @@
 
 - [ ] **(M04)** Operators have no inbox to read `preloved_donation_notes` — raised: 2026-09-07, by: build:M04
       context: Bag notes persist without creating a SKU (AC met). Spec calls them a message to operators; M04 did not add a SELECT/admin list. Non-blocking for donate/refund copy. Resolve in a later admin slice if P&Cs need to see drop-off notes.
+
+- [ ] **(M05)** Parent-shop client islands do not hydrate in Playwright — raised: 2026-09-07, by: build:M05
+      context: Qty stepper and Add to cart stay dead SSR (`data-hydrated=false`) on Chromium and Chrome channel. Same on existing `/item/polo`. Mixed-cart + qty-cap ACs are code-complete but not runtime-proven. RSC filter/badge/PDP copy/disabled pass. Needs a hydration/HMR/CSP investigation before marking M05 complete.
+
+- [ ] **(M05)** Empty Preloved filter e2e skipped when the rack already has stock — raised: 2026-09-07, by: build:M05
+      context: Write-off is expired-only and M05 must not decrement qty. A tenant that already has stock will `test.skip`. Copy+donate link exist in `catalog-grid.tsx`. Need a fresh empty tenant or a non-destructive empty fixture.

@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { loadStripe, type Stripe, type StripePaymentElement, type StripeElements } from "@stripe/stripe-js";
-import type { Tenant } from "@/lib/data";
-import { cartTotal } from "@/lib/data";
-import { useCart } from "@/lib/cart-store";
+import type { CartLine, Tenant } from "@/lib/data";
+import { cartLinePrelovedSkuId, useCart } from "@/lib/cart-store";
 import { Btn } from "@/components/btn";
 import { BackIcon, CheckIcon, LockIcon, PickupIcon, ShipIcon } from "@/components/icons";
 import { readStudentDetails, writeStudentDetails, type StudentDetails } from "@/lib/order-store";
 import { clearActiveChildCookieClient } from "@/lib/active-child.client";
 import { posthog } from "@/lib/analytics/client";
+import { computeTotals } from "@/lib/order-totals";
 import { SHIP_FEE_AUD } from "@/lib/shipping";
 
 type Prefill = { studentName: string; year: string; rollClass: string } | null;
@@ -22,13 +22,31 @@ const YEAR_OPTIONS = ["Year 7", "Year 8", "Year 9", "Year 10", "Year 11", "Year 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
+const JUST_SOLD_COPY =
+  "That preloved item was just sold. Remove it from your cart or reduce the quantity and try again.";
+
 async function readApiError(res: Response, fallback: string) {
   try {
     const data = await res.json();
+    if (data.error === "insufficient_qty") return JUST_SOLD_COPY;
     return typeof data.error === "string" ? data.error : fallback;
   } catch {
     return fallback;
   }
+}
+
+function toPaymentIntentLines(lines: CartLine[]) {
+  return lines.map((l) => {
+    const prelovedSkuId = cartLinePrelovedSkuId(l);
+    return {
+      itemId: l.itemId,
+      variantLabel: l.variantLabel,
+      size: l.size,
+      unitPrice: l.price,
+      qty: l.qty,
+      ...(prelovedSkuId ? { prelovedSkuId } : {}),
+    };
+  });
 }
 
 export function CheckoutScreen({
@@ -36,11 +54,13 @@ export function CheckoutScreen({
   prefill,
   shippingEnabled,
   pickupEnabled,
+  donatedGstFree,
 }: {
   tenant: Tenant;
   prefill: Prefill;
   shippingEnabled: boolean;
   pickupEnabled: boolean;
+  donatedGstFree: boolean;
 }) {
   const router = useRouter();
   const { lines, clearCart } = useCart();
@@ -76,10 +96,16 @@ export function CheckoutScreen({
   const paymentElementRef = useRef<StripePaymentElement | null>(null);
   const paymentLockedRef = useRef(false);
 
-  const subtotal = cartTotal(lines);
-  const ship = delivery === "ship" ? SHIP_FEE_AUD : 0;
-  const total = subtotal + ship;
-  const gst = total / 11;
+  const { subtotal, shipping: ship, gst, total } = computeTotals({
+    lines: lines.map((l) => ({
+      unitPrice: l.price,
+      qty: l.qty,
+      // Client estimate only — PI ignores any gstFree field and stamps
+      // gstFree from donatedGstFree + a live SKU lookup.
+      gstFree: donatedGstFree && cartLinePrelovedSkuId(l) !== undefined,
+    })),
+    delivery,
+  });
 
   // When active-child prefill is in effect, write the merged values to localStorage
   // on first render so a parent who switches active child and bounces away mid-checkout
@@ -220,13 +246,7 @@ export function CheckoutScreen({
           currency: "aud",
           // `size` is included so the server-side per-line snapshot written at
           // PI creation carries the full line (it is not price-bearing).
-          lines: lines.map((l) => ({
-            itemId: l.itemId,
-            variantLabel: l.variantLabel,
-            size: l.size,
-            unitPrice: l.price,
-            qty: l.qty,
-          })),
+          lines: toPaymentIntentLines(lines),
           delivery,
           subtotal,
           gst,

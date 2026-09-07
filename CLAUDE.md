@@ -18,9 +18,12 @@ pnpm dev:web          # Next.js dev server
 pnpm build:web        # Production build
 pnpm check-types:web  # TypeScript check (apps/web)
 pnpm check-types      # TypeScript check (all packages)
+pnpm test:m03-intake-stock  # operator accept → stock qty (needs pnpm dev:web)
+pnpm test:m04-donate-refund  # donate note + refund policy (needs pnpm dev:web)
+pnpm test:m05-parent-preloved-shop  # parent preloved shop (needs pnpm dev:web)
 ```
 
-Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`) need `pnpm dev:web` first.
+Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`, `pnpm test:m05-parent-preloved-shop`; `apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`) need `pnpm dev:web` first. They do not boot Next. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
 
 ## Deployment
 
@@ -46,7 +49,7 @@ pnpm monorepo with one app: `apps/web` (Next.js 16, App Router, RSC + server act
 
 ### Multi-tenancy
 
-Routes scoped to a `[tenant]` slug (`imhs`, `rgsh` today). Layout files validate the slug and call `notFound()` on mismatch. Today's validation reads the static `TENANTS` map in `lib/data.ts`; the platform-portal plan replaces this with DB lookups (`getTenant(slug)` + visibility rules). Tenant accent colour is threaded as a prop and applied via inline `style` — not via CSS variables.
+Routes scoped to a `[tenant]` slug (`imhs`, `rgsh` today). Layout files validate the slug and call `notFound()` on mismatch. Today's validation reads the static `TENANTS` map in `lib/data.ts`; the platform-portal plan replaces this with DB lookups (`getTenant(slug)` + visibility rules). Demo names are synthetic (Illawarra Modern High School, Riverside Academy). Do not use real school slugs, names, or `.nsw.edu.au` shop emails in tests, docs, or examples. Tenant accent colour is threaded as a prop and applied via inline `style` — not via CSS variables.
 
 ### Data layer
 

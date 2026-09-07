@@ -462,7 +462,7 @@
 - **Project:** uniform_order
 - **Version scope:** drizzle-orm ^0.45.2; neon-http
 - **Detail:** Omitting id, createdAt, or nullable rejectReason from an INSERT…SELECT into preloved_intake_events throws at runtime: selected fields are not the same or are in a different order compared to the table definition. List every column in schema.ts order; use gen_random_uuid()/now()/null for defaults.
-- **Evidence:** M03 accept POST 500 until acceptAndPool select listed id, rejectReason, createdAt. Playwright then passed: pnpm test:m03-intake-stock on nsbh polo size 10 Good twice.
+- **Evidence:** M03 accept POST 500 until acceptAndPool select listed id, rejectReason, createdAt. Playwright then passed: pnpm test:m03-intake-stock on a synthetic tenant polo size 10 Good twice.
 - **Links:** specs/milestones/M03-operator-intake.md
 
 ## When Drizzle snapshots stopped, hand-write SQL plus a journal idx; do not drizzle-kit generate a snapshot for one additive migration.
@@ -659,4 +659,225 @@
 - **Detail:** baseURL: PLAYWRIGHT_BASE_URL, then .dev-local/web.url, then PORT. Specs do not boot the app. Feature-flagged routes: serial tests each set Enable preloved via the operator UI rather than a direct PATCH or one mega-test, so they do not race the shared tenant flag.
 - **Evidence:** apps/web/playwright.config.ts; apps/web/tests/preloved/m04-donate-refund.spec.ts; pnpm test:m04-donate-refund
 - **Links:** specs/milestones/M04-donate-and-refund-policy.md
+
+## Optional additive fields on persisted cart/line types typecheck against existing samples and add sites without editing those callers.
+- **ID:** 7bedd66a-00b0-4c5d-b855-942c041c0c2b
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** TypeScript / Next.js 16 apps/web; localStorage cart uo:cart:v1
+- **Detail:** New identity fields (sku id, condition, on-hand cap) must be optional so old localStorage rows still parse and unlimited new-stock add sites stay valid. Merge keys stay product-type-specific: capped lines merge on sku id only; uncapped lines keep item+variant+size.
+- **Evidence:** CartLine optional prelovedSkuId/condition/qtyOnHand; SAMPLE_CART and new-item add sites unchanged; pnpm check-types:web exit 0 after T1.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Joining a catalog parent on id does not inherit that parent's live tenant/active gate.
+- **ID:** efda8ca4-4802-406f-af9c-e9cb63f6f567
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2; Next.js ^16.2.4
+- **Detail:** Child rows filtered by tenant, active, and qty>0 still leak unpublished or cross-tenant parents unless the same predicates sit on the shared WHERE used by list and get. Put those predicates on the shop WHERE helper, not only the JOIN ON clause. Operator stock lists that must show inactive/zero rows need a separate WHERE.
+- **Evidence:** listShopPrelovedSkus/getShopPrelovedSku shopInStockWhere gained catalogItems.tenantId + catalogItems.active; listInStockPrelovedSkus unchanged; getActiveCatalog already filtered both.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Public shop reads need a stricter query than operator in-stock lists.
+- **ID:** ae2e7820-a4f6-49ce-bcfd-0e9727dc63ba
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0300
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Drizzle neon-http shop vs admin query split
+- **Detail:** Parents should see only active qty>0 rows; operators still need inactive and zero-qty. Do not reuse the admin list and filter in the UI. Hold/expiry is an operator write-off trigger, not an auto-hide, unless product says otherwise.
+- **Evidence:** listShopPrelovedSkus/getShopPrelovedSku: active AND qtyOnHand>0; listInStockPrelovedSkus stays qty>0 only; expired in-stock SKUs remain shoppable until write-off.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Guard uuid-typed lookups for non-UUID route params before querying Postgres.
+- **ID:** 1b5cf4f1-c38a-4f84-a640-1194e4b98dba
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0300
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Postgres uuid columns; Next.js 16 App Router dynamic params
+- **Detail:** uuid columns throw on junk ids. A public detail URL should 404, not 500. Keep the regex local to the get helper so list/detail share one null path.
+- **Evidence:** getShopPrelovedSku returns null for non-UUID skuId instead of selecting; PDP notFound() on null.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Copy-pasted domain predicates with different names or return shapes drift; GST and keys then disagree.
+- **ID:** cd003d2f-e087-4350-9d92-31a5a03134db
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2 / apps/web cart-store
+- **Detail:** Export one id extractor (string | undefined) plus a type guard from the owning store module. Use both at merge, UI keys, tax estimate, and charge-line mapping. Do not Boolean(field) beside a second guard, and do not park the helper next to unrelated catalog constants.
+- **Evidence:** cartLinePrelovedSkuId + isPrelovedLine in cart-store.ts; GST had used Boolean(prelovedSkuId) beside a type guard.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Persisted client carts that clamp only on add/setQty will render stale or tampered qty until the next mutation.
+- **ID:** 9c7a8909-3e13-4fb0-b09a-49145f9dbf04
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router client cart, localStorage
+- **Detail:** Hydrate through the same clamp as writes and drop qty<=0. Disable + on a finite cap (qty >= qtyOnHand), not on a product-type check that can disagree with clamp. Live oversell still belongs on the charge API.
+- **Evidence:** cart-store read() now clampQty(line.qty, line.qtyOnHand); isAtQtyCap for cart +; previously only add/setQty clamped and CartScreen also required isPrelovedLine.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Split charge-time stock errors: unknown resource stays 400 after price lookup; over-qty is 409 and must not write stock when decrement is a later webhook.
+- **ID:** 1c8b5154-f5f7-4d19-82f2-594026489e03
+- **Date:** 2026-09-07T02:18:15Z
+- **DocId:** 0400
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Stripe PaymentIntent + Drizzle neon-http
+- **Detail:** After assertTotalsMatch, missing/inactive ids stay unknown_variant 400. Summed qty over live on-hand is 409 insufficient_qty. neon-http has no interactive transaction; do not decrement at PaymentIntent create if fulfilment owns the write. Map 409 to human copy; do not auto-clamp the client cart.
+- **Evidence:** POST /api/stripe/payment-intent; lookup key preloved:<skuId>; 409 { error: 'insufficient_qty' }; readApiError just-sold copy; M06 owns webhook decrement.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Hiding shop UI on a feature flag is not a charge gate; leftover carts and crafted ids still hit PaymentIntent.
+- **ID:** eb76717f-afa5-4577-873d-9c0b738aab51
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0400
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4 Stripe PaymentIntent feature gating
+- **Detail:** Match the flag on the mint route to other feature APIs (same status and body). Checking settings only for tax, or only 404ing pages, still prices and qty-checks leftover lines. An already-created PI after a mid-checkout flag flip is a separate race.
+- **Evidence:** payment-intent returns 404 { error: 'Preloved is not enabled' } when prelovedSkuIds.length > 0 and !settings.prelovedEnabled, matching donate/intake/write-off; shop pages use notFound(); no live PI request in that pair turn.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## When the server ignores a client tax flag, checkout UI and e2e still must run the same totals helper with a server-fetched setting.
+- **ID:** 8b20e9bf-624d-4882-a8d7-4b1ceb22debb
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0400
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router; Stripe PI assertTotalsMatch; Playwright 1.59
+- **Detail:** Do not persist gstFree on the cart line. Derive it at display from RSC settings plus a live sku id. Omit the flag from the PI payload so the server stamps it. Specs should import computeTotals rather than re-coding tax math, or mixed carts 400 totals_mismatch.
+- **Evidence:** checkout-screen computeTotals + toPaymentIntentLines omit gstFree; CartPage passes donatedGstFree; m05 spec imports ../../src/lib/order-totals.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Feature-flagged catalogue chips must share one allow-list with the filter querystring.
+- **ID:** 0d9717bb-c1c4-49b3-b6c6-564018935cf5
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0600
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router catalogue grid
+- **Detail:** Chips and activeCat must read the expanded list only when the flag is on; otherwise the base list. A stale ?cat= of the extra filter must fall back to the default category, not render an empty heading. Skip fetching overlay cards when the flag is off.
+- **Evidence:** page.tsx uses SHOP_FILTERS when prelovedEnabled else CATEGORIES for chips and activeCat; listShopPrelovedSkus skipped when disabled.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## A new parent buy PDP should clone existing purchase chrome (shell, stepper, sticky add), not a sibling informational Card stack.
+- **ID:** e2a0f1ec-ab6a-499c-8fac-e5795cd1ac02
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0600
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router; @heroui/react ^3.1.0 OSS-only; Tailwind CSS v4
+- **Detail:** Donate/info screens can use HeroUI Card/Chip. The add-to-cart path needs the same qty stepper and footer as unlimited stock. Overlay a finite cap rather than mixing unlimited and capped qty on one stepper. On a bespoke Tailwind cart, reuse the local Chip for mixed-line badges instead of a second component system. OSS-only repos still must not pull Pro.
+- **Evidence:** preloved/[skuId] uses MobileShell, Btn, components/chip like item/[itemId]; donate uses HeroUI Cards; cart-screen gold Chip + disabled + at max.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Parent-shop empty-state e2e cannot zero leftover in-stock rows when write-off is expired-only and the milestone forbids qty decrement.
+- **ID:** 52b55fe2-7b6d-45e4-bdfe-b7049d115b7b
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0100
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Playwright 1.59 + Next.js 16 App Router
+- **Detail:** Skip the empty assertion when operator stock is not empty rather than SQL-updating qty or writing off live units. A seeded CI tenant will never prove empty copy unless it has a fresh rack or a non-destructive empty fixture.
+- **Evidence:** m05-parent-preloved-shop.spec.ts test.skip(!rackEmpty); writeOffPrelovedSku isExpiredForWriteOff; M05 out: qty decrement.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Playwright cookies for an RSC splash gate must match the production cookie name and Path.
+- **ID:** 8e7f21d1-b273-4b2e-a83d-a47fee00f519
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0100
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 cookies() + Playwright 1.59
+- **Detail:** cookies().get(name) only sees cookies whose Path covers the route. Set Path=/{tenant} (or click the real CTA) rather than a root-path cookie. Fall back to the landing button if the splash still renders.
+- **Evidence:** Catalog RSC cookies().get(`uo:visited:${slug}`); landing-visit.client.ts Path=/${slug}; m05 setVisitedCookie.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Playwright testDir plus testMatch *.spec.ts lets a sibling helpers.ts be imported without being collected as a test.
+- **ID:** 7e3a71fa-1a07-4a71-9f47-074f25544f1b
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0100
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Playwright test runner; apps/web/playwright.config.ts
+- **Detail:** Shared login/enable/intake helpers belong in helpers.ts next to the specs. Always-save settings helpers are a superset of skip-if-already-on and can return flags the later spec needs (tax-free, refund clause). Adding a pnpm script still requires the same command in AGENTS.md/Claude.md Commands or agents miss the gate.
+- **Evidence:** apps/web/tests/preloved/helpers.ts; playwright.config.ts testDir ./tests/preloved testMatch /.*\.spec\.ts$/; ensurePrelovedEnabled always PATCH returns donatedGstFree.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Reuse the existing add-to-cart funnel event and add optional sku/condition properties; do not fire a parallel event name.
+- **ID:** 8f656df4-90e0-4115-b560-355427081511
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0900
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** PostHog; Next.js 16 parent shop
+- **Detail:** Parent analytics already keys mixed-cart adds on one event. A preloved-only event drops those adds from the funnel. Extra properties can be null/absent on new-stock captures.
+- **Evidence:** PrelovedSkuInteractive.onAdd captures item_added_to_cart with the same core properties as item/[itemId]/interactive.tsx plus preloved_sku_id and condition.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Next 16 parent-shop client islands may not hydrate in Playwright even when scripts and React load.
+- **ID:** a575a28b-91ea-4215-bd7e-af75ca4b7700
+- **Date:** 2026-09-07T02:18:16Z
+- **DocId:** 0100
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4 Turbopack; Playwright 1.59 Chromium/Chrome; nonce CSP middleware
+- **Detail:** Add to cart and qty stepper stay dead SSR (no navigation, data-hydrated stays false) on both bundled Chromium and Chrome channel, including the existing /item/polo PDP. RSC copy and Links still work. Do not treat a passing RSC assertion as proof of the add-to-cart path. Prefer PATCH fixtures for admin flags. Investigate HMR websocket 400 and nonce CSP separately.
+- **Evidence:** m05 spec: 3 passed (disabled UI, mobile/desktop filter+badge+PDP copy), mixed-cart tests skipped; polo Add to cart click left URL on /{tenant}/item/polo.
+- **Links:** specs/milestones/M05-parent-preloved-shop.md
+
+## Next 16 Turbopack HMR rejects Origin http://127.0.0.1 unless allowedDevOrigins includes it; client islands then never hydrate.
+- **ID:** 22024edd-dc15-4a00-9819-0e6003f1e767
+- **Date:** 2026-09-07T12:17:55Z
+- **DocId:** 0100
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M05
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4 Turbopack; Playwright 1.59; Chrome
+- **Detail:** localhost vs 127.0.0.1 are different origins. Chrome sends Origin on the HMR websocket; Next returns a non-HTTP handshake (ERR_INVALID_HTTP_RESPONSE). Add to cart, qty steppers, and router.refresh buttons stay dead SSR. Set allowedDevOrigins to 127.0.0.1 (and localhost). Do not treat a passing RSC snapshot as proof of client buttons.
+- **Evidence:** check-hydrate.mjs: localhost hydrated=true, 127.0.0.1 hydrated=false until allowedDevOrigins; then both true. playwright-cli mixed cart $51 / GST $4.64.
+- **Links:** apps/web/next.config.ts
 
