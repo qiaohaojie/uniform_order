@@ -19,6 +19,10 @@ import { applyRateLimit } from "@/lib/rate-limit";
 const PRELOVED_SKU_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function asUuidOrNull(id: string): string | null {
+  return PRELOVED_SKU_ID_RE.test(id) ? id : null;
+}
+
 type ClientOrderLine = {
   itemId: string;
   variantLabel: string;
@@ -343,7 +347,9 @@ export async function POST(req: NextRequest) {
       await db.insert(pendingOrderSnapshots).values({
         paymentIntentId: paymentIntent.id,
         tenantId,
-        userId: authResult.user.id,
+        // Dev-login ids are `dev-<email>`, not uuids. The column is uuid + FK
+        // to neon_auth.users; a non-uuid here 500s the PI after Stripe create.
+        userId: asUuidOrNull(authResult.user.id),
         fulfilmentMethod,
         subtotal: String(verified.subtotal),
         gst: String(verified.gst),

@@ -1,10 +1,10 @@
 /**
- * Shared Playwright helpers for M03/M04/M05 preloved specs.
+ * Shared Playwright helpers for M03/M04/M05/M06 preloved specs.
  *
  * Auth uses GET /api/dev/login (NODE_ENV=development). Operator email must
  * match the tenant shop email (seed default below).
  */
-import { expect, type Page } from "playwright/test";
+import { expect, type Locator, type Page } from "playwright/test";
 
 export const TENANT = process.env.PRELOVED_TENANT ?? "imhs";
 export const OPERATOR_EMAIL =
@@ -123,4 +123,81 @@ export async function acceptSize10PoloGood(page: Page) {
   await expect(page.getByTestId("intake-price").locator("input")).not.toHaveValue("");
   await page.getByTestId("intake-accept").click();
   await expect(page.getByTestId("intake-success")).toContainText(/Accepted/i);
+}
+
+export function parseMoney(text: string): number {
+  const match = text.replace(/,/g, "").match(/(\d+(?:\.\d+)?)/);
+  if (!match) {
+    throw new Error(`could not parse money from ${JSON.stringify(text)}`);
+  }
+  return Number(match[1]);
+}
+
+export async function setVisitedCookie(page: Page) {
+  if (page.url() === "about:blank") {
+    await page.goto(`/${TENANT}`);
+  }
+  const { hostname } = new URL(page.url());
+  await page.context().addCookies([
+    {
+      name: `uo:visited:${TENANT}`,
+      value: "1",
+      domain: hostname,
+      path: `/${TENANT}`,
+    },
+  ]);
+}
+
+export async function openCatalog(page: Page, cat?: string) {
+  await setVisitedCookie(page);
+  const path = cat ? `/${TENANT}?cat=${encodeURIComponent(cat)}` : `/${TENANT}`;
+  await page.goto(path);
+  const browse = page.getByRole("button", { name: /Browse Catalogue/i });
+  if ((await browse.count()) > 0) {
+    await browse.click();
+    await expect(page.getByTestId("shop-filter-chip").first()).toBeVisible();
+    if (cat) await page.goto(path);
+  }
+  await expect(page.getByTestId("shop-filter-chip").first()).toBeVisible();
+}
+
+export async function readStockQty(page: Page): Promise<number> {
+  await page.goto(`/admin/${TENANT}/preloved/stock`);
+  await expect(page.getByTestId("preloved-stock-page")).toBeVisible();
+  const row = pooledRow(page);
+  if ((await row.count()) === 0) return 0;
+  const text = (await row.getByTestId("stock-qty").innerText()).trim();
+  const qty = Number(text);
+  if (!Number.isInteger(qty) || qty < 0) {
+    throw new Error(`stock-qty was not a non-negative integer: ${JSON.stringify(text)}`);
+  }
+  return qty;
+}
+
+export async function ensureInStockSku(page: Page): Promise<number> {
+  const qty = await readStockQty(page);
+  if (qty >= 1) return qty;
+  await acceptSize10PoloGood(page);
+  const after = await readStockQty(page);
+  expect(after).toBeGreaterThanOrEqual(1);
+  return after;
+}
+
+export function skuCard(page: Page): Locator {
+  return page.locator(
+    `[data-testid="preloved-card"][data-size="${SIZE}"][data-condition="${CONDITION}"]`,
+    { hasText: ITEM_NAME },
+  );
+}
+
+export async function addNewPolo(page: Page): Promise<number> {
+  await page.goto(`/${TENANT}/item/${ITEM_ID}`);
+  const add = page.getByRole("button", { name: /Add to cart/i });
+  await expect(add).toBeVisible();
+  const sizeBtn = page.getByRole("button", { name: SIZE, exact: true });
+  if ((await sizeBtn.count()) > 0) await sizeBtn.click();
+  const price = parseMoney(await add.innerText());
+  await add.click();
+  await expect(page).toHaveURL(new RegExp(`/${TENANT}/cart`));
+  return price;
 }

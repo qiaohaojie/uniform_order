@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines, tenants, pendingOrderSnapshots } from "@/db";
 import type { PendingOrderLineSnapshot } from "@/db/schema";
+import { decrementPrelovedForPaymentIntent } from "@/db/preloved-queries";
 import {
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
   getTenant,
   getTenantSettings,
 } from "@/db/queries";
+import { PrelovedInsufficientQtyError } from "@/lib/preloved";
 import { eq, inArray } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import {
@@ -360,7 +362,9 @@ export async function POST(req: NextRequest) {
         qty: l.qty,
         unitPrice: l.unitPrice,
         // Legacy no-snapshot PIs (pre-snapshot-table) stay all-taxable; do not
-        // copy client gstFree. New PIs cannot reach here without a snapshot.
+        // copy client gstFree, prelovedSkuId, or condition. Decrement and
+        // PRELOVED marks must follow snapshot ids only. New PIs cannot reach
+        // here without a snapshot — those fields come from linesJson there.
         gstFree: false,
       }),
     );
@@ -456,7 +460,11 @@ export async function POST(req: NextRequest) {
         stripePaymentIntentId: normalizedStripePaymentIntentId,
         stripeRef: normalizedStripePaymentIntentId,
         refundPolicyAcceptedAt: new Date(),
-        userId: authResult.user.id,
+        userId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          authResult.user.id,
+        )
+          ? authResult.user.id
+          : null,
         parentNote: normalizedParentNote,
         legalVersionId,
       });
@@ -483,6 +491,21 @@ export async function POST(req: NextRequest) {
       );
       await db.batch([orderInsert, linesInsert]);
     };
+
+    // Paid CAS: drop preloved qty after the PI succeeded and before the order
+    // row exists. New-only carts no-op. Oversell → 409, no order row.
+    try {
+      await decrementPrelovedForPaymentIntent({
+        paymentIntentId: normalizedStripePaymentIntentId,
+        tenantId,
+        lines: persistedLines,
+      });
+    } catch (error) {
+      if (error instanceof PrelovedInsufficientQtyError) {
+        return NextResponse.json({ error: "insufficient_qty" }, { status: 409 });
+      }
+      throw error;
+    }
 
     let createdOrderId: string | null = null;
     for (let attempt = 0; attempt < 5; attempt += 1) {

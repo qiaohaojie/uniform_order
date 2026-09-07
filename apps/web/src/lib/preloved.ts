@@ -188,6 +188,15 @@ export class PrelovedExpiredStockError extends Error {
   }
 }
 
+export class PrelovedInsufficientQtyError extends Error {
+  readonly code = "insufficient_qty";
+
+  constructor(message = "Preloved quantity is insufficient.") {
+    super(message);
+    this.name = "PrelovedInsufficientQtyError";
+  }
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

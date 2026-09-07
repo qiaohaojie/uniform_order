@@ -31,3 +31,18 @@
 
 - [ ] **(M05)** Empty Preloved filter e2e skipped when the rack already has stock — raised: 2026-09-07, by: build:M05
       context: Write-off is expired-only and M05 must not decrement qty. A tenant that already has stock will `test.skip`. Copy+donate link exist in `catalog-grid.tsx`. Need a fresh empty tenant or a non-destructive empty fixture.
+
+- [x] **(M06)** Live pay + pick-slip self-ver not run — raised: 2026-09-07, by: build:M06
+      context: `pnpm test:m06-preloved-fulfilment` passed on demo-academy (qty 2→1, mixed-cart Stripe `pm_card_visa`, pick slip PRELOVED on preloved line only, Kanban To prepare/Ready/Needs attention/Completed). Desktop 1920×1080 screenshots in `.dev-local/m06-verify/`. playwright-cli chrome-for-testing was still installing; used project Playwright Chromium.
+
+- [ ] **(M06)** Concurrent last-unit is code-only — raised: 2026-09-07, by: build:M06
+      context: CAS + 409 on order create is implemented; no race e2e. Loser can be charged with no order (webhook ACK 200, no auto-refund). Decide if a second API race test is required before complete.
+
+- [x] **(M06)** Webhook snapshot decrement can drop qty with no order row — raised: 2026-09-07, by: review:M06
+      context: Kept snapshot-first (decision `580c7676`). 3DS paid-without-order is ops refund, not auto-refund.
+
+- [ ] **(M06)** Write-off retry can count sold units as written_off — raised: 2026-09-07, by: review:M06
+      context: `writeOffPrelovedSku` qty=0 path still sums accepted-this-listing (M03 “no sale decrements”). Paid CAS zeros `qty_on_hand` without an intake `sold` event. Happy path with leftover qty is fine.
+
+- [x] **(M06)** Apply drizzle 0021 on Neon — raised: 2026-09-07, by: build:M06
+      context: Applied `CREATE TABLE IF NOT EXISTS preloved_paid_decrements` via neon-http (full `drizzle-orm` migrator blocked on already-applied 0019). Journaled as `manual_0021_preloved_paid_decrements`.

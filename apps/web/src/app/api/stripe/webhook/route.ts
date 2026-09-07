@@ -2,9 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { orders, tenants, orderRefunds, auditEvents, orderEvents } from "@/db/schema";
+import {
+  orders,
+  tenants,
+  orderRefunds,
+  auditEvents,
+  orderEvents,
+  orderLines,
+  pendingOrderSnapshots,
+} from "@/db/schema";
+import { decrementPrelovedForPaymentIntent } from "@/db/preloved-queries";
 import { sendOrderRefundEmail } from "@/lib/email";
 import { recordOrderPaid } from "@/lib/orders/record-order-paid";
+import { PrelovedInsufficientQtyError } from "@/lib/preloved";
 
 function formatAud(amount: number): string {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount);
@@ -25,6 +35,75 @@ function money(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Paid preloved CAS: snapshot first (webhook may beat order POST), else
+ * order_lines. Helper no-ops redelivery / already-decremented. Missing
+ * snapshot+order skips. CAS fail after charge is logged; do not refund.
+ */
+async function decrementPrelovedOnPaid(input: {
+  paymentIntentId: string;
+  resolved: { id: string; tenantId: string } | null;
+}): Promise<void> {
+  const [snapshot] = await db
+    .select({
+      linesJson: pendingOrderSnapshots.linesJson,
+      tenantId: pendingOrderSnapshots.tenantId,
+    })
+    .from(pendingOrderSnapshots)
+    .where(eq(pendingOrderSnapshots.paymentIntentId, input.paymentIntentId))
+    .limit(1);
+
+  const snapshotLines =
+    snapshot && Array.isArray(snapshot.linesJson) && snapshot.linesJson.length > 0
+      ? snapshot.linesJson
+      : null;
+
+  let tenantId: string | null = null;
+  let lines: { prelovedSkuId?: string | null; qty: number }[] | null = null;
+
+  if (snapshot && snapshotLines) {
+    tenantId = snapshot.tenantId;
+    lines = snapshotLines;
+  } else if (input.resolved) {
+    const rows = await db
+      .select({
+        prelovedSkuId: orderLines.prelovedSkuId,
+        qty: orderLines.qty,
+      })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, input.resolved.id));
+    tenantId = input.resolved.tenantId;
+    lines = rows;
+  }
+
+  if (!tenantId || !lines) return;
+
+  try {
+    await decrementPrelovedForPaymentIntent({
+      paymentIntentId: input.paymentIntentId,
+      tenantId,
+      lines,
+    });
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error("stripe webhook: preloved decrement failed after charge", {
+      paymentIntentId: input.paymentIntentId,
+      tenantId,
+      casFail: err instanceof PrelovedInsufficientQtyError,
+    });
+    await serverCaptureException("stripe-webhook", error, {
+      step: "preloved-decrement",
+      paymentIntentId: input.paymentIntentId,
+      tenantId,
+      casFail: err instanceof PrelovedInsufficientQtyError,
+    });
+    // Charge already succeeded. Do not mint refunds. CAS fail stays 200 so
+    // Stripe does not retry forever; other errors rethrow for retry.
+    if (err instanceof PrelovedInsufficientQtyError) return;
+    throw err;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -128,6 +207,11 @@ export async function POST(req: NextRequest) {
       // `paid`, and calls recordOrderPaid itself — so nothing is lost here.
       console.info("stripe webhook: no order matched payment intent yet", pi.id);
     }
+
+    await decrementPrelovedOnPaid({
+      paymentIntentId: pi.id,
+      resolved,
+    });
 
     return NextResponse.json({ received: true });
   }

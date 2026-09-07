@@ -1,5 +1,5 @@
 /**
- * Preloved settings / SKU / intake / parent-shop helpers.
+ * Preloved settings / SKU / intake / parent-shop / paid-decrement helpers.
  * Kept out of queries.ts so GST/report work in queries.ts does not clash.
  */
 import { cache } from "react";
@@ -10,6 +10,7 @@ import {
   PRELOVED_INTAKE_SOURCE,
   PrelovedCatalogMatchError,
   PrelovedExpiredStockError,
+  PrelovedInsufficientQtyError,
   PrelovedWriteOffNotEligibleError,
   defaultPrelovedPrice,
   defaultPrelovedSettings,
@@ -35,6 +36,7 @@ import { type InsertDonationNoteInput } from "@/lib/preloved-donate";
 import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { AuditActorRole } from "@/lib/audit/types";
+import { isUniqueConstraintError } from "@/lib/db/unique-constraint";
 import { db } from "./index";
 import {
   catalogItems,
@@ -710,4 +712,134 @@ export async function listExpiredPrelovedSkus(
     )
     .orderBy(asc(prelovedSkus.expiresAt));
   return rows.map(mapStockListItem);
+}
+
+export type DecrementPrelovedLine = {
+  prelovedSkuId?: string | null;
+  qty: number;
+};
+
+export type DecrementPrelovedForPaymentIntentResult =
+  | "applied"
+  | "already-applied"
+  | "noop";
+
+function collectPrelovedDecrementLines(
+  lines: ReadonlyArray<DecrementPrelovedLine>,
+): { skuId: string; qty: number }[] {
+  const qtyBySku = new Map<string, number>();
+  for (const line of lines) {
+    if (typeof line.prelovedSkuId !== "string") continue;
+    const skuId = line.prelovedSkuId.trim();
+    if (!skuId || !SHOP_SKU_ID_RE.test(skuId)) continue;
+    if (!Number.isInteger(line.qty) || line.qty <= 0) continue;
+    qtyBySku.set(skuId, (qtyBySku.get(skuId) ?? 0) + line.qty);
+  }
+  return [...qtyBySku.entries()].map(([skuId, qty]) => ({ skuId, qty }));
+}
+
+/**
+ * CAS-decrement preloved qty for a succeeded PaymentIntent.
+ * One SQL statement (neon-http: never db.transaction). Empty / new-only
+ * lines no-op and do not insert a claim row. Same-PI retries take
+ * pg_advisory_xact_lock(hashtext(pi)) so they serialize without an unclaim
+ * DELETE of a sibling INSERT (WITH writes are invisible except via
+ * RETURNING). Claim INSERT runs only after UPDATE RETURNING shows every
+ * requested SKU decremented. already-applied means that claim row exists
+ * from a prior successful decrement, never from a failed CAS. Competing
+ * PIs for the last unit: one applied, the other throws
+ * PrelovedInsufficientQtyError.
+ */
+export async function decrementPrelovedForPaymentIntent(input: {
+  paymentIntentId: string;
+  tenantId: string;
+  lines: ReadonlyArray<DecrementPrelovedLine>;
+}): Promise<DecrementPrelovedForPaymentIntentResult> {
+  const paymentIntentId = input.paymentIntentId.trim();
+  const tenantId = input.tenantId.trim();
+  if (!paymentIntentId || !tenantId) {
+    throw new Error("paymentIntentId and tenantId are required");
+  }
+
+  const requestedLines = collectPrelovedDecrementLines(input.lines);
+  if (requestedLines.length === 0) return "noop";
+
+  const valueRows = requestedLines.map(
+    (line) => sql`(${line.skuId}::uuid, ${line.qty}::int)`,
+  );
+
+  type DecrementRow = { status: string };
+  let result: { rows: DecrementRow[] };
+  try {
+    result = (await db.execute(sql`
+      WITH lock AS (
+        SELECT pg_advisory_xact_lock(hashtext(${paymentIntentId})::bigint) AS held
+      ),
+      requested AS (
+        SELECT sku_id, SUM(qty)::int AS qty
+        FROM (VALUES ${sql.join(valueRows, sql`, `)}) AS t(sku_id, qty)
+        GROUP BY sku_id
+      ),
+      already AS (
+        SELECT d.payment_intent_id
+        FROM preloved_paid_decrements d
+        WHERE d.payment_intent_id = ${paymentIntentId}
+          AND EXISTS (SELECT 1 FROM lock)
+      ),
+      locked AS (
+        SELECT s.id, r.qty, s.qty_on_hand
+        FROM requested r
+        INNER JOIN preloved_skus s
+          ON s.id = r.sku_id AND s.tenant_id = ${tenantId}
+        WHERE NOT EXISTS (SELECT 1 FROM already)
+          AND EXISTS (SELECT 1 FROM lock)
+        ORDER BY s.id
+        FOR UPDATE OF s
+      ),
+      ok AS (
+        SELECT
+          COUNT(*) = (SELECT COUNT(*) FROM requested)
+          AND COALESCE(BOOL_AND(locked.qty_on_hand >= locked.qty), false)
+          AS all_ok
+        FROM locked
+      ),
+      decremented AS (
+        UPDATE preloved_skus s
+        SET qty_on_hand = s.qty_on_hand - l.qty
+        FROM locked l, ok
+        WHERE s.id = l.id
+          AND ok.all_ok
+          AND s.qty_on_hand >= l.qty
+        RETURNING s.id
+      ),
+      claimed AS (
+        INSERT INTO preloved_paid_decrements (payment_intent_id, tenant_id)
+        SELECT ${paymentIntentId}, ${tenantId}
+        WHERE COALESCE((SELECT all_ok FROM ok), false)
+          AND (SELECT COUNT(*) FROM decremented) = (SELECT COUNT(*) FROM requested)
+          AND NOT EXISTS (SELECT 1 FROM already)
+        RETURNING payment_intent_id
+      )
+      SELECT
+        CASE
+          WHEN EXISTS (SELECT 1 FROM already) THEN 'already-applied'
+          WHEN EXISTS (SELECT 1 FROM claimed)
+            AND (SELECT COUNT(*) FROM decremented) = (SELECT COUNT(*) FROM requested)
+            THEN 'applied'
+          ELSE 'insufficient'
+        END AS status
+    `)) as { rows: DecrementRow[] };
+  } catch (error) {
+    // Concurrent same-PI: this statement's UPDATE rolled back on PK
+    // conflict; the winner already claimed after a successful decrement.
+    if (isUniqueConstraintError(error, "preloved_paid_decrements_pkey")) {
+      return "already-applied";
+    }
+    throw error;
+  }
+
+  const status = result.rows[0]?.status;
+  if (status === "applied" || status === "already-applied") return status;
+  if (status === "insufficient") throw new PrelovedInsufficientQtyError();
+  throw new Error(`Unexpected preloved decrement status: ${String(status)}`);
 }

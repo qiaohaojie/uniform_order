@@ -32,9 +32,10 @@ pnpm check-types:web  # TypeScript check for apps/web only
 pnpm test:m03-intake-stock  # operator accept → stock qty (needs pnpm dev:web)
 pnpm test:m04-donate-refund  # donate note + refund policy (needs pnpm dev:web)
 pnpm test:m05-parent-preloved-shop  # parent preloved shop (needs pnpm dev:web)
+pnpm test:m06-preloved-fulfilment  # pay → stock qty down → pick slip PRELOVED (needs pnpm dev:web)
 ```
 
-Type-checking is the main correctness gate. M03, M04, and M05 add Playwright specs (`apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`); they do not boot Next — run `pnpm dev:web` first. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
+Type-checking is the main correctness gate. M03, M04, M05, and M06 add Playwright specs (`apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`, `m06-preloved-fulfilment.spec.ts`); they do not boot Next — run `pnpm dev:web` first. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
 
 If `.next` was deleted and generated route types such as `PageProps` / `LayoutProps` are missing, run:
 
@@ -69,7 +70,7 @@ Neon PostgreSQL plus Drizzle backs live catalog, tenant settings, orders, and St
 - `src/db/schema.ts`: database schema.
 - `src/db/index.ts`: lazy Neon/Drizzle client. Do not create DB clients at module import time.
 - `src/db/queries.ts`: shared catalog, order, tenant, GST, and reports query helpers. Keep GST/reports here. Do not add preloved settings/SKU/intake writes here.
-- `src/db/preloved-queries.ts`: preloved settings, SKU, intake, write-off, and donation-note helpers. Put preloved reads/writes here (M01/M02 boundary — keeps GST/report work in `queries.ts` from clashing).
+- `src/db/preloved-queries.ts`: preloved settings, SKU, intake, write-off, donation-note, parent-shop, and paid-decrement helpers. Put preloved reads/writes here (keeps GST/report work in `queries.ts` from clashing).
 - `app/api/orders`, `app/api/catalog`, `app/api/tenant`, `app/api/stripe/*`: client-facing live write surfaces. Client code must check `res.ok` and surface errors.
 - `lib/data.ts`: tenant metadata, parent/child demo data, static fallback catalog, helpers.
 - `lib/admin-data.ts`: legacy mock admin orders and sales analytics.

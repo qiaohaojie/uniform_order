@@ -59,5 +59,19 @@
 - 2026-09-07 · b89ff2f1 · build:M05 · Dev CSP connect-src allows ws/wss; middleware skips /_next/.
 - 2026-09-07 · a8708d49 · build:M05 · Allow 127.0.0.1 as a Next.js allowedDevOrigin so Playwright hydrates
 
+## M06  ([decisions/M06.md](M06.md)) — 12
+- 2026-09-07 · 8839cfda · build:M06 · Paid decrement is one neon-http SQL CAS keyed by payment_intent_id, not db.batch
+- 2026-09-07 · 326d76bd · build:M06 · CAS fail after a succeeded PI does not auto-refund; order create returns 409 insufficient_qty
+- 2026-09-07 · 01ba5219 · build:M06 · PRELOVED chip on pick slip; no rack location; sold-out PDP stays 404
+- 2026-09-07 · 4f4b673d · build:M06 · SQL-only drizzle 0021 with journal idx 21; no new snapshot JSON
+- 2026-09-07 · 4f9745d8 · build:M06 · Webhook decrements snapshot-first; order_lines fallback; skip if both missing
+- 2026-09-07 · cb171b81 · build:M06 · No-snapshot order POST omits client prelovedSkuId/condition; snapshot path still stamps them
+- 2026-09-07 · 075a4cb0 · build:M06 · M06 Playwright is mixed-cart pay plus catalog fingerprint; last-unit race is code-only
+- 2026-09-07 · 580c7676 · build:M06 · Keep snapshot-first webhook decrement; 3DS paid-without-order is ops refund
+- 2026-09-07 · 2fca4c5c · build:M06 · demo-academy uses a real Stripe test Connect destination, not acct_demo_*
+- 2026-09-07 · 1a370b50 · build:M06 · Pending-order snapshot userId is null for non-uuid dev-login ids
+- 2026-09-07 · 65ef5136 · build:M06 · orders.userId is null for non-uuid dev-login ids
+- 2026-09-07 · c0f472c8 · build:M06 · Tick last-unit AC from sequential oversell plus CAS; no concurrent e2e
+
 ## Misc  ([decisions/misc.md](misc.md)) — 1
 - 2026-09-06 · 2f31cd1c · onboard · HeroUI OSS only — this repo is open source

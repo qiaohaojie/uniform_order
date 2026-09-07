@@ -881,3 +881,146 @@
 - **Evidence:** check-hydrate.mjs: localhost hydrated=true, 127.0.0.1 hydrated=false until allowedDevOrigins; then both true. playwright-cli mixed cart $51 / GST $4.64.
 - **Links:** apps/web/next.config.ts
 
+## Postgres WITH data-modifying CTEs cannot see sibling INSERTs except via RETURNING, so DELETE unclaim of a just-inserted idempotency row matches nothing.
+- **ID:** 246029b8-0308-4e61-a03c-ef969daca601
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** verified
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** PostgreSQL + drizzle-orm ^0.45.2 neon-http (no interactive transaction)
+- **Detail:** INSERT claim … RETURNING then DELETE USING that CTE still reads the statement snapshot. The claim commits. A same-key retry is treated as already-applied with no CAS write, so a 409 can become a paid order on retry. Unclaim-in-the-same-statement is not a rollback.
+- **Evidence:** M06 decrementPrelovedForPaymentIntent: first POST /api/orders 409 insufficient_qty, retry already-applied and inserted a paid order. apps/web/src/db/preloved-queries.ts
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## On neon-http, inventory CAS is one SQL statement: advisory lock, FOR UPDATE, qty-gated UPDATE, then INSERT the idempotency claim from UPDATE RETURNING.
+- **ID:** 8993c8bc-258c-42d1-8f5e-55055e418dda
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2; @neondatabase/serverless neon-http; PostgreSQL
+- **Detail:** Do not db.transaction. Do not db.batch of UPDATE+INSERT (partial commit). Do not claim-first then unclaim. Same-id retries serialize on pg_advisory_xact_lock(hashtext(id)) and map unique PK 23505 to already-applied. Competing keys serialize on SKU row locks; failed CAS leaves no claim. FOR UPDATE inside a CTE must be referenced by the final SELECT or Postgres will not lock.
+- **Evidence:** apps/web/src/db/preloved-queries.ts decrementPrelovedForPaymentIntent; drizzle/0021_preloved_paid_decrements.sql. Typecheck only; not live-raced on Neon this run.
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## After a captured Stripe charge, a terminal inventory CAS fail must ACK 200 (log + capture, no auto-refund); only retryable errors should throw.
+- **ID:** 8c611be2-af9d-4669-ace1-7d438822946b
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0400
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** stripe ^22; Next.js 16 App Router webhooks; neon-http
+- **Detail:** Throwing PrelovedInsufficientQtyError on payment_intent.succeeded makes Stripe retry forever. Refunds.create with reverse_transfer on destination charges is a separate money-moving path. Idempotent decrement lets order POST and webhook redelivery no-op. Charge-time qty reads are non-locking; two last-unit PaymentIntents can both succeed and the loser may be charged with no order row.
+- **Evidence:** apps/web/src/app/api/stripe/webhook/route.ts decrementPrelovedOnPaid catch; POST /api/orders 409 insufficient_qty; no stripe.refunds.create
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## Do not consume inventory from a pending PaymentIntent snapshot on payment_intent.succeeded before a fulfilment/order row exists.
+- **ID:** 53111483-4226-4d3b-8cf5-16b62b927c80
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0400
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** Stripe.js Payment Element deferred + Connect; Next.js 16 App Router
+- **Detail:** Webhook-first races need a line source, but confirmPayment redirect:'if_required' plus a return_url that only reads orderId never POST /api/orders. 3DS/redirect then drops qty_on_hand with no paid order and no pick slip. Keep CAS on order create; decrement on webhook only after the orders row exists, or finalize the order from the return_url payment_intent.
+- **Evidence:** apps/web/src/app/api/stripe/webhook/route.ts decrementPrelovedOnPaid snapshot path; checkout-screen confirmPayment return_url /[tenant]/order/placed
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## Forcing gstFree:false on a no-snapshot order fallback is not enough if the same mapper still copies client SKU/condition ids.
+- **ID:** 3b7ac005-68a4-4020-91da-f4264157e491
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0300
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** Next.js 16 App Router POST /api/orders; neon-http db.batch insert
+- **Detail:** Paid legacy PaymentIntents without pending_order_snapshots must stay SKU-less. Decrement, PRELOVED marks, and tax then follow untrusted client ids. Omit those fields (insert already maps missing to null; decrement already skips non-string ids). Read prelovedSkuId/condition only from the server snapshot written at charge time.
+- **Evidence:** apps/web/src/app/api/orders/route.ts persistedLines mapper; decrementPrelovedForPaymentIntent(persistedLines)
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## Sale decrements and write-off audit must not share an “accepted minus leftover qty” reconstruction, or sold units are recorded as written off.
+- **ID:** 2cce8220-7384-452b-9c63-d428e0e308c8
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0300
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2 neon-http; Postgres CHECK qty_on_hand >= 0
+- **Detail:** Keep paid CAS on its own idempotency table; do not reuse intake action=sold. After qty_on_hand hits 0 from sales, a write-off that sums accepted-this-listing will invent written_off qty. Treat zero-after-sales as already cleared, or subtract paid decrements.
+- **Evidence:** apps/web/src/db/preloved-queries.ts writeOffPrelovedSku comment still assumes M03 has no sale decrements (~line 489); decrementPrelovedForPaymentIntent updates preloved_skus only
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## A local Chip that only accepts children/tone/size does not forward data-*; wrap the testid on a span instead of extending the primitive.
+- **ID:** 91ba1268-2456-4200-80e3-1bf128bb0e81
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0600
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4; local Chip; @heroui/react ^3.1.0 OSS-only
+- **Detail:** Cart already wraps Chip. Pick slip uses the same gold sm Chip and data-testid=pick-slip-preloved on a wrapper. Do not mount a second Chip system or invent rack-location copy when no location field exists. Optional prelovedSkuId on the view type is enough if batch print select()s full rows — later narrowing of the select silently drops the mark.
+- **Evidence:** apps/web/src/components/chip.tsx; pick-slip.tsx wrapper span; cart-screen.tsx gold Chip wrap; admin order detail maps line.prelovedSkuId
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## When a later Playwright milestone copies shop setup, move those helpers into the shared spec file in the same change and return skuId/price from the add helper.
+- **ID:** c8345a6b-dc1f-4f25-af4e-c8d00c1f42b3
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0100
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** Playwright 1.59.1; Next.js 16.2.4; apps/web/tests/preloved
+- **Detail:** Otherwise the next spec grows ~80 duplicated lines and opens the PDP twice. Qty-returning in-stock seed belongs in helpers once any spec needs the number. Specs import only helpers they call. Mixed cart (one tagged + one untagged line) is required to prove a mark appears only on the tagged row.
+- **Evidence:** apps/web/tests/preloved/helpers.ts parseMoney/openCatalog/ensureInStockSku/readStockQty/addNewPolo; m06-preloved-fulfilment.spec.ts addOnePrelovedUnit
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## Stripe Payment Element e2e needs iframe polling; Playwright specs still do not boot Next and do not cover last-unit races.
+- **ID:** 88fbdbc8-4ff6-4f2c-99ea-e52d4ce1e71d
+- **Date:** 2026-09-07T14:00:22Z
+- **DocId:** 0100
+- **Kind:** note
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** playwright ^1.59; Stripe.js Payment Element layout tabs; Next.js 16 App Router
+- **Detail:** Card number/expiry/CVC may live in one payment iframe (#Field-numberInput) or in per-field Secure card frames; postal is optional. Bind PLAYWRIGHT_BASE_URL then .dev-local/web.url, workers 1, GET /api/dev/login. Live pay needs test keys, Connect, and webhook forwarding or the spec throws Payment unavailable. Oversell 409 can be API-only; concurrent last-unit stays code-only unless a second race test is added.
+- **Evidence:** apps/web/tests/preloved/m06-preloved-fulfilment.spec.ts fillStripeTestCard; playwright.config.ts; pnpm test:m06-preloved-fulfilment
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## A Kanban “unchanged” assertion must target the board, not the first [data-no-print] node (often the admin sidebar).
+- **ID:** 66f769a6-2fcb-46fc-ad76-fd65c20e9a9a
+- **Date:** 2026-09-07T14:00:23Z
+- **DocId:** 0100
+- **Kind:** fails
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** Playwright 1.59; Next.js 16 admin Kanban
+- **Detail:** Branching on 2 vs 4 scraped labels does not prove statuses. Assert no extra column plus the paid order in the first status. Print/pick-slip visual proof is playwright-cli desktop against a running Next, not the runner spec alone.
+- **Evidence:** apps/web/tests/preloved/m06-preloved-fulfilment.spec.ts readKanbanColumnLabels ~line 276; specs/milestones/M06-preloved-fulfilment.md Verification strategy
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+
+## GET /api/catalog is a usable negative oracle when catalogue variants must stay untracked: fingerprint columns and assert qty/qtyOnHand stay absent after a paid overlay sale.
+- **ID:** 3cc29135-a4e6-4c46-b174-a531ab218a1c
+- **Date:** 2026-09-07T14:00:23Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** provisional
+- **Milestone:** M06
+- **Project:** uniform_order
+- **Version scope:** drizzle-orm ^0.45.2; Next.js 16 App Router
+- **Detail:** Do not add qty to catalog_variants. Decrement SQL updates only the overlay stock table and no-ops new-only lines. A new-only PaymentIntent with a huge qty must not 409 if that table has no inventory.
+- **Evidence:** apps/web/src/db/schema.ts catalogVariants (id/itemId/label/price/sizes/active); apps/web/src/app/api/catalog/route.ts; m06 spec catalog fingerprint + qty-99 PI
+- **Links:** specs/milestones/M06-preloved-fulfilment.md
+

@@ -99,7 +99,7 @@ graph TD
 - [x] [M05 — Parent preloved catalogue and cart](./milestones/M05-parent-preloved-shop.md) — deps: M01, M02, M03, M04
 
 ### Wave 4
-- [ ] [M06 — Paid decrement and PRELOVED pick slip](./milestones/M06-preloved-fulfilment.md) — deps: M05
+- [x] [M06 — Paid decrement and PRELOVED pick slip](./milestones/M06-preloved-fulfilment.md) — deps: M05
 
 ## Project Definition of Done
 
@@ -107,6 +107,6 @@ graph TD
 - [x] Operators accept/reject donated garments, pool qty by source item + size + condition, price from the new variant (default 50%, warn above cap), and write off expired stock to charity.
 - [x] Parents see donate instructions (drop-off, not self-listing), browse preloved next to new, add mixed carts with stock caps, and pay the school’s Stripe Connect account.
 - [x] Donated preloved lines are GST-free only when the tenant declared `donatedGstFree`; reports CSV splits GST-free preloved vs taxable sales.
-- [ ] Paid preloved qty decrements; pick slips mark PRELOVED; oversell fails PaymentIntent creation.
-- [ ] Refund policy states sold-as-worn / no change-of-mind / ACL still applies. No C2C listings, consignment, escrow, or inventory on new catalogue.
-- [ ] `pnpm check-types:web` passes. Parent/admin UI slices proven with playwright-cli on `pnpm dev:web`.
+- [x] Paid preloved qty decrements; pick slips mark PRELOVED; oversell fails PaymentIntent creation.
+- [x] Refund policy states sold-as-worn / no change-of-mind / ACL still applies. No C2C listings, consignment, escrow, or inventory on new catalogue.
+- [x] `pnpm check-types:web` passes. Parent/admin UI slices proven with playwright-cli on `pnpm dev:web`.

@@ -15,19 +15,17 @@
  * PRELOVED_TENANT defaults to imhs (Illawarra Modern High School). Override
  * with rgsh (Riverside Academy) if needed. Demo tenants are synthetic only.
  */
-import { expect, test, type Locator, type Page } from "playwright/test";
+import { expect, test, type Page } from "playwright/test";
 import { computeTotals } from "../../src/lib/order-totals";
 import {
-  CONDITION,
-  ITEM_ID,
-  ITEM_NAME,
-  SIZE,
   TENANT,
-  acceptSize10PoloGood,
+  addNewPolo,
   devLogin,
+  ensureInStockSku,
   ensurePrelovedDisabled,
   ensurePrelovedEnabled,
-  pooledRow,
+  openCatalog,
+  skuCard,
 } from "./helpers";
 
 const ITEM_CATEGORY = process.env.PRELOVED_ITEM_CATEGORY ?? "Sports";
@@ -37,64 +35,6 @@ const DESKTOP_VIEWPORT = { width: 1440, height: 900 };
 
 const EMPTY_COPY = /No preloved in this size right now/i;
 const DONATE_HREF = `/${TENANT}/preloved/donate`;
-
-function skuCard(page: Page): Locator {
-  return page.locator(
-    `[data-testid="preloved-card"][data-size="${SIZE}"][data-condition="${CONDITION}"]`,
-    { hasText: ITEM_NAME },
-  );
-}
-
-function parseMoney(text: string): number {
-  const match = text.replace(/,/g, "").match(/(\d+(?:\.\d+)?)/);
-  if (!match) {
-    throw new Error(`could not parse money from ${JSON.stringify(text)}`);
-  }
-  return Number(match[1]);
-}
-
-async function setVisitedCookie(page: Page) {
-  if (page.url() === "about:blank") {
-    await page.goto(`/${TENANT}`);
-  }
-  const { hostname } = new URL(page.url());
-  await page.context().addCookies([
-    {
-      name: `uo:visited:${TENANT}`,
-      value: "1",
-      domain: hostname,
-      path: `/${TENANT}`,
-    },
-  ]);
-}
-
-async function openCatalog(page: Page, cat?: string) {
-  await setVisitedCookie(page);
-  const path = cat ? `/${TENANT}?cat=${encodeURIComponent(cat)}` : `/${TENANT}`;
-  await page.goto(path);
-  const browse = page.getByRole("button", { name: /Browse Catalogue/i });
-  if ((await browse.count()) > 0) {
-    await browse.click();
-    await expect(page.getByTestId("shop-filter-chip").first()).toBeVisible();
-    if (cat) await page.goto(path);
-  }
-  await expect(page.getByTestId("shop-filter-chip").first()).toBeVisible();
-}
-
-async function ensureInStockSku(page: Page) {
-  await page.goto(`/admin/${TENANT}/preloved/stock`);
-  await expect(page.getByTestId("preloved-stock-page")).toBeVisible();
-  const row = pooledRow(page);
-  if ((await row.count()) > 0) {
-    const text = (await row.getByTestId("stock-qty").innerText()).trim();
-    const qty = Number(text);
-    if (Number.isInteger(qty) && qty >= 1) return;
-  }
-  await acceptSize10PoloGood(page);
-  await page.goto(`/admin/${TENANT}/preloved/stock`);
-  await expect(pooledRow(page)).toBeVisible();
-  await expect(pooledRow(page).getByTestId("stock-qty")).not.toHaveText("0");
-}
 
 async function clearCart(page: Page) {
   await page.evaluate(() => localStorage.removeItem("uo:cart:v1"));
@@ -135,18 +75,6 @@ async function capPrelovedQty(page: Page) {
     await expect(qty).toHaveText(String(n - 1));
   }
   await expect(qty).toHaveText("1");
-}
-
-async function addNewPolo(page: Page) {
-  await page.goto(`/${TENANT}/item/${ITEM_ID}`);
-  const add = page.getByRole("button", { name: /Add to cart/i });
-  await expect(add).toBeVisible();
-  const sizeBtn = page.getByRole("button", { name: SIZE, exact: true });
-  if ((await sizeBtn.count()) > 0) await sizeBtn.click();
-  const price = parseMoney(await add.innerText());
-  await add.click();
-  await expect(page).toHaveURL(new RegExp(`/${TENANT}/cart`));
-  return price;
 }
 
 async function expectCheckoutPickupTotals(

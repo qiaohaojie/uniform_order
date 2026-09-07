@@ -148,6 +148,13 @@
       "when": 1788800000000,
       "tag": "0020_preloved_donation_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0021_preloved_paid_decrements",
+      "breakpoints": true
     }
   ]
 }

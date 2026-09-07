@@ -64,6 +64,7 @@ export default async function OrderDetailPage({
     variantLabel: line.variantLabel,
     qty: line.qty,
     lineTotal: line.lineTotal,
+    prelovedSkuId: line.prelovedSkuId,
   }));
 
   const refundsBlock = refunds.length > 0 ? (

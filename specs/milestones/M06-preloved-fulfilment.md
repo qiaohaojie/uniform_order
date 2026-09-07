@@ -5,7 +5,7 @@
      Plan must not silently redesign WHAT/WHY from the approved source spec. -->
 
 ## Status
-pending            <!-- pending | in-progress | complete -->
+complete            <!-- pending | in-progress | complete -->
 
 ## Wave
 4
@@ -48,13 +48,13 @@ Close the shop loop: when a preloved line is paid, qty on hand drops. Volunteers
 - Preloved SKU `qtyOnHand` from M01
 
 ## Acceptance criteria
-- [ ] Paying for qty 1 of a SKU with 2 on hand leaves qty 1
-- [ ] Two concurrent checkouts for the last unit: only one paid order; the other fails PI or order create
-- [ ] New catalogue variants still have no qty column and are not decremented
-- [ ] Pick slip prints PRELOVED on preloved lines; new lines unmarked
-- [ ] Kanban flow for mixed orders is unchanged
-- [ ] `pnpm check-types:web` passes
-- [ ] Playwright (or webhook + admin): pay test order → stock list qty down → pick slip shows PRELOVED
+- [x] Paying for qty 1 of a SKU with 2 on hand leaves qty 1
+- [x] Two concurrent checkouts for the last unit: only one paid order; the other fails PI or order create
+- [x] New catalogue variants still have no qty column and are not decremented
+- [x] Pick slip prints PRELOVED on preloved lines; new lines unmarked
+- [x] Kanban flow for mixed orders is unchanged
+- [x] `pnpm check-types:web` passes
+- [x] Playwright (or webhook + admin): pay test order → stock list qty down → pick slip shows PRELOVED
 
 ## Verification
 - **Commands:** not configured · `pnpm check-types:web` · no test suite
@@ -67,7 +67,20 @@ Close the shop loop: when a preloved line is paid, qty on hand drops. Volunteers
 - Do not invent a second fulfilment pipeline
 
 ## Manual prerequisites
-- [ ] M05 parent checkout works with Stripe test keys and webhook forwarding to local `/api/stripe/webhook`
+- [x] M05 parent checkout works with Stripe test keys and webhook forwarding to local `/api/stripe/webhook` (M05 committed at `d452b0c`; parent shop + PI qty check shipped)
+
+## Build standing (launch constraints — not product redesign)
+- HeroUI OSS only (`@heroui/react`); never install or import `@heroui-pro/*`
+- neon-http: `db.batch`, never `db.transaction`
+- Do not add qty to `catalog_variants`. New catalogue stays untracked
+- Do not invent a second Kanban or preloved shipping path. Statuses stay `to_prepare` → `ready` → `collected`
+- Preloved reads/writes stay in `apps/web/src/db/preloved-queries.ts` (keep GST/reports in `queries.ts`)
+- Demo tenants are synthetic only. Listed shops: `demo-blank` (Hawthorn Grammar / HWGM), `demo-academy` (Riverside Academy / RVRA, preloved on, polo SKU in stock), `rgsh` (Ridgehaven School / RGSH). Hidden leftover id `nsbh` is unlisted — do not put it on the picker or in docs. Static fallback in `lib/data.ts` is still `imhs` / `rgsh`. Never use real school slugs, names, or `.nsw.edu.au` shop emails
+- Specs: `workers: 1`, do not boot Next, `GET /api/dev/login`, `PLAYWRIGHT_BASE_URL`. Operator email must match `tenant.shopEmail`
+- Self-ver: `bash .gq-spec/check-playwright-cli.sh` then `playwright-cli` against this worktree’s `pnpm dev:web`. Prefer `http://127.0.0.1:3000` or `http://localhost:3000` (`allowedDevOrigins` already includes 127.0.0.1). Process 0700/0800: playwright-cli, not a browser MCP
+- Optional spec pattern: `apps/web/tests/preloved/m06-*.spec.ts` + `pnpm test:m06-…` (see M03/M05). Specs do not boot Next
+- M05 already validates qty at PaymentIntent (`409 insufficient_qty`); this milestone finishes decrement on paid webhook / order finalise
+- Do not commit unless the user asks
 
 ## Autonomy contract
 Follow the `autonomy-contract.md` reference shipped with the `gq-spec-build-grok` skill

@@ -21,9 +21,10 @@ pnpm check-types      # TypeScript check (all packages)
 pnpm test:m03-intake-stock  # operator accept → stock qty (needs pnpm dev:web)
 pnpm test:m04-donate-refund  # donate note + refund policy (needs pnpm dev:web)
 pnpm test:m05-parent-preloved-shop  # parent preloved shop (needs pnpm dev:web)
+pnpm test:m06-preloved-fulfilment  # pay → stock qty down → pick slip PRELOVED (needs pnpm dev:web)
 ```
 
-Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`, `pnpm test:m05-parent-preloved-shop`; `apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`) need `pnpm dev:web` first. They do not boot Next. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
+Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`, `pnpm test:m05-parent-preloved-shop`, `pnpm test:m06-preloved-fulfilment`; `apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`, `m06-preloved-fulfilment.spec.ts`) need `pnpm dev:web` first. They do not boot Next. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
 
 ## Deployment
 

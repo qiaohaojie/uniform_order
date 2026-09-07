@@ -325,6 +325,18 @@ export const prelovedDonationNotes = pgTable(
   }),
 );
 
+// Idempotency key for paid preloved CAS decrements. One row per PaymentIntent;
+// qty lives only on preloved_skus — catalog_variants still has no qty column.
+export const prelovedPaidDecrements = pgTable("preloved_paid_decrements", {
+  paymentIntentId: text("payment_intent_id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // ─── Pending order snapshots ─────────────────────────────────────────────────
 /**
  * Server-authoritative per-line price snapshot, written at PaymentIntent

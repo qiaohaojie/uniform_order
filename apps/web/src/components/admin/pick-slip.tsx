@@ -26,6 +26,8 @@ export interface PickSlipLine {
   variantLabel: string | null;
   qty: number;
   lineTotal: string;
+  /** Present on preloved order lines. New catalogue lines omit this. */
+  prelovedSkuId?: string | null;
 }
 
 const STATUS_MAP: Record<string, { tone: "info" | "warn" | "success" | "neutral" | "danger"; label: string }> = {
@@ -200,7 +202,16 @@ export function PickSlip({ order, tenant, lines, refundsSlot }: PickSlipProps) {
                   style={{ borderColor: "var(--color-ink)", borderWidth: 1.5 }}
                 />
               </td>
-              <td className="py-3 font-medium" style={{ color: "var(--color-ink)" }}>{line.itemName}</td>
+              <td className="py-3 font-medium" style={{ color: "var(--color-ink)" }}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="min-w-0 truncate">{line.itemName}</span>
+                  {typeof line.prelovedSkuId === "string" && line.prelovedSkuId.length > 0 ? (
+                    <span data-testid="pick-slip-preloved" className="flex-shrink-0">
+                      <Chip tone="gold" size="sm">PRELOVED</Chip>
+                    </span>
+                  ) : null}
+                </div>
+              </td>
               <td className="py-3 text-[12px]" style={{ color: "var(--color-ink-dim)" }}>{line.variantLabel}</td>
               <td className="py-3 text-center font-bold font-mono" style={{ color: "var(--color-ink)" }}>{line.qty}</td>
               <td className="py-3 text-right font-semibold tnum" style={{ color: "var(--color-ink)" }}>
