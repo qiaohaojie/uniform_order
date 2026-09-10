@@ -25,6 +25,8 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "UniformOrder",
   description: "Order your school uniform online",

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Card, Chip } from "@heroui/react";
 import { getTenant } from "@/db/queries";
 import { getPrelovedSettings } from "@/db/preloved-queries";
 import { getSessionUser, isPlatformAdminEmail } from "@/lib/auth/authorization";
@@ -85,114 +84,81 @@ export default async function DonatePage({
         </p>
 
         <div className="space-y-4">
-          <Card className="bg-paper border border-rule shadow-none">
-            <Card.Header>
-              <Card.Title className="font-serif text-base text-navy-deep">
-                What to bring
-              </Card.Title>
-              <Card.Description className="text-ink-dim">
-                Only washed current-uniform pieces that the shop can sell.
-              </Card.Description>
-            </Card.Header>
-            <Card.Content>
-              <ul className="list-disc pl-5 space-y-1.5 text-sm leading-6 text-ink">
-                {WASH_RULES.map((rule) => (
-                  <li key={rule}>{rule}</li>
+          <section className="rounded-lg border border-rule bg-paper p-4">
+            <h2 className="font-serif text-base text-navy-deep">What to bring</h2>
+            <p className="mt-1 text-sm text-ink-dim">
+              Only washed current-uniform pieces that the shop can sell.
+            </p>
+            <ul className="mt-3 list-disc pl-5 space-y-1.5 text-sm leading-6 text-ink">
+              {WASH_RULES.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="rounded-lg border border-rule bg-paper p-4">
+            <h2 className="font-serif text-base text-navy-deep">What not to bring</h2>
+            <p className="mt-1 text-sm text-ink-dim">The shop will refuse these items.</p>
+            {settings.refuseList.length > 0 ? (
+              <ul className="mt-3 flex flex-wrap gap-2" aria-label="Refuse list">
+                {settings.refuseList.map((item) => (
+                  <li
+                    key={item}
+                    className="rounded-full border border-rule px-2.5 py-0.5 text-xs uppercase tracking-wide text-ink"
+                  >
+                    {formatRefuseItem(item)}
+                  </li>
                 ))}
               </ul>
-            </Card.Content>
-          </Card>
-
-          <Card className="bg-paper border border-rule shadow-none">
-            <Card.Header>
-              <Card.Title className="font-serif text-base text-navy-deep">
-                What not to bring
-              </Card.Title>
-              <Card.Description className="text-ink-dim">
-                The shop will refuse these items.
-              </Card.Description>
-            </Card.Header>
-            <Card.Content>
-              {settings.refuseList.length > 0 ? (
-                <ul className="flex flex-wrap gap-2" aria-label="Refuse list">
-                  {settings.refuseList.map((item) => (
-                    <li key={item}>
-                      <Chip size="sm" variant="secondary" color="warning">
-                        {formatRefuseItem(item)}
-                      </Chip>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm leading-6 text-ink">
-                  No extra refuse items are listed. Current uniform only, washed, no
-                  stains or holes.
-                </p>
-              )}
-            </Card.Content>
-          </Card>
-
-          <Card className="bg-paper border border-rule shadow-none">
-            <Card.Header>
-              <Card.Title className="font-serif text-base text-navy-deep">
-                Where and when
-              </Card.Title>
-              <Card.Description className="text-ink-dim">
-                Leave the bag at the shop — there is no parent listing or payment.
-              </Card.Description>
-            </Card.Header>
-            <Card.Content>
-              <div className="space-y-3 text-sm leading-6 text-ink">
-                <section>
-                  <div className="text-ink-dim text-xs uppercase tracking-wide">
-                    Shop hours
-                  </div>
-                  <p className="whitespace-pre-wrap">{shopHours}</p>
-                </section>
-                <section>
-                  <div className="text-ink-dim text-xs uppercase tracking-wide">
-                    Address
-                  </div>
-                  <p className="whitespace-pre-wrap">{address}</p>
-                </section>
-                <section>
-                  <div className="text-ink-dim text-xs uppercase tracking-wide">
-                    Collection instructions
-                  </div>
-                  <p className="whitespace-pre-wrap">{collectionInstructions}</p>
-                </section>
-              </div>
-            </Card.Content>
-          </Card>
-
-          <Card className="bg-paper border border-rule shadow-none">
-            <Card.Header>
-              <Card.Title className="font-serif text-base text-navy-deep">
-                If we cannot accept it
-              </Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <p className="text-sm leading-6 text-ink">
-                Rejected items go to charity or textile recycling. They are not
-                returned by default.
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-ink">
+                No extra refuse items are listed. Current uniform only, washed, no
+                stains or holes.
               </p>
-            </Card.Content>
-          </Card>
+            )}
+          </section>
 
-          <Card className="bg-paper border border-rule shadow-none">
-            <Card.Header>
-              <Card.Title className="font-serif text-base text-navy-deep">
-                I am dropping off a donation
-              </Card.Title>
-              <Card.Description className="text-ink-dim">
-                Optional note so the shop expects a bag. This is a message, not
-                a listing or payment.
-              </Card.Description>
-            </Card.Header>
-            <Card.Content>
+          <section className="rounded-lg border border-rule bg-paper p-4">
+            <h2 className="font-serif text-base text-navy-deep">Where and when</h2>
+            <p className="mt-1 text-sm text-ink-dim">
+              Leave the bag at the shop — there is no parent listing or payment.
+            </p>
+            <div className="mt-3 space-y-3 text-sm leading-6 text-ink">
+              <section>
+                <div className="text-ink-dim text-xs uppercase tracking-wide">Shop hours</div>
+                <p className="whitespace-pre-wrap">{shopHours}</p>
+              </section>
+              <section>
+                <div className="text-ink-dim text-xs uppercase tracking-wide">Address</div>
+                <p className="whitespace-pre-wrap">{address}</p>
+              </section>
+              <section>
+                <div className="text-ink-dim text-xs uppercase tracking-wide">
+                  Collection instructions
+                </div>
+                <p className="whitespace-pre-wrap">{collectionInstructions}</p>
+              </section>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-rule bg-paper p-4">
+            <h2 className="font-serif text-base text-navy-deep">If we cannot accept it</h2>
+            <p className="mt-3 text-sm leading-6 text-ink">
+              Rejected items go to charity or textile recycling. They are not
+              returned by default.
+            </p>
+          </section>
+
+          <section className="rounded-lg border border-rule bg-paper p-4">
+            <h2 className="font-serif text-base text-navy-deep">I am dropping off a donation</h2>
+            <p className="mt-1 text-sm text-ink-dim">
+              Optional note so the shop expects a bag. This is a message, not a
+              listing or payment.
+            </p>
+            <div className="mt-3">
               <DonateScreen tenantId={tenant.id} accent={tenant.accent} />
-            </Card.Content>
-          </Card>
+            </div>
+          </section>
         </div>
       </div>
       <TenantFooter tenant={tenant} />
