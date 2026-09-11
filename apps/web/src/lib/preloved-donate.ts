@@ -13,3 +13,11 @@ export type InsertDonationNoteInput = {
   studentName: string;
   bagCount: number;
 };
+
+export type DonationNoteListItem = {
+  id: string;
+  parentName: string;
+  studentName: string;
+  bagCount: number;
+  createdAt: Date;
+};

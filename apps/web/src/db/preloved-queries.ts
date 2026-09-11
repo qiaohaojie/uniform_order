@@ -1,9 +1,9 @@
 /**
- * Preloved settings / SKU / intake / parent-shop / paid-decrement helpers.
+ * Preloved settings / SKU / intake / donation-note / parent-shop / paid-decrement helpers.
  * Kept out of queries.ts so GST/report work in queries.ts does not clash.
  */
 import { cache } from "react";
-import { and, asc, desc, eq, gt, gte, isNotNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, lt, sql } from "drizzle-orm";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
   PRELOVED_INTAKE_MODE,
@@ -32,7 +32,10 @@ import {
   type ShopPrelovedSku,
   type WriteOffPrelovedSkuInput,
 } from "@/lib/preloved";
-import { type InsertDonationNoteInput } from "@/lib/preloved-donate";
+import {
+  type DonationNoteListItem,
+  type InsertDonationNoteInput,
+} from "@/lib/preloved-donate";
 import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { AuditActorRole } from "@/lib/audit/types";
@@ -222,6 +225,27 @@ export async function insertDonationNote(
     })
     .returning();
   return row;
+}
+
+const DONATION_NOTE_INBOX_LIMIT = 200;
+
+/** Newest parent drop-off notes for the operator inbox. */
+export async function listDonationNotes(
+  tenantId: string,
+): Promise<DonationNoteListItem[]> {
+  const rows = await db
+    .select({
+      id: prelovedDonationNotes.id,
+      parentName: prelovedDonationNotes.parentName,
+      studentName: prelovedDonationNotes.studentName,
+      bagCount: prelovedDonationNotes.bagCount,
+      createdAt: prelovedDonationNotes.createdAt,
+    })
+    .from(prelovedDonationNotes)
+    .where(eq(prelovedDonationNotes.tenantId, tenantId))
+    .orderBy(desc(prelovedDonationNotes.createdAt))
+    .limit(DONATION_NOTE_INBOX_LIMIT);
+  return rows;
 }
 
 function variantHasSize(sizes: unknown, size: string): boolean {
@@ -465,50 +489,6 @@ function isExpiredForWriteOff(sku: PrelovedSkuRow, now: Date): boolean {
   return sku.expiresAt != null && sku.expiresAt < now;
 }
 
-async function findWrittenOffEventForListing(
-  tenantId: string,
-  skuId: string,
-  listedAt: Date,
-): Promise<PrelovedIntakeEventRow | undefined> {
-  const [row] = await db
-    .select()
-    .from(prelovedIntakeEvents)
-    .where(
-      and(
-        eq(prelovedIntakeEvents.tenantId, tenantId),
-        eq(prelovedIntakeEvents.prelovedSkuId, skuId),
-        eq(prelovedIntakeEvents.action, "written_off"),
-        gte(prelovedIntakeEvents.createdAt, listedAt),
-      ),
-    )
-    .orderBy(desc(prelovedIntakeEvents.createdAt))
-    .limit(1);
-  return row;
-}
-
-/** Accepted qty this listing. M03 has no sale decrements, so this is the write-off qty on retry. */
-async function acceptedQtyForListing(
-  tenantId: string,
-  skuId: string,
-  listedAt: Date,
-): Promise<number> {
-  const [row] = await db
-    .select({
-      total: sql<number>`coalesce(sum(${prelovedIntakeEvents.qty}), 0)`,
-    })
-    .from(prelovedIntakeEvents)
-    .where(
-      and(
-        eq(prelovedIntakeEvents.tenantId, tenantId),
-        eq(prelovedIntakeEvents.prelovedSkuId, skuId),
-        eq(prelovedIntakeEvents.action, "accepted"),
-        gte(prelovedIntakeEvents.createdAt, listedAt),
-      ),
-    );
-  const total = Number(row?.total ?? 0);
-  return Number.isFinite(total) ? total : 0;
-}
-
 function writtenOffEventInput(
   input: WriteOffPrelovedSkuInput,
   sku: PrelovedSkuRow,
@@ -527,10 +507,12 @@ function writtenOffEventInput(
 }
 
 /**
- * Zero expired stock and record written_off.
+ * Zero leftover expired stock and record that leftover as written_off.
  * neon-http cannot wrap the qty update + event insert in an interactive
- * transaction. If qty is already 0 and this listing has no written_off
- * event, retry inserts the missing event instead of 409.
+ * transaction. Qty already 0 is treated as cleared (sold or previously
+ * written off). Do not reconstruct written_off from accepted-this-listing —
+ * paid CAS zeros qty without an intake sold event, so that sum would count
+ * sold units as written off.
  */
 export async function writeOffPrelovedSku(
   input: WriteOffPrelovedSkuInput,
@@ -547,54 +529,37 @@ export async function writeOffPrelovedSku(
     )
     .limit(1);
 
-  if (!existing || !isExpiredForWriteOff(existing, now)) {
+  if (
+    !existing ||
+    existing.qtyOnHand <= 0 ||
+    !isExpiredForWriteOff(existing, now)
+  ) {
     throw new PrelovedWriteOffNotEligibleError();
   }
 
-  if (existing.qtyOnHand > 0) {
-    const qtyWrittenOff = existing.qtyOnHand;
-    const [sku] = await db
-      .update(prelovedSkus)
-      .set({ qtyOnHand: 0 })
-      .where(
-        and(
-          eq(prelovedSkus.id, existing.id),
-          eq(prelovedSkus.tenantId, input.tenantId),
-          eq(prelovedSkus.qtyOnHand, qtyWrittenOff),
-          isNotNull(prelovedSkus.expiresAt),
-          lt(prelovedSkus.expiresAt, now),
-        ),
-      )
-      .returning();
+  const qtyWrittenOff = existing.qtyOnHand;
+  const [sku] = await db
+    .update(prelovedSkus)
+    .set({ qtyOnHand: 0 })
+    .where(
+      and(
+        eq(prelovedSkus.id, existing.id),
+        eq(prelovedSkus.tenantId, input.tenantId),
+        eq(prelovedSkus.qtyOnHand, qtyWrittenOff),
+        isNotNull(prelovedSkus.expiresAt),
+        lt(prelovedSkus.expiresAt, now),
+      ),
+    )
+    .returning();
 
-    if (!sku) {
-      throw new PrelovedWriteOffNotEligibleError();
-    }
-
-    const event = await insertPrelovedIntakeEvent(
-      writtenOffEventInput(input, sku, qtyWrittenOff),
-    );
-    return { sku, event, qtyWrittenOff };
-  }
-
-  const existingEvent = await findWrittenOffEventForListing(
-    input.tenantId,
-    existing.id,
-    existing.listedAt,
-  );
-  if (existingEvent) {
+  if (!sku) {
     throw new PrelovedWriteOffNotEligibleError();
   }
 
-  const qtyWrittenOff = await acceptedQtyForListing(
-    input.tenantId,
-    existing.id,
-    existing.listedAt,
-  );
   const event = await insertPrelovedIntakeEvent(
-    writtenOffEventInput(input, existing, qtyWrittenOff),
+    writtenOffEventInput(input, sku, qtyWrittenOff),
   );
-  return { sku: existing, event, qtyWrittenOff };
+  return { sku, event, qtyWrittenOff };
 }
 
 export async function listInStockPrelovedSkus(

@@ -23,8 +23,8 @@
 - [ ] **(plan)** School-fee credit as a payout option — raised: 2026-09-06, by: plan
       context: Phase 2 only. Not in M01–M06.
 
-- [ ] **(M04)** Operators have no inbox to read `preloved_donation_notes` — raised: 2026-09-07, by: build:M04
-      context: Bag notes persist without creating a SKU (AC met). Spec calls them a message to operators; M04 did not add a SELECT/admin list. Non-blocking for donate/refund copy. Resolve in a later admin slice if P&Cs need to see drop-off notes.
+- [x] **(M04)** Operators have no inbox to read `preloved_donation_notes` — raised: 2026-09-07, by: build:M04
+      context: Resolved 2026-09-12. Operator inbox at `/admin/[tenant]/preloved/inbox` lists `preloved_donation_notes` (empty / loading / error). Notes still do not create a SKU.
 
 - [ ] **(M05)** Parent-shop client islands do not hydrate in Playwright — raised: 2026-09-07, by: build:M05
       context: Qty stepper and Add to cart stay dead SSR (`data-hydrated=false`) on Chromium and Chrome channel. Same on existing `/item/polo`. Mixed-cart + qty-cap ACs are code-complete but not runtime-proven. RSC filter/badge/PDP copy/disabled pass. Needs a hydration/HMR/CSP investigation before marking M05 complete.
@@ -41,8 +41,8 @@
 - [x] **(M06)** Webhook snapshot decrement can drop qty with no order row — raised: 2026-09-07, by: review:M06
       context: Kept snapshot-first (decision `580c7676`). 3DS paid-without-order is ops refund, not auto-refund.
 
-- [ ] **(M06)** Write-off retry can count sold units as written_off — raised: 2026-09-07, by: review:M06
-      context: `writeOffPrelovedSku` qty=0 path still sums accepted-this-listing (M03 “no sale decrements”). Paid CAS zeros `qty_on_hand` without an intake `sold` event. Happy path with leftover qty is fine.
+- [x] **(M06)** Write-off retry can count sold units as written_off — raised: 2026-09-07, by: review:M06
+      context: Resolved 2026-09-12. Qty already 0 is treated as cleared (409). Write-off records leftover `qty_on_hand` only; it no longer reconstructs from accepted-this-listing.
 
 - [x] **(M06)** Apply drizzle 0021 on Neon — raised: 2026-09-07, by: build:M06
       context: Applied `CREATE TABLE IF NOT EXISTS preloved_paid_decrements` via neon-http (full `drizzle-orm` migrator blocked on already-applied 0019). Journaled as `manual_0021_preloved_paid_decrements`.

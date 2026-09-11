@@ -33,9 +33,10 @@ pnpm test:m03-intake-stock  # operator accept → stock qty (needs pnpm dev:web)
 pnpm test:m04-donate-refund  # donate note + refund policy (needs pnpm dev:web)
 pnpm test:m05-parent-preloved-shop  # parent preloved shop (needs pnpm dev:web)
 pnpm test:m06-preloved-fulfilment  # pay → stock qty down → pick slip PRELOVED (needs pnpm dev:web)
+pnpm test:preloved-followups      # write-off leftover-only + donation inbox (needs pnpm dev:web)
 ```
 
-Type-checking is the main correctness gate. M03, M04, M05, and M06 add Playwright specs (`apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`, `m06-preloved-fulfilment.spec.ts`); they do not boot Next — run `pnpm dev:web` first. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
+Type-checking is the main correctness gate. Preloved Playwright specs (`apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`, `m06-preloved-fulfilment.spec.ts`, `preloved-followups.spec.ts`) do not boot Next — run `pnpm dev:web` first. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
 
 If `.next` was deleted and generated route types such as `PageProps` / `LayoutProps` are missing, run:
 
@@ -58,7 +59,7 @@ Security headers live in `apps/web/next.config.ts` via `async headers()`. The ap
 - Monorepo: pnpm workspace with one app, `apps/web`.
 - Parent portal: `apps/web/src/app/[tenant]/`, mobile shopping flow in `MobileShell`.
 - Admin portal: `apps/web/src/app/admin/[tenant]/`, desktop operations UI in `AdminShell`.
-- Admin preloved: `apps/web/src/app/admin/[tenant]/preloved/` — Intake, stock, write-offs.
+- Admin preloved: `apps/web/src/app/admin/[tenant]/preloved/` — Intake, stock, inbox, write-offs.
 - Home: `apps/web/src/app/page.tsx`, school picker and one-child auto-redirect.
 - Tenants: `[tenant]` must be `imhs` or `rgsh`; layouts validate via `TENANTS` in `lib/data.ts`. Demo names are synthetic (Illawarra Modern High School, Riverside Academy). Do not use real school slugs, names, or `.nsw.edu.au` shop emails in tests, docs, or examples.
 - Tenant accent color is passed through props and applied inline where needed.
