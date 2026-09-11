@@ -13,6 +13,7 @@
     "test:m05-parent-preloved-shop": "playwright test -c playwright.config.ts tests/preloved/m05-parent-preloved-shop.spec.ts",
     "test:m06-preloved-fulfilment": "playwright test -c playwright.config.ts tests/preloved/m06-preloved-fulfilment.spec.ts",
     "test:admin-dashboard": "playwright test -c playwright.admin.config.ts",
+    "test:preloved-followups": "PRELOVED_TENANT=demo-academy OPERATOR_EMAIL=operator@demo.uniformorder.online playwright test -c playwright.config.ts tests/preloved/preloved-followups.spec.ts",
     "demo:seed:dry": "node ../../demo/demo_data/run.mjs seed --dry-run",
     "demo:seed": "node ../../demo/demo_data/run.mjs seed",
     "demo:cleanup": "node ../../demo/demo_data/run.mjs cleanup",

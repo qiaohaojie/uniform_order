@@ -22,9 +22,10 @@ pnpm test:m03-intake-stock  # operator accept → stock qty (needs pnpm dev:web)
 pnpm test:m04-donate-refund  # donate note + refund policy (needs pnpm dev:web)
 pnpm test:m05-parent-preloved-shop  # parent preloved shop (needs pnpm dev:web)
 pnpm test:m06-preloved-fulfilment  # pay → stock qty down → pick slip PRELOVED (needs pnpm dev:web)
+pnpm test:preloved-followups      # write-off leftover-only + donation inbox (needs pnpm dev:web)
 ```
 
-Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`, `pnpm test:m05-parent-preloved-shop`, `pnpm test:m06-preloved-fulfilment`; `apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`, `m06-preloved-fulfilment.spec.ts`) need `pnpm dev:web` first. They do not boot Next. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
+Type-checking is the main correctness gate. Preloved Playwright specs (`pnpm test:m03-intake-stock`, `pnpm test:m04-donate-refund`, `pnpm test:m05-parent-preloved-shop`, `pnpm test:m06-preloved-fulfilment`, `pnpm test:preloved-followups`; `apps/web/tests/preloved/m03-intake-stock.spec.ts`, `m04-donate-refund.spec.ts`, `m05-parent-preloved-shop.spec.ts`, `m06-preloved-fulfilment.spec.ts`, `preloved-followups.spec.ts`) need `pnpm dev:web` first. They do not boot Next. Bind with `PLAYWRIGHT_BASE_URL` (then `.dev-local/web.url`, then `PORT`).
 
 ## Deployment
 
@@ -43,7 +44,7 @@ pnpm monorepo with one app: `apps/web` (Next.js 16, App Router, RSC + server act
 ### Portals
 
 - **Parent shop** — `app/[tenant]/` — mobile-first via `MobileShell` (max 430px): catalog → item → cart → checkout → confirmation.
-- **School admin** — `app/admin/[tenant]/` — desktop sidebar via `AdminShell`. Dashboard, Orders (Kanban), Catalog, Preloved (Intake, stock, write-offs), Bulk Upload, Reports, Settings.
+- **School admin** — `app/admin/[tenant]/` — desktop sidebar via `AdminShell`. Dashboard, Orders (Kanban), Catalog, Preloved (Intake, stock, inbox, write-offs), Bulk Upload, Reports, Settings.
 - **Platform console** *(in design — `docs/superpowers/specs/2026-05-09-platform-portal-design.md`)* — `/platform`, gated to platform-admin emails.
 
 `app/page.tsx` is the parent home / school picker.

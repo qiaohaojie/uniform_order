@@ -8,6 +8,7 @@ import { Tabs } from "@heroui/react";
 const PRELOVED_SECTION_TABS = [
   { id: "intake", label: "Intake" },
   { id: "stock", label: "Stock" },
+  { id: "inbox", label: "Inbox" },
   { id: "write-offs", label: "Write-offs" },
 ] as const;
 

@@ -73,5 +73,7 @@
 - 2026-09-07 · 65ef5136 · build:M06 · orders.userId is null for non-uuid dev-login ids
 - 2026-09-07 · c0f472c8 · build:M06 · Tick last-unit AC from sequential oversell plus CAS; no concurrent e2e
 
-## Misc  ([decisions/misc.md](misc.md)) — 1
+## Misc  ([decisions/misc.md](misc.md)) — 3
 - 2026-09-06 · 2f31cd1c · onboard · HeroUI OSS only — this repo is open source
+- 2026-09-11 · 47952782 · build:followup · Write-off records leftover qty only; qty 0 is already cleared
+- 2026-09-11 · 34541772 · build:followup · Operator inbox lists preloved_donation_notes under Preloved

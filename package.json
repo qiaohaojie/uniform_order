@@ -15,7 +15,8 @@
     "test:m04-donate-refund": "pnpm --filter web test:m04-donate-refund",
     "test:m05-parent-preloved-shop": "pnpm --filter web test:m05-parent-preloved-shop",
     "test:m06-preloved-fulfilment": "pnpm --filter web test:m06-preloved-fulfilment",
-    "test:admin-dashboard": "pnpm --filter web test:admin-dashboard"
+    "test:admin-dashboard": "pnpm --filter web test:admin-dashboard",
+    "test:preloved-followups": "pnpm --filter web test:preloved-followups"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
