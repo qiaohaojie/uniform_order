@@ -68,7 +68,15 @@ test.describe("Admin dashboard and reports use live Neon data", () => {
     await expect(page.getByTestId("admin-dashboard")).toBeVisible();
     await expect(page.getByTestId("dashboard-empty-sales")).toContainText("No paid orders in the last 30 days.");
     await expect(page.getByTestId("dashboard-top-items-empty")).toContainText("No live order lines yet.");
-    await expect(page.getByTestId("dashboard-recent-empty")).toContainText("No live orders yet.");
+    await expect(page.getByTestId("dashboard-recent-empty")).toContainText("No paid orders yet.");
+    await expect(page.getByText(MOCK_SALES_REVENUE)).toHaveCount(0);
+  });
+
+  test("empty tenant reports show empty sales and category copy", async ({ page }) => {
+    await devLogin(page, `/admin/${EMPTY_TENANT}/reports`);
+    await expect(page.getByTestId("admin-reports")).toBeVisible();
+    await expect(page.getByTestId("reports-empty-sales")).toContainText("No paid orders in the last 6 months.");
+    await expect(page.getByTestId("reports-category-empty")).toContainText("No live category sales yet.");
     await expect(page.getByText(MOCK_SALES_REVENUE)).toHaveCount(0);
   });
 });

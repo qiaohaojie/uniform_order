@@ -77,7 +77,7 @@ Neon PostgreSQL plus Drizzle backs live catalog, tenant settings, orders, and St
 - `lib/cart-store.ts`: cart localStorage store, key `uo:cart:v1`.
 - `lib/order-store.ts`: leftover localStorage orders plus `uo:student:v1`; checkout now writes orders to Neon.
 
-Admin dashboard (`/admin/[tenant]/dashboard`) and reports (`/admin/[tenant]/reports`) read paid Neon orders via `getLiveDashboardData` / `getLiveReportsData`. Sales KPIs exclude pending and fully refunded orders.
+Admin dashboard (`/admin/[tenant]/dashboard`) and reports (`/admin/[tenant]/reports`) read paid Neon orders via `getLiveDashboardData` / `getLiveReportsData`. Sales KPIs and recent orders exclude pending and fully refunded rows; revenue/GST net out `refundedAmountCents` on partially refunded sales.
 
 ## Server/Client Pattern
 

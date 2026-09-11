@@ -353,7 +353,7 @@ export function AdminDashboardClient({
                   className="py-4 text-[12px] text-center"
                   style={{ color: "var(--color-ink-dim)" }}
                 >
-                  No live orders yet.
+                  No paid orders yet.
                 </div>
               )}
             </div>

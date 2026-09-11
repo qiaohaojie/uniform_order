@@ -113,6 +113,33 @@ export function isRecognisedSale(paymentStatus: PaymentStatus) {
   return paymentStatus === "paid" || paymentStatus === "partially_refunded";
 }
 
+type SaleMoneyOrder = {
+  total: string | number | null | undefined;
+  gst?: string | number | null | undefined;
+  refundedAmountCents?: number | null | undefined;
+};
+
+/** Net recognised-sale dollars after subtracting refundedAmountCents. */
+export function netSaleAmount(order: SaleMoneyOrder) {
+  const gross = money(order.total);
+  const refunded = money((order.refundedAmountCents ?? 0) / 100);
+  return money(Math.max(0, gross - refunded));
+}
+
+/** Remittable GST scaled by the retained (post-refund) share of the order total. */
+export function netGstAmount(order: SaleMoneyOrder) {
+  const gross = money(order.total);
+  if (gross <= 0) return 0;
+  return money(money(order.gst) * (netSaleAmount(order) / gross));
+}
+
+/** Multiply line/category dollars by this to allocate partial refunds across lines. */
+export function saleRetainRatio(order: SaleMoneyOrder) {
+  const gross = money(order.total);
+  if (gross <= 0) return 0;
+  return netSaleAmount(order) / gross;
+}
+
 const REPORTING_TIME_ZONE = "Australia/Sydney";
 const sydneyDatePartsFormatter = new Intl.DateTimeFormat("en-AU", {
   timeZone: REPORTING_TIME_ZONE,
@@ -266,7 +293,7 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
     return order.createdAt !== null && order.createdAt >= last30Start && order.createdAt < tomorrowStart;
   });
 
-  const revenue = money(last30Orders.reduce((sum, order) => sum + money(order.total), 0));
+  const revenue = money(last30Orders.reduce((sum, order) => sum + netSaleAmount(order), 0));
   const orderCount = last30Orders.length;
   const avgOrder = orderCount > 0 ? money(revenue / orderCount) : 0;
   const awaitingPickup = saleRows.filter((order) => {
@@ -293,13 +320,14 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
     if (!order.createdAt || order.createdAt < sparkStart || order.createdAt >= tomorrowStart) continue;
     const key = dayKey(order.createdAt);
     if (!sparkBuckets.has(key)) continue;
-    sparkBuckets.set(key, money((sparkBuckets.get(key) ?? 0) + money(order.total)));
+    sparkBuckets.set(key, money((sparkBuckets.get(key) ?? 0) + netSaleAmount(order)));
   }
 
-  const datedRecentRows = orderRows
+  // Same recognised-sale filter as Paid-order KPIs — pending / fully refunded stay off this list.
+  const datedRecentRows = saleRows
     .filter((order) => order.createdAt !== null)
     .sort((a, b) => b.createdAt!.getTime() - a.createdAt!.getTime());
-  const nullDatedRows = orderRows.filter((order) => order.createdAt === null);
+  const nullDatedRows = saleRows.filter((order) => order.createdAt === null);
   const recentOrders: LiveRecentOrder[] = [...datedRecentRows, ...nullDatedRows].slice(0, 5).map((order) => ({
     id: order.id,
     tenantId: order.tenantId,
@@ -311,11 +339,12 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
     rollClass: order.studentRoll,
     parent: order.parentName,
     email: order.parentEmail,
-    total: money(order.total),
+    total: netSaleAmount(order),
     createdAt: order.createdAt,
   }));
 
   const last30OrderIds = last30Orders.map((order) => order.id);
+  const retainByOrderId = new Map(last30Orders.map((order) => [order.id, saleRetainRatio(order)]));
   const topItemsByName = new Map<string, LiveTopItem>();
   if (last30OrderIds.length > 0) {
     const lineRows = await db
@@ -324,13 +353,14 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
       .where(inArray(orderLines.orderId, last30OrderIds));
 
     for (const line of lineRows) {
+      const retain = retainByOrderId.get(line.orderId) ?? 1;
       const current = topItemsByName.get(line.itemName) ?? {
         name: line.itemName,
         qty: 0,
         revenue: 0,
       };
       current.qty += line.qty;
-      current.revenue = money(current.revenue + money(line.lineTotal));
+      current.revenue = money(current.revenue + money(line.lineTotal) * retain);
       topItemsByName.set(line.itemName, current);
     }
   }
@@ -373,14 +403,14 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
   for (const order of orderRows) {
     if (!order.createdAt) continue;
     const key = monthKey(order.createdAt);
-    monthlyTotals.set(key, money((monthlyTotals.get(key) ?? 0) + money(order.total)));
-    gstTotals.set(key, money((gstTotals.get(key) ?? 0) + money(order.gst)));
+    monthlyTotals.set(key, money((monthlyTotals.get(key) ?? 0) + netSaleAmount(order)));
+    gstTotals.set(key, money((gstTotals.get(key) ?? 0) + netGstAmount(order)));
   }
 
-  const revenue = money(orderRows.reduce((sum, order) => sum + money(order.total), 0));
+  const revenue = money(orderRows.reduce((sum, order) => sum + netSaleAmount(order), 0));
   const orderCount = orderRows.length;
   const avgOrder = orderCount > 0 ? money(revenue / orderCount) : 0;
-  const gst = money(orderRows.reduce((sum, order) => sum + money(order.gst), 0));
+  const gst = money(orderRows.reduce((sum, order) => sum + netGstAmount(order), 0));
   const monthlyRevenue = months.map((month) => ({
     month: monthKey(month),
     label: monthLabel(month),
@@ -389,6 +419,7 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
 
   const orderIds = orderRows.map((order) => order.id);
   const orderMonthById = new Map<string, string>();
+  const retainByOrderId = new Map(orderRows.map((order) => [order.id, saleRetainRatio(order)]));
   for (const order of orderRows) {
     if (!order.createdAt) continue;
     orderMonthById.set(order.id, monthKey(order.createdAt));
@@ -412,12 +443,14 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
       .where(inArray(orderLines.orderId, orderIds));
 
     for (const line of lineRows) {
+      const retain = retainByOrderId.get(line.orderId) ?? 1;
+      const retainedLine = money(money(line.lineTotal) * retain);
       const category = line.category ?? "Uncategorised";
-      categoryTotals.set(category, money((categoryTotals.get(category) ?? 0) + money(line.lineTotal)));
+      categoryTotals.set(category, money((categoryTotals.get(category) ?? 0) + retainedLine));
       if (line.gstFree === true && line.prelovedSkuId != null) {
         const key = orderMonthById.get(line.orderId);
         if (!key) continue;
-        gstFreePrelovedTotals.set(key, money((gstFreePrelovedTotals.get(key) ?? 0) + money(line.lineTotal)));
+        gstFreePrelovedTotals.set(key, money((gstFreePrelovedTotals.get(key) ?? 0) + retainedLine));
       }
     }
   }
