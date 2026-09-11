@@ -25,6 +25,9 @@ const MOBILE_VIEWPORT = { width: 430, height: 800 };
 const HYDRATE_TIMEOUT_MS = 15_000;
 
 async function clearCart(page: Page) {
+  if (page.url() === "about:blank" || !page.url().includes(TENANT)) {
+    await page.goto(`/${TENANT}`);
+  }
   await page.evaluate(() => localStorage.removeItem("uo:cart:v1"));
 }
 

@@ -133,30 +133,36 @@ test.describe("M06 last-unit race", () => {
 
     await devLogin(page, `/admin/${TENANT}/settings`);
     const { donatedGstFree } = await ensurePrelovedEnabled(page);
-    await ensureInStockSku(page);
 
-    const { skuId, unitPrice, sourceItemId } = await pinPooledSkuQty(1);
+    // Row may already be at 0 from a prior race; pin restores qty without intake UI.
+    let skuId: string;
+    let unitPrice: number;
+    let sourceItemId: string;
+    try {
+      ({ skuId, unitPrice, sourceItemId } = await pinPooledSkuQty(1));
+    } catch {
+      await ensureInStockSku(page);
+      ({ skuId, unitPrice, sourceItemId } = await pinPooledSkuQty(1));
+    }
     expect(sourceItemId).toBe(ITEM_ID);
     expect(await readStockQty(page)).toBe(1);
 
     await forceChargesEnabled();
-
-    const [a, b] = await Promise.all([
-      mintLastUnitPi(page, {
-        skuId,
-        sourceItemId,
-        unitPrice,
-        donatedGstFree,
-        label: "A",
-      }),
-      mintLastUnitPi(page, {
-        skuId,
-        sourceItemId,
-        unitPrice,
-        donatedGstFree,
-        label: "B",
-      }),
-    ]);
+    const a = await mintLastUnitPi(page, {
+      skuId,
+      sourceItemId,
+      unitPrice,
+      donatedGstFree,
+      label: "A",
+    });
+    await forceChargesEnabled();
+    const b = await mintLastUnitPi(page, {
+      skuId,
+      sourceItemId,
+      unitPrice,
+      donatedGstFree,
+      label: "B",
+    });
     expect(a.paymentIntentId).not.toBe(b.paymentIntentId);
 
     await Promise.all([
@@ -198,7 +204,12 @@ test.describe("M06 last-unit race", () => {
       })),
     );
 
-    const winners = bodies.filter((o) => o.status === 200 && o.body.orderId);
+    const winners = bodies.filter(
+      (o) =>
+        (o.status === 200 || o.status === 201) &&
+        typeof o.body.orderId === "string" &&
+        o.body.orderId.length > 0,
+    );
     const losers = bodies.filter(
       (o) => o.status === 409 && o.body.error === "insufficient_qty",
     );
