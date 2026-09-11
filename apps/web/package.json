@@ -12,6 +12,7 @@
     "test:m04-donate-refund": "playwright test -c playwright.config.ts tests/preloved/m04-donate-refund.spec.ts",
     "test:m05-parent-preloved-shop": "playwright test -c playwright.config.ts tests/preloved/m05-parent-preloved-shop.spec.ts",
     "test:m06-preloved-fulfilment": "playwright test -c playwright.config.ts tests/preloved/m06-preloved-fulfilment.spec.ts",
+    "test:admin-dashboard": "playwright test -c playwright.admin.config.ts",
     "demo:seed:dry": "node ../../demo/demo_data/run.mjs seed --dry-run",
     "demo:seed": "node ../../demo/demo_data/run.mjs seed",
     "demo:cleanup": "node ../../demo/demo_data/run.mjs cleanup",

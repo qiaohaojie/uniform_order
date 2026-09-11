@@ -73,11 +73,11 @@ Neon PostgreSQL plus Drizzle backs live catalog, tenant settings, orders, and St
 - `src/db/preloved-queries.ts`: preloved settings, SKU, intake, write-off, donation-note, parent-shop, and paid-decrement helpers. Put preloved reads/writes here (keeps GST/report work in `queries.ts` from clashing).
 - `app/api/orders`, `app/api/catalog`, `app/api/tenant`, `app/api/stripe/*`: client-facing live write surfaces. Client code must check `res.ok` and surface errors.
 - `lib/data.ts`: tenant metadata, parent/child demo data, static fallback catalog, helpers.
-- `lib/admin-data.ts`: legacy mock admin orders and sales analytics.
+- `lib/admin-data.ts`: leftover mock orders used only by `order-store` (not dashboard/reports).
 - `lib/cart-store.ts`: cart localStorage store, key `uo:cart:v1`.
-- `lib/order-store.ts`: legacy localStorage orders plus `uo:student:v1`; checkout now writes orders to Neon.
+- `lib/order-store.ts`: leftover localStorage orders plus `uo:student:v1`; checkout now writes orders to Neon.
 
-Known gap: dashboard recent orders, reports, and sales KPIs still use mock data. See `docs/FEATURE_AUDIT.md`.
+Admin dashboard (`/admin/[tenant]/dashboard`) and reports (`/admin/[tenant]/reports`) read paid Neon orders via `getLiveDashboardData` / `getLiveReportsData`. Sales KPIs exclude pending and fully refunded orders.
 
 ## Server/Client Pattern
 

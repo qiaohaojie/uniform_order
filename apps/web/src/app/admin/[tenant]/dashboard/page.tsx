@@ -29,7 +29,15 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </Link>
         }
       />
-      <AdminDashboardClient tenant={tenant} dashboard={dashboard} />
+      <AdminDashboardClient
+        tenant={tenant}
+        dashboard={dashboard}
+        stripe={{
+          linked: Boolean(tenantRecord.stripeAccountId),
+          chargesEnabled: tenantRecord.stripeChargesEnabled === true,
+          payoutsEnabled: tenantRecord.stripePayoutsEnabled === true,
+        }}
+      />
     </>
   );
 }

@@ -88,6 +88,9 @@ HEROUI_PERSONAL_TOKEN.txt
 # Self-ver live captures (host via process 1300, then wipe — not a repo archive)
 .self-ver/
 
+# Per-worktree recorded origin (process 0100). Do not commit the live URL.
+.dev-local/web.url
+
 # Skill junk
 **/__pycache__/
 **/*.pyc

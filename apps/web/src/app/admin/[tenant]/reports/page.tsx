@@ -39,17 +39,18 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
           </div>
         }
       />
-      <div className="flex-1 overflow-y-auto p-7">
+      <div data-testid="admin-reports" className="flex-1 overflow-y-auto p-7">
         {/* Summary cards */}
         <div className="grid grid-cols-4 gap-3.5 mb-6">
           {[
-            { label: "Total revenue", value: `$${reports.revenue.toLocaleString()}`, sub: "6 months" },
-            { label: "Total orders", value: String(reports.orders), sub: "6 months" },
-            { label: "Avg order value", value: `$${reports.avgOrder.toFixed(2)}`, sub: "6 months" },
-            { label: "GST collected", value: `$${reports.gst.toFixed(2)}`, sub: "Remittable" },
+            { id: "revenue", label: "Total revenue", value: `$${reports.revenue.toLocaleString()}`, sub: "6 months" },
+            { id: "orders", label: "Total orders", value: String(reports.orders), sub: "6 months" },
+            { id: "avg", label: "Avg order value", value: `$${reports.avgOrder.toFixed(2)}`, sub: "6 months" },
+            { id: "gst", label: "GST collected", value: `$${reports.gst.toFixed(2)}`, sub: "Remittable" },
           ].map((s) => (
             <div
               key={s.label}
+              data-testid={`reports-kpi-${s.id}`}
               className="bg-white rounded-[10px] border p-4"
               style={{ borderColor: "var(--color-rule)" }}
             >
@@ -63,6 +64,15 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
             </div>
           ))}
         </div>
+        {reports.orders === 0 && (
+          <p
+            data-testid="reports-empty-sales"
+            className="text-[12px] mb-6"
+            style={{ color: "var(--color-ink-dim)" }}
+          >
+            No paid orders in the last 6 months.
+          </p>
+        )}
 
         <div className="grid gap-3.5" style={{ gridTemplateColumns: "2fr 1fr" }}>
           {/* Monthly revenue bar chart */}
@@ -114,7 +124,7 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
               Revenue by category
             </h3>
             {reports.categoryRevenue.length === 0 ? (
-              <p className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
+              <p data-testid="reports-category-empty" className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
                 No live category sales yet.
               </p>
             ) : (
@@ -162,7 +172,7 @@ export default async function AdminReportsPage({ params }: { params: Promise<{ t
                     className="py-4 text-center text-[12px]"
                     style={{ color: "var(--color-ink-dim)" }}
                   >
-                    No live GST rows yet.
+                    <span data-testid="reports-gst-empty">No live GST rows yet.</span>
                   </td>
                 </tr>
               ) : (

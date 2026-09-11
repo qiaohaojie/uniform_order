@@ -55,6 +55,7 @@ export type LiveDashboardData = {
   avgOrder: number;
   awaitingPickup: number;
   readyOverSevenDays: number;
+  needsAttention: number;
   spark: number[];
   topItems: LiveTopItem[];
   recentOrders: LiveRecentOrder[];
@@ -105,6 +106,11 @@ export function money(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
+}
+
+/** Paid shop sales that belong on dashboard KPIs and GST reports. Pending and fully refunded orders are excluded. */
+export function isRecognisedSale(paymentStatus: PaymentStatus) {
+  return paymentStatus === "paid" || paymentStatus === "partially_refunded";
 }
 
 const REPORTING_TIME_ZONE = "Australia/Sydney";
@@ -242,6 +248,7 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
       avgOrder: 0,
       awaitingPickup: 0,
       readyOverSevenDays: 0,
+      needsAttention: 0,
       spark: Array.from({ length: 12 }, () => 0),
       topItems: [],
       recentOrders: [],
@@ -254,34 +261,35 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
   const tomorrowStart = addSydneyDays(today, 1);
   const sevenDaysAgo = addSydneyDays(today, -7);
 
-  const last30Orders = orderRows.filter((order) => {
+  const saleRows = orderRows.filter((order) => isRecognisedSale(order.paymentStatus));
+  const last30Orders = saleRows.filter((order) => {
     return order.createdAt !== null && order.createdAt >= last30Start && order.createdAt < tomorrowStart;
   });
 
   const revenue = money(last30Orders.reduce((sum, order) => sum + money(order.total), 0));
   const orderCount = last30Orders.length;
   const avgOrder = orderCount > 0 ? money(revenue / orderCount) : 0;
-  const awaitingPickup = orderRows.filter((order) => {
+  const awaitingPickup = saleRows.filter((order) => {
     return (
-      order.paymentStatus !== "pending" &&
-      (order.fulfilmentStatus === "to_prepare" ||
-        order.fulfilmentStatus === "needs_attention")
+      order.fulfilmentStatus === "to_prepare" ||
+      order.fulfilmentStatus === "needs_attention"
     );
   }).length;
-  const readyOverSevenDays = orderRows.filter((order) => {
+  const readyOverSevenDays = saleRows.filter((order) => {
     return (
       order.fulfilmentStatus === "ready" &&
       order.readyAt !== null &&
       order.readyAt < sevenDaysAgo
     );
   }).length;
+  const needsAttention = saleRows.filter((order) => order.fulfilmentStatus === "needs_attention").length;
 
   const sparkBuckets = new Map<string, number>();
   for (let i = 0; i < 12; i += 1) {
     const day = addSydneyDays(sparkStart, i);
     sparkBuckets.set(dayKey(day), 0);
   }
-  for (const order of orderRows) {
+  for (const order of saleRows) {
     if (!order.createdAt || order.createdAt < sparkStart || order.createdAt >= tomorrowStart) continue;
     const key = dayKey(order.createdAt);
     if (!sparkBuckets.has(key)) continue;
@@ -333,6 +341,7 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
     avgOrder,
     awaitingPickup,
     readyOverSevenDays,
+    needsAttention,
     spark: Array.from(sparkBuckets.values()),
     topItems: Array.from(topItemsByName.values())
       .sort((a, b) => b.revenue - a.revenue)
@@ -351,11 +360,12 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
     return addSydneyMonths(firstMonth, index);
   });
 
-  const orderRows = await db
+  const fetchedRows = await db
     .select()
     .from(orders)
     .where(and(eq(orders.tenantId, tenantId), gte(orders.createdAt, firstMonth), lt(orders.createdAt, nextMonthStart)))
     .orderBy(desc(orders.createdAt));
+  const orderRows = fetchedRows.filter((order) => isRecognisedSale(order.paymentStatus));
 
   const monthlyTotals = new Map(months.map((month) => [monthKey(month), 0]));
   const gstTotals = new Map(months.map((month) => [monthKey(month), 0]));
