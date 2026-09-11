@@ -55,6 +55,7 @@ export type LiveDashboardData = {
   avgOrder: number;
   awaitingPickup: number;
   readyOverSevenDays: number;
+  needsAttention: number;
   spark: number[];
   topItems: LiveTopItem[];
   recentOrders: LiveRecentOrder[];
@@ -105,6 +106,38 @@ export function money(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
+}
+
+/** Paid shop sales that belong on dashboard KPIs and GST reports. Pending and fully refunded orders are excluded. */
+export function isRecognisedSale(paymentStatus: PaymentStatus) {
+  return paymentStatus === "paid" || paymentStatus === "partially_refunded";
+}
+
+type SaleMoneyOrder = {
+  total: string | number | null | undefined;
+  gst?: string | number | null | undefined;
+  refundedAmountCents?: number | null | undefined;
+};
+
+/** Net recognised-sale dollars after subtracting refundedAmountCents. */
+export function netSaleAmount(order: SaleMoneyOrder) {
+  const gross = money(order.total);
+  const refunded = money((order.refundedAmountCents ?? 0) / 100);
+  return money(Math.max(0, gross - refunded));
+}
+
+/** Remittable GST scaled by the retained (post-refund) share of the order total. */
+export function netGstAmount(order: SaleMoneyOrder) {
+  const gross = money(order.total);
+  if (gross <= 0) return 0;
+  return money(money(order.gst) * (netSaleAmount(order) / gross));
+}
+
+/** Multiply line/category dollars by this to allocate partial refunds across lines. */
+export function saleRetainRatio(order: SaleMoneyOrder) {
+  const gross = money(order.total);
+  if (gross <= 0) return 0;
+  return netSaleAmount(order) / gross;
 }
 
 const REPORTING_TIME_ZONE = "Australia/Sydney";
@@ -242,6 +275,7 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
       avgOrder: 0,
       awaitingPickup: 0,
       readyOverSevenDays: 0,
+      needsAttention: 0,
       spark: Array.from({ length: 12 }, () => 0),
       topItems: [],
       recentOrders: [],
@@ -254,44 +288,46 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
   const tomorrowStart = addSydneyDays(today, 1);
   const sevenDaysAgo = addSydneyDays(today, -7);
 
-  const last30Orders = orderRows.filter((order) => {
+  const saleRows = orderRows.filter((order) => isRecognisedSale(order.paymentStatus));
+  const last30Orders = saleRows.filter((order) => {
     return order.createdAt !== null && order.createdAt >= last30Start && order.createdAt < tomorrowStart;
   });
 
-  const revenue = money(last30Orders.reduce((sum, order) => sum + money(order.total), 0));
+  const revenue = money(last30Orders.reduce((sum, order) => sum + netSaleAmount(order), 0));
   const orderCount = last30Orders.length;
   const avgOrder = orderCount > 0 ? money(revenue / orderCount) : 0;
-  const awaitingPickup = orderRows.filter((order) => {
+  const awaitingPickup = saleRows.filter((order) => {
     return (
-      order.paymentStatus !== "pending" &&
-      (order.fulfilmentStatus === "to_prepare" ||
-        order.fulfilmentStatus === "needs_attention")
+      order.fulfilmentStatus === "to_prepare" ||
+      order.fulfilmentStatus === "needs_attention"
     );
   }).length;
-  const readyOverSevenDays = orderRows.filter((order) => {
+  const readyOverSevenDays = saleRows.filter((order) => {
     return (
       order.fulfilmentStatus === "ready" &&
       order.readyAt !== null &&
       order.readyAt < sevenDaysAgo
     );
   }).length;
+  const needsAttention = saleRows.filter((order) => order.fulfilmentStatus === "needs_attention").length;
 
   const sparkBuckets = new Map<string, number>();
   for (let i = 0; i < 12; i += 1) {
     const day = addSydneyDays(sparkStart, i);
     sparkBuckets.set(dayKey(day), 0);
   }
-  for (const order of orderRows) {
+  for (const order of saleRows) {
     if (!order.createdAt || order.createdAt < sparkStart || order.createdAt >= tomorrowStart) continue;
     const key = dayKey(order.createdAt);
     if (!sparkBuckets.has(key)) continue;
-    sparkBuckets.set(key, money((sparkBuckets.get(key) ?? 0) + money(order.total)));
+    sparkBuckets.set(key, money((sparkBuckets.get(key) ?? 0) + netSaleAmount(order)));
   }
 
-  const datedRecentRows = orderRows
+  // Same recognised-sale filter as Paid-order KPIs — pending / fully refunded stay off this list.
+  const datedRecentRows = saleRows
     .filter((order) => order.createdAt !== null)
     .sort((a, b) => b.createdAt!.getTime() - a.createdAt!.getTime());
-  const nullDatedRows = orderRows.filter((order) => order.createdAt === null);
+  const nullDatedRows = saleRows.filter((order) => order.createdAt === null);
   const recentOrders: LiveRecentOrder[] = [...datedRecentRows, ...nullDatedRows].slice(0, 5).map((order) => ({
     id: order.id,
     tenantId: order.tenantId,
@@ -303,11 +339,12 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
     rollClass: order.studentRoll,
     parent: order.parentName,
     email: order.parentEmail,
-    total: money(order.total),
+    total: netSaleAmount(order),
     createdAt: order.createdAt,
   }));
 
   const last30OrderIds = last30Orders.map((order) => order.id);
+  const retainByOrderId = new Map(last30Orders.map((order) => [order.id, saleRetainRatio(order)]));
   const topItemsByName = new Map<string, LiveTopItem>();
   if (last30OrderIds.length > 0) {
     const lineRows = await db
@@ -316,13 +353,14 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
       .where(inArray(orderLines.orderId, last30OrderIds));
 
     for (const line of lineRows) {
+      const retain = retainByOrderId.get(line.orderId) ?? 1;
       const current = topItemsByName.get(line.itemName) ?? {
         name: line.itemName,
         qty: 0,
         revenue: 0,
       };
       current.qty += line.qty;
-      current.revenue = money(current.revenue + money(line.lineTotal));
+      current.revenue = money(current.revenue + money(line.lineTotal) * retain);
       topItemsByName.set(line.itemName, current);
     }
   }
@@ -333,6 +371,7 @@ export async function getLiveDashboardData(tenantId: string): Promise<LiveDashbo
     avgOrder,
     awaitingPickup,
     readyOverSevenDays,
+    needsAttention,
     spark: Array.from(sparkBuckets.values()),
     topItems: Array.from(topItemsByName.values())
       .sort((a, b) => b.revenue - a.revenue)
@@ -351,11 +390,12 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
     return addSydneyMonths(firstMonth, index);
   });
 
-  const orderRows = await db
+  const fetchedRows = await db
     .select()
     .from(orders)
     .where(and(eq(orders.tenantId, tenantId), gte(orders.createdAt, firstMonth), lt(orders.createdAt, nextMonthStart)))
     .orderBy(desc(orders.createdAt));
+  const orderRows = fetchedRows.filter((order) => isRecognisedSale(order.paymentStatus));
 
   const monthlyTotals = new Map(months.map((month) => [monthKey(month), 0]));
   const gstTotals = new Map(months.map((month) => [monthKey(month), 0]));
@@ -363,14 +403,14 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
   for (const order of orderRows) {
     if (!order.createdAt) continue;
     const key = monthKey(order.createdAt);
-    monthlyTotals.set(key, money((monthlyTotals.get(key) ?? 0) + money(order.total)));
-    gstTotals.set(key, money((gstTotals.get(key) ?? 0) + money(order.gst)));
+    monthlyTotals.set(key, money((monthlyTotals.get(key) ?? 0) + netSaleAmount(order)));
+    gstTotals.set(key, money((gstTotals.get(key) ?? 0) + netGstAmount(order)));
   }
 
-  const revenue = money(orderRows.reduce((sum, order) => sum + money(order.total), 0));
+  const revenue = money(orderRows.reduce((sum, order) => sum + netSaleAmount(order), 0));
   const orderCount = orderRows.length;
   const avgOrder = orderCount > 0 ? money(revenue / orderCount) : 0;
-  const gst = money(orderRows.reduce((sum, order) => sum + money(order.gst), 0));
+  const gst = money(orderRows.reduce((sum, order) => sum + netGstAmount(order), 0));
   const monthlyRevenue = months.map((month) => ({
     month: monthKey(month),
     label: monthLabel(month),
@@ -379,6 +419,7 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
 
   const orderIds = orderRows.map((order) => order.id);
   const orderMonthById = new Map<string, string>();
+  const retainByOrderId = new Map(orderRows.map((order) => [order.id, saleRetainRatio(order)]));
   for (const order of orderRows) {
     if (!order.createdAt) continue;
     orderMonthById.set(order.id, monthKey(order.createdAt));
@@ -402,12 +443,14 @@ export async function getLiveReportsData(tenantId: string): Promise<LiveReportsD
       .where(inArray(orderLines.orderId, orderIds));
 
     for (const line of lineRows) {
+      const retain = retainByOrderId.get(line.orderId) ?? 1;
+      const retainedLine = money(money(line.lineTotal) * retain);
       const category = line.category ?? "Uncategorised";
-      categoryTotals.set(category, money((categoryTotals.get(category) ?? 0) + money(line.lineTotal)));
+      categoryTotals.set(category, money((categoryTotals.get(category) ?? 0) + retainedLine));
       if (line.gstFree === true && line.prelovedSkuId != null) {
         const key = orderMonthById.get(line.orderId);
         if (!key) continue;
-        gstFreePrelovedTotals.set(key, money((gstFreePrelovedTotals.get(key) ?? 0) + money(line.lineTotal)));
+        gstFreePrelovedTotals.set(key, money((gstFreePrelovedTotals.get(key) ?? 0) + retainedLine));
       }
     }
   }

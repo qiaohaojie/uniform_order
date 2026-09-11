@@ -250,6 +250,7 @@ export interface SalesData {
   topItems: { name: string; qty: number; revenue: number }[];
 }
 
+/** Legacy mock KPIs. Admin dashboard and reports read Neon via getLiveDashboardData / getLiveReportsData. */
 export const SALES_DATA: Record<TenantId, SalesData> = {
   imhs: {
     revenue: 18420,

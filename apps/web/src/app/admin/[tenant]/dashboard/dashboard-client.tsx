@@ -32,24 +32,34 @@ function StatusBadge({
   return <Chip tone={tone}>{label}</Chip>;
 }
 
+export type DashboardStripeStatus = {
+  linked: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+};
+
 export function AdminDashboardClient({
   tenant,
   dashboard,
+  stripe,
 }: {
   tenant: Tenant;
   dashboard: LiveDashboardData;
+  stripe: DashboardStripeStatus;
 }) {
   const stats = [
     {
+      id: "revenue",
       label: "Revenue · 30d",
       value: `$${dashboard.revenue.toLocaleString()}`,
-      delta: "Live orders",
+      delta: "Paid orders",
       tone: "pos" as const,
       spark: dashboard.spark,
     },
-    { label: "Orders · 30d", value: String(dashboard.orders), delta: "Live orders", tone: "pos" as const },
-    { label: "Avg order", value: `$${dashboard.avgOrder.toFixed(2)}`, delta: "Last 30 days", tone: "pos" as const },
+    { id: "orders", label: "Orders · 30d", value: String(dashboard.orders), delta: "Paid orders", tone: "pos" as const },
+    { id: "avg", label: "Avg order", value: `$${dashboard.avgOrder.toFixed(2)}`, delta: "Last 30 days", tone: "pos" as const },
     {
+      id: "awaiting",
       label: "Awaiting pickup",
       value: String(dashboard.awaitingPickup),
       delta: `${dashboard.readyOverSevenDays} over 7d`,
@@ -57,13 +67,18 @@ export function AdminDashboardClient({
     },
   ];
 
+  const stripeReady = stripe.linked && stripe.chargesEnabled && stripe.payoutsEnabled;
+  const hasAlerts =
+    dashboard.readyOverSevenDays > 0 || dashboard.needsAttention > 0 || !stripeReady;
+
   return (
-    <div className="flex-1 overflow-y-auto p-7">
+    <div data-testid="admin-dashboard" className="flex-1 overflow-y-auto p-7">
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-3.5 mb-6">
         {stats.map((s) => (
           <div
             key={s.label}
+            data-testid={`dashboard-kpi-${s.id}`}
             className="bg-white rounded-[10px] border p-4"
             style={{ borderColor: "var(--color-rule)" }}
           >
@@ -98,6 +113,15 @@ export function AdminDashboardClient({
           </div>
         ))}
       </div>
+      {dashboard.orders === 0 && (
+        <p
+          data-testid="dashboard-empty-sales"
+          className="text-[12px] mb-6"
+          style={{ color: "var(--color-ink-dim)" }}
+        >
+          No paid orders in the last 30 days.
+        </p>
+      )}
 
       {/* Main grid */}
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "2fr 1fr" }}>
@@ -114,7 +138,7 @@ export function AdminDashboardClient({
               Last 30 days
             </span>
           </div>
-          <table className="w-full border-collapse text-[13px]">
+          <table data-testid="dashboard-top-items" className="w-full border-collapse text-[13px]">
             <thead>
               <tr
                 className="text-[10.5px] uppercase tracking-[0.6px]"
@@ -177,7 +201,12 @@ export function AdminDashboardClient({
               })}
               {dashboard.topItems.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-[12px]" style={{ color: "var(--color-ink-dim)" }}>
+                  <td
+                    colSpan={4}
+                    data-testid="dashboard-top-items-empty"
+                    className="py-4 text-center text-[12px]"
+                    style={{ color: "var(--color-ink-dim)" }}
+                  >
                     No live order lines yet.
                   </td>
                 </tr>
@@ -195,49 +224,81 @@ export function AdminDashboardClient({
             <h3 className="font-serif text-[17px] font-medium m-0 mb-3" style={{ color: "var(--color-ink)" }}>
               Needs attention
             </h3>
-            <div className="flex flex-col gap-3">
-              <div
-                className="flex gap-2.5 p-2.5 rounded-md text-[12px] leading-[1.5]"
-                style={{ background: "#FBF1E5", border: "1px solid #E5D5AE" }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7A5418" strokeWidth="1.7" strokeLinecap="round" className="flex-shrink-0 mt-0.5">
-                  <path d="M12 3 L22 20 H2 Z" />
-                  <path d="M12 10 V14" />
-                  <circle cx="12" cy="17" r="0.6" fill="#7A5418" stroke="none" />
-                </svg>
-                <div style={{ color: "var(--color-ink)" }}>
-                  <b>{dashboard.readyOverSevenDays} orders</b> ready for pickup over 7 days.{" "}
-                  <Link href={`/admin/${tenant.id}/orders`} className="font-semibold underline" style={{ color: tenant.accent }}>
-                    View orders →
-                  </Link>
+            <div data-testid="dashboard-attention" className="flex flex-col gap-3">
+              {dashboard.readyOverSevenDays > 0 && (
+                <div
+                  data-testid="dashboard-alert-stale-ready"
+                  className="flex gap-2.5 p-2.5 rounded-md text-[12px] leading-[1.5]"
+                  style={{ background: "#FBF1E5", border: "1px solid #E5D5AE" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7A5418" strokeWidth="1.7" strokeLinecap="round" className="flex-shrink-0 mt-0.5">
+                    <path d="M12 3 L22 20 H2 Z" />
+                    <path d="M12 10 V14" />
+                    <circle cx="12" cy="17" r="0.6" fill="#7A5418" stroke="none" />
+                  </svg>
+                  <div style={{ color: "var(--color-ink)" }}>
+                    <b>{dashboard.readyOverSevenDays} orders</b> ready for pickup over 7 days.{" "}
+                    <Link href={`/admin/${tenant.id}/orders`} className="font-semibold underline" style={{ color: tenant.accent }}>
+                      View orders →
+                    </Link>
+                  </div>
                 </div>
-              </div>
-              <div
-                className="flex gap-2.5 p-2.5 rounded-md text-[12px] leading-[1.5]"
-                style={{ background: "#E2EAF3", border: "1px solid #C7D4E3" }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-navy-soft)" strokeWidth="1.7" strokeLinecap="round" className="flex-shrink-0 mt-0.5">
-                  <rect x="3" y="5" width="18" height="14" rx="1" />
-                  <path d="M3 7 L12 13 L21 7" />
-                </svg>
-                <div style={{ color: "var(--color-ink)" }}>
-                  <b>Term 2 catalog</b> ready for review.{" "}
-                  <Link href={`/admin/${tenant.id}/catalog`} className="font-semibold underline" style={{ color: tenant.accent }}>
-                    Review →
-                  </Link>
+              )}
+              {dashboard.needsAttention > 0 && (
+                <div
+                  data-testid="dashboard-alert-hold"
+                  className="flex gap-2.5 p-2.5 rounded-md text-[12px] leading-[1.5]"
+                  style={{ background: "#FBF1E5", border: "1px solid #E5D5AE" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7A5418" strokeWidth="1.7" strokeLinecap="round" className="flex-shrink-0 mt-0.5">
+                    <path d="M12 3 L22 20 H2 Z" />
+                    <path d="M12 10 V14" />
+                    <circle cx="12" cy="17" r="0.6" fill="#7A5418" stroke="none" />
+                  </svg>
+                  <div style={{ color: "var(--color-ink)" }}>
+                    <b>{dashboard.needsAttention} orders</b> on hold.{" "}
+                    <Link href={`/admin/${tenant.id}/orders`} className="font-semibold underline" style={{ color: tenant.accent }}>
+                      View orders →
+                    </Link>
+                  </div>
                 </div>
-              </div>
-              <div
-                className="flex gap-2.5 p-2.5 rounded-md text-[12px] leading-[1.5]"
-                style={{ background: "#E5F0E7", border: "1px solid #C6DECB" }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="1.7" strokeLinecap="round" className="flex-shrink-0 mt-0.5">
-                  <path d="M5 13 L10 18 L20 6" />
-                </svg>
-                <div style={{ color: "var(--color-ink)" }}>
-                  Stripe payout estimate from live orders: <b>${(dashboard.revenue * 0.26).toLocaleString()}</b>.
+              )}
+              {!stripeReady && (
+                <div
+                  data-testid="dashboard-alert-stripe"
+                  className="flex gap-2.5 p-2.5 rounded-md text-[12px] leading-[1.5]"
+                  style={{ background: "#E2EAF3", border: "1px solid #C7D4E3" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-navy-soft)" strokeWidth="1.7" strokeLinecap="round" className="flex-shrink-0 mt-0.5">
+                    <rect x="3" y="5" width="18" height="14" rx="1" />
+                    <path d="M3 7 L12 13 L21 7" />
+                  </svg>
+                  <div style={{ color: "var(--color-ink)" }}>
+                    {!stripe.linked ? (
+                      <>
+                        Stripe Connect is not linked.{" "}
+                      </>
+                    ) : (
+                      <>
+                        Stripe is linked but{" "}
+                        {!stripe.chargesEnabled ? "charges are pending" : "payouts are pending"}.{" "}
+                      </>
+                    )}
+                    <Link href={`/admin/${tenant.id}/settings`} className="font-semibold underline" style={{ color: tenant.accent }}>
+                      Open settings →
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              )}
+              {!hasAlerts && (
+                <p
+                  data-testid="dashboard-attention-clear"
+                  className="text-[12px] m-0"
+                  style={{ color: "var(--color-ink-dim)" }}
+                >
+                  No live issues right now.
+                </p>
+              )}
             </div>
           </div>
 
@@ -258,10 +319,13 @@ export function AdminDashboardClient({
                 View all
               </Link>
             </div>
-            <div className="flex flex-col">
+            <div data-testid="dashboard-recent-orders" className="flex flex-col">
               {dashboard.recentOrders.map((o, i) => (
-                <div
+                <Link
                   key={o.id}
+                  href={`/admin/${tenant.id}/orders/${o.id}`}
+                  data-testid="dashboard-recent-order"
+                  data-order-id={o.id}
                   className="flex items-center gap-3 py-2.5"
                   style={{
                     borderBottom: i < dashboard.recentOrders.length - 1 ? "1px solid var(--color-rule)" : "none",
@@ -281,11 +345,15 @@ export function AdminDashboardClient({
                       ${o.total.toFixed(0)}
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
               {dashboard.recentOrders.length === 0 && (
-                <div className="py-4 text-[12px] text-center" style={{ color: "var(--color-ink-dim)" }}>
-                  No live orders yet.
+                <div
+                  data-testid="dashboard-recent-empty"
+                  className="py-4 text-[12px] text-center"
+                  style={{ color: "var(--color-ink-dim)" }}
+                >
+                  No paid orders yet.
                 </div>
               )}
             </div>
