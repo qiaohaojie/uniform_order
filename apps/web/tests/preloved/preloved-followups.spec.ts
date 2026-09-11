@@ -4,6 +4,9 @@
  * Does not start the app. From repo root:
  *   pnpm dev:web
  *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:<port> pnpm test:preloved-followups
+ *
+ * Defaults to demo-academy (live Neon has no imhs). Override with
+ * PRELOVED_TENANT / OPERATOR_EMAIL.
  */
 import { expect, test } from "playwright/test";
 import { TENANT, devLogin, ensurePrelovedEnabled } from "./helpers";
