@@ -432,8 +432,8 @@ export const consignmentItems = pgTable(
     size: text("size").notNull(),
     condition: prelovedConditionEnum("condition").notNull(),
     qty: integer("qty").notNull().default(1),
-    // Later payout CSV / sold-line ledger fills this. No FK yet — order_lines
-    // is declared later and remittance is a separate slice.
+    // Filled when a paid order consumes this unit (FIFO). FK is in SQL only —
+    // order_lines is declared later in this file.
     soldOrderLineId: uuid("sold_order_line_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -604,6 +604,64 @@ export const orderLines = pgTable(
   (t) => ({
     orderItemIdx: index("idx_order_lines_order_id_item_id").on(t.orderId, t.itemId),
   })
+);
+
+// One remittance row per sold consigned unit. commission_bps is snapshotted
+// from tenant settings at sale time so a later settings edit cannot rewrite
+// the treasurer ledger.
+export const consignmentSoldLines = pgTable(
+  "consignment_sold_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    lotId: uuid("lot_id")
+      .notNull()
+      .references(() => consignmentLots.id, { onDelete: "cascade" }),
+    consignmentItemId: uuid("consignment_item_id")
+      .notNull()
+      .references(() => consignmentItems.id, { onDelete: "restrict" }),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    orderLineId: uuid("order_line_id")
+      .notNull()
+      .references(() => orderLines.id, { onDelete: "restrict" }),
+    prelovedSkuId: uuid("preloved_sku_id")
+      .notNull()
+      .references(() => prelovedSkus.id, { onDelete: "restrict" }),
+    qty: integer("qty").notNull().default(1),
+    saleUnitPrice: numeric("sale_unit_price", { precision: 10, scale: 2 }).notNull(),
+    saleLineTotal: numeric("sale_line_total", { precision: 10, scale: 2 }).notNull(),
+    commissionBps: integer("commission_bps").notNull(),
+    commissionAmount: numeric("commission_amount", {
+      precision: 10,
+      scale: 2,
+    }).notNull(),
+    remittanceAmount: numeric("remittance_amount", {
+      precision: 10,
+      scale: 2,
+    }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    itemUnique: uniqueIndex("consignment_sold_lines_item_unique").on(
+      t.consignmentItemId,
+    ),
+    tenantTimeIdx: index("idx_consignment_sold_lines_tenant_time").on(
+      t.tenantId,
+      t.createdAt,
+    ),
+    lotTimeIdx: index("idx_consignment_sold_lines_lot_time").on(
+      t.lotId,
+      t.createdAt,
+    ),
+    orderIdx: index("idx_consignment_sold_lines_order").on(t.orderId),
+    qtyPositive: check("consignment_sold_lines_qty_positive", sql`${t.qty} >= 1`),
+  }),
 );
 
 // ─── Order refunds ───────────────────────────────────────────────────────────
@@ -779,3 +837,4 @@ export type PrelovedIntakeEventRow = typeof prelovedIntakeEvents.$inferSelect;
 export type PrelovedDonationNoteRow = typeof prelovedDonationNotes.$inferSelect;
 export type ConsignmentLotRow = typeof consignmentLots.$inferSelect;
 export type ConsignmentItemRow = typeof consignmentItems.$inferSelect;
+export type ConsignmentSoldLineRow = typeof consignmentSoldLines.$inferSelect;

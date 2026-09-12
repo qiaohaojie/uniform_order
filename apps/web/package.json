@@ -19,6 +19,7 @@
     "test:preloved-test-gaps": "pnpm test:m05-parent-hydration && pnpm test:m06-last-unit-race",
     "test:m07-consignment-school-fee": "PRELOVED_TENANT=demo-academy OPERATOR_EMAIL=operator@demo.uniformorder.online playwright test -c playwright.config.ts tests/preloved/m07-consignment-school-fee.spec.ts",
     "test:m08-lot-intake": "PRELOVED_TENANT=demo-academy OPERATOR_EMAIL=operator@demo.uniformorder.online PRELOVED_ITEM_ID=rvra-polo-ss PRELOVED_ITEM_NAME='Polo Shirt — Short Sleeve' playwright test -c playwright.config.ts tests/preloved/m08-lot-intake.spec.ts",
+    "test:m09-payout-csv": "PRELOVED_TENANT=demo-academy OPERATOR_EMAIL=operator@demo.uniformorder.online PRELOVED_ITEM_ID=rvra-polo-ss PRELOVED_ITEM_NAME='Polo Shirt — Short Sleeve' playwright test -c playwright.config.ts tests/preloved/m09-payout-csv.spec.ts",
     "demo:seed:dry": "node ../../demo/demo_data/run.mjs seed --dry-run",
     "demo:seed": "node ../../demo/demo_data/run.mjs seed",
     "demo:cleanup": "node ../../demo/demo_data/run.mjs cleanup",

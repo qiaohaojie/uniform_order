@@ -11,7 +11,10 @@ import {
   orderLines,
   pendingOrderSnapshots,
 } from "@/db/schema";
-import { decrementPrelovedForPaymentIntent } from "@/db/preloved-queries";
+import {
+  decrementPrelovedForPaymentIntent,
+  recordConsignmentSoldLinesBestEffort,
+} from "@/db/preloved-queries";
 import { sendOrderRefundEmail } from "@/lib/email";
 import { recordOrderPaid } from "@/lib/orders/record-order-paid";
 import { PrelovedInsufficientQtyError } from "@/lib/preloved";
@@ -212,6 +215,13 @@ export async function POST(req: NextRequest) {
       paymentIntentId: pi.id,
       resolved,
     });
+
+    if (resolved) {
+      await recordConsignmentSoldLinesBestEffort({
+        orderId: resolved.id,
+        tenantId: resolved.tenantId,
+      });
+    }
 
     return NextResponse.json({ received: true });
   }

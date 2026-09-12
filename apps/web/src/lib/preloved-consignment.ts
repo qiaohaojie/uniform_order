@@ -60,6 +60,24 @@ export type ConsignmentAcceptedUnit = {
   size: string;
   condition: "good" | "fair";
   qty: number;
+  soldOrderLineId: string | null;
+  createdAt: Date;
+};
+
+export type ConsignmentSoldLine = {
+  id: string;
+  consignmentItemId: string;
+  orderId: string;
+  orderLineId: string;
+  itemName: string;
+  size: string;
+  condition: "good" | "fair";
+  qty: number;
+  saleUnitPrice: number;
+  saleLineTotal: number;
+  commissionBps: number;
+  commissionAmount: number;
+  remittanceAmount: number;
   createdAt: Date;
 };
 
@@ -81,6 +99,10 @@ export type ConsignmentLotListItem = {
   createdAt: Date;
   acceptedUnits: ConsignmentAcceptedUnit[];
   acceptedQty: number;
+  soldLines: ConsignmentSoldLine[];
+  soldQty: number;
+  remittanceTotal: number;
+  commissionTotal: number;
 };
 
 export function isConsignmentIntakeMode(mode: string): boolean {

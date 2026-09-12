@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, orders, orderLines, tenants, pendingOrderSnapshots } from "@/db";
 import type { PendingOrderLineSnapshot } from "@/db/schema";
-import { decrementPrelovedForPaymentIntent } from "@/db/preloved-queries";
+import {
+  decrementPrelovedForPaymentIntent,
+  recordConsignmentSoldLinesBestEffort,
+} from "@/db/preloved-queries";
 import {
   getOrdersByTenant,
   getOrdersByTenantAndParentEmail,
@@ -231,6 +234,10 @@ export async function POST(req: NextRequest) {
       if (existingOrder.userId && existingOrder.userId !== authResult.user.id) {
         return NextResponse.json({ error: "Payment intent already used" }, { status: 409 });
       }
+      await recordConsignmentSoldLinesBestEffort({
+        orderId: existingOrder.id,
+        tenantId,
+      });
       return NextResponse.json(
         { orderId: existingOrder.id, idempotent: true },
         { status: 200 }
@@ -533,6 +540,10 @@ export async function POST(req: NextRequest) {
             if (duplicateOrder.userId && duplicateOrder.userId !== authResult.user.id) {
               return NextResponse.json({ error: "Payment intent already used" }, { status: 409 });
             }
+            await recordConsignmentSoldLinesBestEffort({
+              orderId: duplicateOrder.id,
+              tenantId,
+            });
             return NextResponse.json(
               { orderId: duplicateOrder.id, idempotent: true },
               { status: 200 }
@@ -547,6 +558,11 @@ export async function POST(req: NextRequest) {
     if (!createdOrderId) {
       throw new Error("Unable to generate a unique order ID");
     }
+
+    await recordConsignmentSoldLinesBestEffort({
+      orderId: createdOrderId,
+      tenantId,
+    });
 
     // The snapshot has served its purpose — the authoritative copy now lives in
     // order_lines. Best-effort: a stale row is harmless (the PI id is already
