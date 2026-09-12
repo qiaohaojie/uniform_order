@@ -1,12 +1,21 @@
 /**
- * Phase 1 preloved domain types and in-code defaults.
- * Donation-only: no consignment or commission fields on the public settings type.
+ * Preloved domain types and in-code defaults.
+ * Phase 2 exposes intake mode + commission; donation-only remains the default.
  * This module must not import the DB client.
  */
 import { round2 } from "./order-totals";
+import {
+  DEFAULT_COMMISSION_BPS,
+  isValidCommissionBps,
+} from "./preloved-consignment";
 
+export const PRELOVED_INTAKE_MODES = [
+  "donation_only",
+  "donation_and_consignment",
+] as const;
+export type PrelovedIntakeMode = (typeof PRELOVED_INTAKE_MODES)[number];
+/** @deprecated Prefer PRELOVED_INTAKE_MODES[0]; kept for donation-default call sites. */
 export const PRELOVED_INTAKE_MODE = "donation_only" as const;
-export type PrelovedIntakeMode = typeof PRELOVED_INTAKE_MODE;
 
 export const PRELOVED_CONDITIONS = ["good", "fair"] as const;
 export type PrelovedCondition = (typeof PRELOVED_CONDITIONS)[number];
@@ -38,15 +47,18 @@ export type PrelovedSettings = {
   holdDays: number;
   donatedGstFree: boolean;
   refuseList: string[];
+  commissionBps: number;
 };
 
-/** Operator-writable settings. Intake mode and commission are not accepted. */
+/** Operator-writable settings including Phase 2 intake mode + commission. */
 export type PrelovedSettingsPatch = {
   prelovedEnabled?: boolean;
+  intakeMode?: PrelovedIntakeMode;
   priceFractionOfNew?: number;
   holdDays?: number;
   donatedGstFree?: boolean;
   refuseList?: string[];
+  commissionBps?: number;
 };
 
 export type AcceptAndPoolInput = {
@@ -128,7 +140,21 @@ export function defaultPrelovedSettings(tenantId: string): PrelovedSettings {
     holdDays: DEFAULT_HOLD_DAYS,
     donatedGstFree: false,
     refuseList: [...DEFAULT_REFUSE_LIST],
+    commissionBps: DEFAULT_COMMISSION_BPS,
   };
+}
+
+export function parseIntakeMode(value: unknown): PrelovedIntakeMode {
+  if (value === "donation_and_consignment" || value === "donation_only") {
+    return value;
+  }
+  return PRELOVED_INTAKE_MODE;
+}
+
+export function parseCommissionBps(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? NaN);
+  if (!isValidCommissionBps(parsed)) return DEFAULT_COMMISSION_BPS;
+  return parsed;
 }
 
 export function parsePriceFraction(value: string | number | null | undefined): number {

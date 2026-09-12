@@ -5,9 +5,18 @@ import { useRouter } from "next/navigation";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
   isPersistablePriceFractionOfNew,
+  PRELOVED_INTAKE_MODES,
   roundPriceFractionOfNew,
+  type PrelovedIntakeMode,
   type PrelovedSettings,
 } from "@/lib/preloved";
+import {
+  COMMISSION_BPS_PRESETS,
+  DEFAULT_COMMISSION_BPS,
+  formatCommissionPercent,
+  isConsignmentIntakeMode,
+  isValidCommissionBps,
+} from "@/lib/preloved-consignment";
 
 const GST_FREE_COPY =
   "Confirm with your accountant that your P&C / school is an endorsed charity, gift-deductible entity, or government school before treating donated preloved as GST-free (GST Act s 38-255).";
@@ -33,6 +42,8 @@ export function PrelovedSettingsSection({
   settings: PrelovedSettings;
 }) {
   const [enabled, setEnabled] = useState(settings.prelovedEnabled);
+  const [intakeMode, setIntakeMode] = useState<PrelovedIntakeMode>(settings.intakeMode);
+  const [commissionBps, setCommissionBps] = useState(String(settings.commissionBps));
   const [priceFraction, setPriceFraction] = useState(String(settings.priceFractionOfNew));
   const [holdDays, setHoldDays] = useState(String(settings.holdDays));
   const [refuseList, setRefuseList] = useState(formatRefuseList(settings.refuseList));
@@ -45,6 +56,7 @@ export function PrelovedSettingsSection({
   const parsedFraction = Number(priceFraction);
   const showFractionWarning =
     Number.isFinite(parsedFraction) && parsedFraction > DEFAULT_PRICE_FRACTION_OF_NEW;
+  const consignOn = isConsignmentIntakeMode(intakeMode);
 
   const handleSave = async () => {
     setSaving(true);
@@ -53,6 +65,7 @@ export function PrelovedSettingsSection({
 
     const parsedFractionValue = Number(priceFraction);
     const days = Number(holdDays);
+    const commission = Number(commissionBps);
     if (!isPersistablePriceFractionOfNew(parsedFractionValue)) {
       setSaveError("Price fraction must be at least 0.01 and at most 2.");
       setSaving(false);
@@ -64,6 +77,11 @@ export function PrelovedSettingsSection({
       setSaving(false);
       return;
     }
+    if (!isValidCommissionBps(commission)) {
+      setSaveError("Commission must be an integer between 0 and 10000 basis points.");
+      setSaving(false);
+      return;
+    }
 
     try {
       const res = await fetch(`/api/tenant/${tenantId}/preloved`, {
@@ -71,6 +89,8 @@ export function PrelovedSettingsSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prelovedEnabled: enabled,
+          intakeMode,
+          commissionBps: commission,
           priceFractionOfNew: fraction,
           holdDays: days,
           donatedGstFree,
@@ -98,8 +118,8 @@ export function PrelovedSettingsSection({
         Preloved
       </h2>
       <p className="text-[12.5px] mb-4" style={{ color: "var(--color-ink-dim)" }}>
-        Donation-only rack. Parents donate washed current-uniform items; the shop inspects, prices,
-        and sells them. Consignment is not available in this phase.
+        Donation rack by default. Enable donation + consignment to open the parent
+        consign form, lot tickets, and school-fee credit marks.
       </p>
 
       <div className="flex flex-col gap-4">
@@ -128,6 +148,73 @@ export function PrelovedSettingsSection({
             />
           </button>
         </div>
+
+        <fieldset data-testid="preloved-intake-mode">
+          <legend
+            className="block text-[11px] font-bold uppercase tracking-[0.6px] mb-1.5"
+            style={{ color: "var(--color-ink-dim)" }}
+          >
+            Intake mode
+          </legend>
+          <div className="flex flex-col gap-2">
+            {PRELOVED_INTAKE_MODES.map((mode) => (
+              <label
+                key={mode}
+                className="flex items-start gap-2 text-[12.5px]"
+                style={{ color: "var(--color-ink)" }}
+              >
+                <input
+                  type="radio"
+                  name="intakeMode"
+                  value={mode}
+                  checked={intakeMode === mode}
+                  onChange={() => setIntakeMode(mode)}
+                  data-testid={`preloved-intake-mode-${mode}`}
+                  className="mt-0.5"
+                />
+                <span>
+                  {mode === "donation_only"
+                    ? "Donation only"
+                    : "Donation + consignment"}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {consignOn ? (
+          <div>
+            <label
+              className="block text-[11px] font-bold uppercase tracking-[0.6px] mb-1.5"
+              style={{ color: "var(--color-ink-dim)" }}
+              htmlFor="preloved-commission-bps"
+            >
+              Shop commission (basis points)
+            </label>
+            <input
+              id="preloved-commission-bps"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={10000}
+              step={100}
+              value={commissionBps}
+              onChange={(e) => setCommissionBps(e.target.value)}
+              className="w-full h-10 border rounded-md px-3 text-[13px] outline-none tnum"
+              style={{
+                borderColor: "var(--color-rule)",
+                color: "var(--color-ink)",
+                fontFamily: "var(--font-sans)",
+              }}
+              data-testid="preloved-commission-bps"
+            />
+            <p className="text-[11px] mt-1" style={{ color: "var(--color-ink-dim)" }}>
+              Default {DEFAULT_COMMISSION_BPS} ({formatCommissionPercent(DEFAULT_COMMISSION_BPS)}
+              to the shop). Common presets:{" "}
+              {COMMISSION_BPS_PRESETS.map((bps) => formatCommissionPercent(bps)).join(", ")}.
+            </p>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -230,7 +317,7 @@ export function PrelovedSettingsSection({
           <span>
             <span className="font-semibold block mb-0.5">Treat donated preloved as GST-free</span>
             <span id="preloved-gst-copy" style={{ color: "var(--color-ink-dim)" }}>
-              {GST_FREE_COPY}
+              {GST_FREE_COPY} Consignment sales stay taxable by default.
             </span>
           </span>
         </label>

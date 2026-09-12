@@ -13,15 +13,20 @@ import {
 } from "@/lib/auth/authorization";
 import {
   isPersistablePriceFractionOfNew,
+  PRELOVED_INTAKE_MODES,
   roundPriceFractionOfNew,
   type PrelovedSettingsPatch,
 } from "@/lib/preloved";
+import {
+  isValidCommissionBps,
+  MAX_COMMISSION_BPS,
+  MIN_COMMISSION_BPS,
+} from "@/lib/preloved-consignment";
 
-// Operator-writable fields only. intakeMode and commissionBps are not accepted
-// (Phase 1 is donation-only; commission is unused until Phase 2).
 const PatchSchema = z
   .object({
     prelovedEnabled: z.boolean().optional(),
+    intakeMode: z.enum(PRELOVED_INTAKE_MODES).optional(),
     priceFractionOfNew: z
       .number()
       .finite()
@@ -33,10 +38,17 @@ const PatchSchema = z
     holdDays: z.number().int().min(1).max(3650).optional(),
     donatedGstFree: z.boolean().optional(),
     refuseList: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
+    commissionBps: z
+      .number()
+      .int()
+      .min(MIN_COMMISSION_BPS)
+      .max(MAX_COMMISSION_BPS)
+      .refine(isValidCommissionBps)
+      .optional(),
   })
   .strict();
 
-// PATCH /api/tenant/:tenantId/preloved — operator-only. Values above 0.50 are allowed.
+// PATCH /api/tenant/:tenantId/preloved — operator-only.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> },
@@ -70,10 +82,12 @@ export async function PATCH(
     const patch = parsed.data as PrelovedSettingsPatch;
     if (
       patch.prelovedEnabled === undefined &&
+      patch.intakeMode === undefined &&
       patch.priceFractionOfNew === undefined &&
       patch.holdDays === undefined &&
       patch.donatedGstFree === undefined &&
-      patch.refuseList === undefined
+      patch.refuseList === undefined &&
+      patch.commissionBps === undefined
     ) {
       return NextResponse.json({ error: "No preloved settings to update" }, { status: 400 });
     }

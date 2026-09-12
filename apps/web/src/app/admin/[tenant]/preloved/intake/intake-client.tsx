@@ -22,7 +22,9 @@ import {
   isPrelovedPriceAboveCap,
   roundPrelovedPrice,
   type PrelovedCondition,
+  type PrelovedIntakeMode,
 } from "@/lib/preloved";
+import { isConsignmentIntakeMode } from "@/lib/preloved-consignment";
 
 export type IntakeCatalogItem = {
   id: string;
@@ -90,12 +92,14 @@ export function IntakeClient({
   catalog,
   priceFractionOfNew,
   refuseList,
+  intakeMode,
 }: {
   tenantId: string;
   tenant: Tenant;
   catalog: IntakeCatalogItem[];
   priceFractionOfNew: number;
   refuseList: string[];
+  intakeMode: PrelovedIntakeMode;
 }) {
   const [itemId, setItemId] = useState("");
   const [size, setSize] = useState("");
@@ -351,7 +355,11 @@ export function IntakeClient({
             <TextField isReadOnly name="source" value="Donation">
               <Label>Source</Label>
               <Input />
-              <Description>Donation only. Consignment is not available.</Description>
+              <Description>
+                {isConsignmentIntakeMode(intakeMode)
+                  ? "This desk still accepts donations into the pooled rack. Link garments to a consignment lot ticket in a later slice."
+                  : "Donation only. Turn on donation + consignment in Settings to open the consign form."}
+              </Description>
             </TextField>
 
             <TextField

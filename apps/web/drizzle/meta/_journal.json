@@ -155,6 +155,13 @@
       "when": 1788900000000,
       "tag": "0021_preloved_paid_decrements",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0022_consignment_lots",
+      "breakpoints": true
     }
   ]
 }

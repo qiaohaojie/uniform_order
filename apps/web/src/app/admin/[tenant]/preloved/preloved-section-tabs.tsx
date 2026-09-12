@@ -5,17 +5,24 @@ import { usePathname } from "next/navigation";
 import type { ComponentProps } from "react";
 import { Tabs } from "@heroui/react";
 
-const PRELOVED_SECTION_TABS = [
+const BASE_TABS = [
   { id: "intake", label: "Intake" },
   { id: "stock", label: "Stock" },
   { id: "inbox", label: "Inbox" },
   { id: "write-offs", label: "Write-offs" },
 ] as const;
 
-type PrelovedSectionTabId = (typeof PRELOVED_SECTION_TABS)[number]["id"];
+const CONSIGNMENTS_TAB = { id: "consignments", label: "Consignments" } as const;
 
-function selectedPrelovedSection(pathname: string): PrelovedSectionTabId {
-  const match = PRELOVED_SECTION_TABS.find(
+type PrelovedSectionTabId =
+  | (typeof BASE_TABS)[number]["id"]
+  | typeof CONSIGNMENTS_TAB.id;
+
+function selectedPrelovedSection(
+  pathname: string,
+  tabs: readonly { id: PrelovedSectionTabId; label: string }[],
+): PrelovedSectionTabId {
+  const match = tabs.find(
     (tab) =>
       pathname.endsWith(`/preloved/${tab.id}`) ||
       pathname.includes(`/preloved/${tab.id}/`),
@@ -23,15 +30,24 @@ function selectedPrelovedSection(pathname: string): PrelovedSectionTabId {
   return match?.id ?? "intake";
 }
 
-export function PrelovedSectionTabs({ tenantId }: { tenantId: string }) {
+export function PrelovedSectionTabs({
+  tenantId,
+  showConsignments = false,
+}: {
+  tenantId: string;
+  showConsignments?: boolean;
+}) {
   const pathname = usePathname();
-  const selectedKey = selectedPrelovedSection(pathname);
+  const tabs = showConsignments
+    ? ([...BASE_TABS, CONSIGNMENTS_TAB] as const)
+    : BASE_TABS;
+  const selectedKey = selectedPrelovedSection(pathname, tabs);
 
   return (
     <Tabs variant="secondary" selectedKey={selectedKey} className="w-full">
       <Tabs.ListContainer>
         <Tabs.List aria-label="Preloved sections">
-          {PRELOVED_SECTION_TABS.map((tab) => {
+          {tabs.map((tab) => {
             const href = `/admin/${tenantId}/preloved/${tab.id}`;
             return (
               <Tabs.Tab

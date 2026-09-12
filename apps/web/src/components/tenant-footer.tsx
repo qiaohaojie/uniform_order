@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { TenantRow } from "@/db/schema";
 import { getPrelovedSettings } from "@/db/preloved-queries";
+import { isConsignmentIntakeMode } from "@/lib/preloved-consignment";
 
 export async function TenantFooter({
   tenant,
@@ -9,7 +10,9 @@ export async function TenantFooter({
   tenant: TenantRow;
   hideContact?: boolean;
 }) {
-  const { prelovedEnabled } = await getPrelovedSettings(tenant.id);
+  const settings = await getPrelovedSettings(tenant.id);
+  const { prelovedEnabled, intakeMode } = settings;
+  const showConsign = prelovedEnabled && isConsignmentIntakeMode(intakeMode);
   const showRefund = tenant.currentLegalVersionId !== null;
   return (
     <footer className="border-t border-rule bg-parchment px-5 py-4 text-[12px] leading-relaxed text-ink-dim">
@@ -21,6 +24,15 @@ export async function TenantFooter({
             data-testid="footer-donate-link"
           >
             Donate
+          </Link>
+        )}
+        {showConsign && (
+          <Link
+            className="underline hover:text-ink"
+            href={`/${tenant.id}/preloved/consign`}
+            data-testid="footer-consign-link"
+          >
+            Consign
           </Link>
         )}
         {showRefund && (
