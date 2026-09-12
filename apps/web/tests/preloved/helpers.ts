@@ -68,6 +68,62 @@ export async function confirmVisaPayment(paymentIntentId: string) {
   }
 }
 
+export type PrelovedQtySnapshot = { id: string; qtyOnHand: number };
+
+/**
+ * Snapshot every in-stock preloved SKU for the tenant, then zero qty_on_hand so
+ * the parent Preloved filter renders empty without write-off or sale. Always
+ * restore via restoreShopPrelovedQty (try/finally).
+ */
+export async function emptyShopPrelovedQty(
+  tenantId: string = TENANT,
+): Promise<PrelovedQtySnapshot[]> {
+  loadLocalEnv();
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL missing for emptyShopPrelovedQty");
+  const sql = neon(url);
+  const rows = await sql`
+    select id, qty_on_hand
+    from preloved_skus
+    where tenant_id = ${tenantId}
+      and qty_on_hand > 0
+  `;
+  const snapshot = (rows as Array<{ id: string; qty_on_hand: number }>).map(
+    (row) => ({ id: row.id, qtyOnHand: Number(row.qty_on_hand) }),
+  );
+  if (snapshot.length === 0) return snapshot;
+  await sql`
+    update preloved_skus
+    set qty_on_hand = 0
+    where tenant_id = ${tenantId}
+      and qty_on_hand > 0
+  `;
+  return snapshot;
+}
+
+/** Restore qty_on_hand after emptyShopPrelovedQty. No-op on an empty snapshot. */
+export async function restoreShopPrelovedQty(
+  snapshot: PrelovedQtySnapshot[],
+): Promise<void> {
+  if (snapshot.length === 0) return;
+  loadLocalEnv();
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL missing for restoreShopPrelovedQty");
+  const sql = neon(url);
+  for (const row of snapshot) {
+    if (!Number.isInteger(row.qtyOnHand) || row.qtyOnHand < 0) {
+      throw new Error(
+        `restoreShopPrelovedQty bad qty for ${row.id}: ${row.qtyOnHand}`,
+      );
+    }
+    await sql`
+      update preloved_skus
+      set qty_on_hand = ${row.qtyOnHand}
+      where id = ${row.id}
+    `;
+  }
+}
+
 /** Pin qty / GST on a pooled SKU. Returns null when the row does not exist. */
 export async function pinPooledSkuForTest(opts: {
   qty: number;

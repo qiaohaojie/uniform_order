@@ -29,8 +29,8 @@
 - [x] **(M05)** Parent-shop client islands do not hydrate in Playwright — raised: 2026-09-07, by: build:M05
       context: Resolved 2026-09-12. `allowedDevOrigins` + CSP `ws:`/`wss:` fix hydration on 127.0.0.1. Hard-fail coverage in `pnpm test:m05-parent-hydration` (preloved stepper `data-hydrated=true` + Add to cart; new catalogue Add to cart).
 
-- [ ] **(M05)** Empty Preloved filter e2e skipped when the rack already has stock — raised: 2026-09-07, by: build:M05
-      context: Write-off is expired-only and M05 must not decrement qty. A tenant that already has stock will `test.skip`. Copy+donate link exist in `catalog-grid.tsx`. Need a fresh empty tenant or a non-destructive empty fixture.
+- [x] **(M05)** Empty Preloved filter e2e skipped when the rack already has stock — raised: 2026-09-07, by: build:M05
+      context: Resolved with a non-destructive fixture (`emptyShopPrelovedQty` / `restoreShopPrelovedQty`) and `pnpm test:m05-empty-preloved-filter` on demo-academy. No write-off or sale; qty restored in `finally`.
 
 - [x] **(M06)** Live pay + pick-slip self-ver not run — raised: 2026-09-07, by: build:M06
       context: `pnpm test:m06-preloved-fulfilment` passed on demo-academy (qty 2→1, mixed-cart Stripe `pm_card_visa`, pick slip PRELOVED on preloved line only, Kanban To prepare/Ready/Needs attention/Completed). Desktop 1920×1080 screenshots in `.dev-local/m06-verify/`. playwright-cli chrome-for-testing was still installing; used project Playwright Chromium.
