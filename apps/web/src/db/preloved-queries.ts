@@ -4,7 +4,7 @@
  */
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
   PRELOVED_INTAKE_SOURCE,
@@ -49,8 +49,14 @@ import {
   type ConsignmentAcceptedUnit,
   type ConsignmentLotItemDraft,
   type ConsignmentLotListItem,
+  type ConsignmentSoldLine,
   type InsertConsignmentLotInput,
 } from "@/lib/preloved-consignment";
+import {
+  parseMoney2,
+  splitSaleCommission,
+  type PayoutCsvRow,
+} from "@/lib/preloved-payout";
 import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { AuditActorRole } from "@/lib/audit/types";
@@ -61,6 +67,9 @@ import {
   catalogVariants,
   consignmentItems,
   consignmentLots,
+  consignmentSoldLines,
+  orderLines,
+  orders,
   prelovedDonationNotes,
   prelovedIntakeEvents,
   prelovedSkus,
@@ -313,6 +322,10 @@ function mapConsignmentLotRow(row: ConsignmentLotRow): ConsignmentLotListItem {
     createdAt: row.createdAt,
     acceptedUnits: [],
     acceptedQty: 0,
+    soldLines: [],
+    soldQty: 0,
+    remittanceTotal: 0,
+    commissionTotal: 0,
   };
 }
 
@@ -345,6 +358,7 @@ async function attachAcceptedUnits(
       size: consignmentItems.size,
       condition: consignmentItems.condition,
       qty: consignmentItems.qty,
+      soldOrderLineId: consignmentItems.soldOrderLineId,
       createdAt: consignmentItems.createdAt,
     })
     .from(consignmentItems)
@@ -366,6 +380,7 @@ async function attachAcceptedUnits(
       size: row.size,
       condition: row.condition,
       qty: row.qty,
+      soldOrderLineId: row.soldOrderLineId,
       createdAt: row.createdAt,
     };
     const list = byLot.get(row.lotId) ?? [];
@@ -381,6 +396,90 @@ async function attachAcceptedUnits(
       acceptedQty: acceptedUnits.reduce((sum, unit) => sum + unit.qty, 0),
     };
   });
+}
+
+async function attachSoldLines(
+  tenantId: string,
+  lots: ConsignmentLotListItem[],
+): Promise<ConsignmentLotListItem[]> {
+  if (lots.length === 0) return lots;
+  const lotIds = lots.map((lot) => lot.id);
+  const rows = await db
+    .select({
+      id: consignmentSoldLines.id,
+      lotId: consignmentSoldLines.lotId,
+      consignmentItemId: consignmentSoldLines.consignmentItemId,
+      orderId: consignmentSoldLines.orderId,
+      orderLineId: consignmentSoldLines.orderLineId,
+      itemName: catalogItems.name,
+      size: consignmentItems.size,
+      condition: consignmentItems.condition,
+      qty: consignmentSoldLines.qty,
+      saleUnitPrice: consignmentSoldLines.saleUnitPrice,
+      saleLineTotal: consignmentSoldLines.saleLineTotal,
+      commissionBps: consignmentSoldLines.commissionBps,
+      commissionAmount: consignmentSoldLines.commissionAmount,
+      remittanceAmount: consignmentSoldLines.remittanceAmount,
+      createdAt: consignmentSoldLines.createdAt,
+    })
+    .from(consignmentSoldLines)
+    .innerJoin(
+      consignmentItems,
+      eq(consignmentItems.id, consignmentSoldLines.consignmentItemId),
+    )
+    .innerJoin(catalogItems, eq(catalogItems.id, consignmentItems.sourceItemId))
+    .where(
+      and(
+        eq(consignmentSoldLines.tenantId, tenantId),
+        inArray(consignmentSoldLines.lotId, lotIds),
+      ),
+    )
+    .orderBy(desc(consignmentSoldLines.createdAt));
+
+  const byLot = new Map<string, ConsignmentSoldLine[]>();
+  for (const row of rows) {
+    const line: ConsignmentSoldLine = {
+      id: row.id,
+      consignmentItemId: row.consignmentItemId,
+      orderId: row.orderId,
+      orderLineId: row.orderLineId,
+      itemName: row.itemName,
+      size: row.size,
+      condition: row.condition,
+      qty: row.qty,
+      saleUnitPrice: parseMoney2(row.saleUnitPrice),
+      saleLineTotal: parseMoney2(row.saleLineTotal),
+      commissionBps: row.commissionBps,
+      commissionAmount: parseMoney2(row.commissionAmount),
+      remittanceAmount: parseMoney2(row.remittanceAmount),
+      createdAt: row.createdAt,
+    };
+    const list = byLot.get(row.lotId) ?? [];
+    list.push(line);
+    byLot.set(row.lotId, list);
+  }
+
+  return lots.map((lot) => {
+    const soldLines = byLot.get(lot.id) ?? [];
+    return {
+      ...lot,
+      soldLines,
+      soldQty: soldLines.reduce((sum, line) => sum + line.qty, 0),
+      remittanceTotal: parseMoney2(
+        soldLines.reduce((sum, line) => sum + line.remittanceAmount, 0),
+      ),
+      commissionTotal: parseMoney2(
+        soldLines.reduce((sum, line) => sum + line.commissionAmount, 0),
+      ),
+    };
+  });
+}
+
+async function hydrateConsignmentLots(
+  tenantId: string,
+  lots: ConsignmentLotListItem[],
+): Promise<ConsignmentLotListItem[]> {
+  return attachSoldLines(tenantId, await attachAcceptedUnits(tenantId, lots));
 }
 
 async function attachLotTickets(
@@ -466,7 +565,7 @@ export async function listConsignmentLots(
     .where(eq(consignmentLots.tenantId, tenantId))
     .orderBy(desc(consignmentLots.createdAt))
     .limit(CONSIGNMENT_LOT_LIST_LIMIT);
-  return attachAcceptedUnits(tenantId, rows.map(mapConsignmentLotRow));
+  return hydrateConsignmentLots(tenantId, rows.map(mapConsignmentLotRow));
 }
 
 export type MarkConsignmentLotPayoutResult =
@@ -499,7 +598,7 @@ export async function markConsignmentLotPayout(opts: {
     return { ok: false, reason: "not_found" };
   }
   if (existing.payoutStatus !== "pending") {
-    const [lot] = await attachAcceptedUnits(opts.tenantId, [
+    const [lot] = await hydrateConsignmentLots(opts.tenantId, [
       mapConsignmentLotRow(existing),
     ]);
     return {
@@ -528,7 +627,7 @@ export async function markConsignmentLotPayout(opts: {
     if (!current) {
       return { ok: false, reason: "not_found" };
     }
-    const [lot] = await attachAcceptedUnits(opts.tenantId, [
+    const [lot] = await hydrateConsignmentLots(opts.tenantId, [
       mapConsignmentLotRow(current),
     ]);
     return {
@@ -538,10 +637,224 @@ export async function markConsignmentLotPayout(opts: {
     };
   }
 
-  const [lot] = await attachAcceptedUnits(opts.tenantId, [
+  const [lot] = await hydrateConsignmentLots(opts.tenantId, [
     mapConsignmentLotRow(row),
   ]);
   return { ok: true, lot };
+}
+
+export type RecordConsignmentSoldLinesResult = {
+  allocated: number;
+  recorded: number;
+};
+
+/**
+ * FIFO-attribute unsold consignment units to a paid order's preloved lines and
+ * write remittance rows with the tenant's commissionBps at sale time.
+ * Idempotent: already-sold items and existing ledger rows are left alone.
+ * Donation units in the same pool are not attributed (no consignment_items).
+ */
+export async function recordConsignmentSoldLinesForOrder(input: {
+  orderId: string;
+  tenantId: string;
+}): Promise<RecordConsignmentSoldLinesResult> {
+  const orderId = input.orderId.trim();
+  const tenantId = input.tenantId.trim();
+  if (!orderId || !tenantId) {
+    throw new Error("orderId and tenantId are required");
+  }
+
+  const settings = await getPrelovedSettings(tenantId);
+  const commissionBps = settings.commissionBps;
+
+  const allocated = (await db.execute(sql`
+    WITH lines AS (
+      SELECT ol.id, ol.preloved_sku_id, ol.qty
+      FROM order_lines ol
+      INNER JOIN orders o ON o.id = ol.order_id
+      WHERE o.id = ${orderId}
+        AND o.tenant_id = ${tenantId}
+        AND ol.preloved_sku_id IS NOT NULL
+    ),
+    needed AS (
+      SELECT
+        ol.id AS order_line_id,
+        ol.preloved_sku_id,
+        row_number() OVER (
+          PARTITION BY ol.preloved_sku_id
+          ORDER BY ol.id, gs.n
+        ) AS rn
+      FROM lines ol
+      CROSS JOIN LATERAL generate_series(1, ol.qty) AS gs(n)
+    ),
+    available AS (
+      SELECT
+        ci.id AS item_id,
+        ci.preloved_sku_id,
+        row_number() OVER (
+          PARTITION BY ci.preloved_sku_id
+          ORDER BY ci.created_at, ci.id
+        ) AS rn
+      FROM consignment_items ci
+      WHERE ci.tenant_id = ${tenantId}
+        AND ci.sold_order_line_id IS NULL
+        AND ci.preloved_sku_id IN (SELECT preloved_sku_id FROM lines)
+    ),
+    alloc AS (
+      SELECT n.order_line_id, a.item_id
+      FROM needed n
+      INNER JOIN available a
+        ON a.preloved_sku_id = n.preloved_sku_id
+       AND a.rn = n.rn
+    )
+    UPDATE consignment_items ci
+    SET sold_order_line_id = alloc.order_line_id
+    FROM alloc
+    WHERE ci.id = alloc.item_id
+      AND ci.sold_order_line_id IS NULL
+    RETURNING ci.id
+  `)) as { rows: { id: string }[] };
+
+  const pending = await db
+    .select({
+      consignmentItemId: consignmentItems.id,
+      lotId: consignmentItems.lotId,
+      prelovedSkuId: consignmentItems.prelovedSkuId,
+      orderLineId: orderLines.id,
+      unitPrice: orderLines.unitPrice,
+    })
+    .from(consignmentItems)
+    .innerJoin(orderLines, eq(orderLines.id, consignmentItems.soldOrderLineId))
+    .innerJoin(orders, eq(orders.id, orderLines.orderId))
+    .leftJoin(
+      consignmentSoldLines,
+      eq(consignmentSoldLines.consignmentItemId, consignmentItems.id),
+    )
+    .where(
+      and(
+        eq(consignmentItems.tenantId, tenantId),
+        eq(orders.id, orderId),
+        eq(orders.tenantId, tenantId),
+        isNull(consignmentSoldLines.id),
+      ),
+    );
+
+  if (pending.length === 0) {
+    return { allocated: allocated.rows.length, recorded: 0 };
+  }
+
+  try {
+    const inserted = await db
+      .insert(consignmentSoldLines)
+      .values(
+        pending.map((row) => {
+          const saleAud = parseMoney2(row.unitPrice);
+          const split = splitSaleCommission(saleAud, commissionBps);
+          return {
+            tenantId,
+            lotId: row.lotId,
+            consignmentItemId: row.consignmentItemId,
+            orderId,
+            orderLineId: row.orderLineId,
+            prelovedSkuId: row.prelovedSkuId,
+            qty: 1,
+            saleUnitPrice: split.saleAud.toFixed(2),
+            saleLineTotal: split.saleAud.toFixed(2),
+            commissionBps,
+            commissionAmount: split.commissionAud.toFixed(2),
+            remittanceAmount: split.remittanceAud.toFixed(2),
+          };
+        }),
+      )
+      .onConflictDoNothing({ target: consignmentSoldLines.consignmentItemId })
+      .returning({ id: consignmentSoldLines.id });
+    return { allocated: allocated.rows.length, recorded: inserted.length };
+  } catch (error) {
+    if (isUniqueConstraintError(error, "consignment_sold_lines_item_unique")) {
+      return { allocated: allocated.rows.length, recorded: 0 };
+    }
+    throw error;
+  }
+}
+
+/** Best-effort remittance write. Order row already exists; webhook retries. */
+export async function recordConsignmentSoldLinesBestEffort(input: {
+  orderId: string;
+  tenantId: string;
+}): Promise<void> {
+  try {
+    await recordConsignmentSoldLinesForOrder(input);
+  } catch (err) {
+    console.error("recordConsignmentSoldLinesForOrder failed", input, err);
+  }
+}
+
+/** Treasurer ledger: one row per sold consigned unit, oldest first. */
+export async function listConsignmentSoldLinesForExport(
+  tenantId: string,
+  opts?: { pendingOnly?: boolean },
+): Promise<PayoutCsvRow[]> {
+  const pendingOnly = opts?.pendingOnly === true;
+  const rows = await db
+    .select({
+      soldAt: consignmentSoldLines.createdAt,
+      ticketCode: consignmentLots.ticketCode,
+      familyName: consignmentLots.familyName,
+      studentName: consignmentLots.studentName,
+      email: consignmentLots.email,
+      mobile: consignmentLots.mobile,
+      payoutPreference: consignmentLots.payoutPreference,
+      payoutStatus: consignmentLots.payoutStatus,
+      bankBsb: consignmentLots.bankBsb,
+      bankAccountName: consignmentLots.bankAccountName,
+      bankAccountNumber: consignmentLots.bankAccountNumber,
+      itemName: catalogItems.name,
+      size: consignmentItems.size,
+      condition: consignmentItems.condition,
+      orderId: consignmentSoldLines.orderId,
+      salePrice: consignmentSoldLines.saleLineTotal,
+      commissionBps: consignmentSoldLines.commissionBps,
+      commissionAmount: consignmentSoldLines.commissionAmount,
+      remittanceAmount: consignmentSoldLines.remittanceAmount,
+    })
+    .from(consignmentSoldLines)
+    .innerJoin(consignmentLots, eq(consignmentLots.id, consignmentSoldLines.lotId))
+    .innerJoin(
+      consignmentItems,
+      eq(consignmentItems.id, consignmentSoldLines.consignmentItemId),
+    )
+    .innerJoin(catalogItems, eq(catalogItems.id, consignmentItems.sourceItemId))
+    .where(
+      pendingOnly
+        ? and(
+            eq(consignmentSoldLines.tenantId, tenantId),
+            eq(consignmentLots.payoutStatus, "pending"),
+          )
+        : eq(consignmentSoldLines.tenantId, tenantId),
+    )
+    .orderBy(asc(consignmentSoldLines.createdAt), asc(consignmentSoldLines.id));
+
+  return rows.map((row) => ({
+    soldAt: row.soldAt,
+    ticketCode: row.ticketCode,
+    familyName: row.familyName,
+    studentName: row.studentName,
+    email: row.email,
+    mobile: row.mobile,
+    payoutPreference: row.payoutPreference,
+    payoutStatus: row.payoutStatus,
+    bankBsb: row.bankBsb,
+    bankAccountName: row.bankAccountName,
+    bankAccountNumber: row.bankAccountNumber,
+    itemName: row.itemName,
+    size: row.size,
+    condition: row.condition,
+    orderId: row.orderId,
+    salePrice: parseMoney2(row.salePrice),
+    commissionBps: row.commissionBps,
+    commissionAmount: parseMoney2(row.commissionAmount),
+    remittanceAmount: parseMoney2(row.remittanceAmount),
+  }));
 }
 
 function variantHasSize(sizes: unknown, size: string): boolean {

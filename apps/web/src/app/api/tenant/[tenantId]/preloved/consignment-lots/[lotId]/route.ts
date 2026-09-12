@@ -8,22 +8,8 @@ import {
   ensureTenantAccess,
   requireSessionUser,
 } from "@/lib/auth/authorization";
-import {
-  isConsignmentIntakeMode,
-  type ConsignmentLotListItem,
-} from "@/lib/preloved-consignment";
-
-function serializeLot(lot: ConsignmentLotListItem) {
-  return {
-    ...lot,
-    createdAt: lot.createdAt.toISOString(),
-    payoutMarkedAt: lot.payoutMarkedAt?.toISOString() ?? null,
-    acceptedUnits: lot.acceptedUnits.map((unit) => ({
-      ...unit,
-      createdAt: unit.createdAt.toISOString(),
-    })),
-  };
-}
+import { isConsignmentIntakeMode } from "@/lib/preloved-consignment";
+import { serializeConsignmentLot } from "../serialize";
 
 // PATCH /api/tenant/:tenantId/preloved/consignment-lots/:lotId — manual payout mark.
 // Status is derived from the lot payout preference. Client body is ignored.
@@ -64,7 +50,7 @@ export async function PATCH(
         {
           error: "Lot payout already marked",
           code: "already_marked",
-          lot: serializeLot(result.lot),
+          lot: serializeConsignmentLot(result.lot),
         },
         { status: 409 },
       );
@@ -72,7 +58,7 @@ export async function PATCH(
 
     return NextResponse.json({
       ok: true,
-      lot: serializeLot(result.lot),
+      lot: serializeConsignmentLot(result.lot),
     });
   } catch (err) {
     console.error(

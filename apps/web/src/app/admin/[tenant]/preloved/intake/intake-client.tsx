@@ -661,7 +661,7 @@ function IntakeLotField({
         </Select.Popover>
         <Description>
           Consigned garments still pool on the rack by item, size, and
-          condition. The ticket is stored so a later payout CSV can attribute
+          condition. The ticket is stored so the payout CSV can attribute
           sold units.
         </Description>
       </Select>

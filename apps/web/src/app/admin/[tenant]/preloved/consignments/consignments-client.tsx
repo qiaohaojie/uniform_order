@@ -13,6 +13,7 @@ import {
   type ConsignmentPayoutPreference,
   type ConsignmentUnsoldPreference,
 } from "@/lib/preloved-consignment";
+import { formatCsvMoney } from "@/lib/preloved-payout";
 
 export type ConsignmentLotRow = {
   id: string;
@@ -37,10 +38,34 @@ export type ConsignmentLotRow = {
     size: string;
     condition: "good" | "fair";
     qty: number;
+    soldOrderLineId: string | null;
     createdAt: string;
   }[];
   acceptedQty: number;
+  soldLines: {
+    id: string;
+    consignmentItemId: string;
+    orderId: string;
+    orderLineId: string;
+    itemName: string;
+    size: string;
+    condition: "good" | "fair";
+    qty: number;
+    saleUnitPrice: number;
+    saleLineTotal: number;
+    commissionBps: number;
+    commissionAmount: number;
+    remittanceAmount: number;
+    createdAt: string;
+  }[];
+  soldQty: number;
+  remittanceTotal: number;
+  commissionTotal: number;
 };
+
+function parseMoneySum(values: number[]): number {
+  return values.reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
+}
 
 function formatReceived(iso: string, timeZone: string) {
   return new Date(iso).toLocaleString("en-AU", {
@@ -66,6 +91,10 @@ export function ConsignmentsClient({
   const [loading, setLoading] = useState(true);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [markError, setMarkError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
+  const [pendingOnly, setPendingOnly] = useState(false);
 
   const loadLots = useCallback(async () => {
     setLoading(true);
@@ -138,20 +167,100 @@ export function ConsignmentsClient({
     }
   };
 
+  const exportPayoutCsv = async () => {
+    setExporting(true);
+    setExportError("");
+    setExportNotice("");
+    try {
+      const qs = pendingOnly ? "?pending=1" : "";
+      const res = await fetch(
+        `/api/tenant/${tenantId}/preloved/payout.csv${qs}`,
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error ?? "Failed to export payout CSV.");
+      }
+      const csv = await res.text();
+      const count = Number(res.headers.get("X-Payout-Row-Count") ?? "0");
+      const match = /filename="([^"]+)"/.exec(
+        res.headers.get("Content-Disposition") ?? "",
+      );
+      const filename = match?.[1] ?? `payout-${tenantId}.csv`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      if (count === 0) {
+        setExportNotice(
+          "No sold consignment lines yet. Downloaded a headers-only CSV.",
+        );
+      }
+    } catch (err) {
+      console.error("Payout CSV export failed:", err);
+      setExportError(
+        err instanceof Error ? err.message : "Failed to export payout CSV.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const soldLineCount = (lots ?? []).reduce(
+    (sum, lot) => sum + (lot.soldQty ?? 0),
+    0,
+  );
+  const remittanceOwing = parseMoneySum(
+    (lots ?? [])
+      .filter((lot) => lot.payoutStatus === "pending")
+      .map((lot) => lot.remittanceTotal ?? 0),
+  );
+
   return (
     <div className="flex-1 overflow-y-auto p-7" data-testid="consignments-panel">
       <p
         className="text-[13px] mb-4 max-w-2xl"
         style={{ color: "var(--color-ink-dim)" }}
       >
-        Parent consignment lots. Accept garments on Intake against a ticket so
-        sold units can be attributed later. Bank details are operator-only. Mark
-        school-fee credit, EFT, or donated proceeds by hand — there is no
-        school-finance integration.
+        Parent consignment lots. Accept garments on Intake against a ticket.
+        When a consigned unit sells, the shop keeps the published commission and
+        the remainder is the amount owing. Export the treasurer CSV for EFT,
+        school-fee credit, or donated proceeds — marks stay manual.
         {commissionBps != null
           ? ` Shop commission: ${formatCommissionPercent(commissionBps)}.`
           : null}
+        {!loading && !error && lots && lots.length > 0
+          ? ` ${soldLineCount} sold · $${formatCsvMoney(remittanceOwing)} pending owing.`
+          : null}
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label
+          className="flex items-center gap-2 text-[13px]"
+          style={{ color: "var(--color-ink)" }}
+        >
+          <input
+            type="checkbox"
+            checked={pendingOnly}
+            onChange={(event) => setPendingOnly(event.target.checked)}
+            data-testid="consignments-export-pending"
+          />
+          Pending payouts only
+        </label>
+        <Button
+          size="sm"
+          onPress={() => void exportPayoutCsv()}
+          isPending={exporting}
+          isDisabled={exporting || loading}
+          data-testid="consignments-export-csv"
+        >
+          Export payout CSV
+        </Button>
+      </div>
 
       {markError ? (
         <div className="mb-4 max-w-xl" data-testid="consignments-mark-error">
@@ -163,6 +272,28 @@ export function ConsignmentsClient({
             </Alert.Content>
           </Alert>
         </div>
+      ) : null}
+
+      {exportError ? (
+        <div className="mb-4 max-w-xl" data-testid="consignments-export-error">
+          <Alert status="danger">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Title>Could not export payout CSV</Alert.Title>
+              <Alert.Description>{exportError}</Alert.Description>
+            </Alert.Content>
+          </Alert>
+        </div>
+      ) : null}
+
+      {exportNotice ? (
+        <p
+          className="mb-4 max-w-xl text-[13px]"
+          style={{ color: "var(--color-ink-dim)" }}
+          data-testid="consignments-export-empty"
+        >
+          {exportNotice}
+        </p>
       ) : null}
 
       {loading ? <LotsLoading /> : null}
@@ -282,6 +413,7 @@ function LotsList({
             data-ticket={lot.ticketCode}
             data-payout-status={lot.payoutStatus}
             data-accepted-qty={String(lot.acceptedQty ?? 0)}
+            data-sold-qty={String(lot.soldQty ?? 0)}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -355,10 +487,49 @@ function LotsList({
                       >
                         {unit.itemName} · {unit.size} · {unit.condition} · qty{" "}
                         {unit.qty}
+                        {unit.soldOrderLineId ? " · sold" : ""}
                       </li>
                     ))}
                   </ul>
                 )}
+              </dd>
+              <dt style={{ color: "var(--color-ink-dim)" }}>Sold</dt>
+              <dd
+                style={{ color: "var(--color-ink)" }}
+                data-testid="consignments-sold"
+              >
+                {(lot.soldLines ?? []).length === 0 ? (
+                  <span data-testid="consignments-sold-empty">
+                    No sold units yet. Amount owing appears after a paid sale.
+                  </span>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {(lot.soldLines ?? []).map((line) => (
+                      <li
+                        key={line.id}
+                        data-testid="consignments-sold-row"
+                        data-order-id={line.orderId}
+                      >
+                        {line.itemName} · {line.size} · {line.condition} · sale $
+                        {formatCsvMoney(line.saleLineTotal)} · shop $
+                        {formatCsvMoney(line.commissionAmount)} (
+                        {formatCommissionPercent(line.commissionBps)}) · owing $
+                        {formatCsvMoney(line.remittanceAmount)} · {line.orderId}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
+              <dt style={{ color: "var(--color-ink-dim)" }}>Owing</dt>
+              <dd
+                className="tnum"
+                style={{ color: "var(--color-ink)" }}
+                data-testid="consignments-owing"
+              >
+                ${formatCsvMoney(lot.remittanceTotal ?? 0)}
+                {(lot.commissionTotal ?? 0) > 0
+                  ? ` after $${formatCsvMoney(lot.commissionTotal)} shop cut`
+                  : ""}
               </dd>
             </dl>
 

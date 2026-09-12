@@ -21,7 +21,8 @@
     "test:m06-last-unit-race": "pnpm --filter web test:m06-last-unit-race",
     "test:preloved-test-gaps": "pnpm --filter web test:preloved-test-gaps",
     "test:m07-consignment-school-fee": "pnpm --filter web test:m07-consignment-school-fee",
-    "test:m08-lot-intake": "pnpm --filter web test:m08-lot-intake"
+    "test:m08-lot-intake": "pnpm --filter web test:m08-lot-intake",
+    "test:m09-payout-csv": "pnpm --filter web test:m09-payout-csv"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
