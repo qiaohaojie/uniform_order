@@ -85,6 +85,7 @@ export const prelovedConditionEnum = pgEnum("preloved_condition", [
 
 export const prelovedIntakeSourceEnum = pgEnum("preloved_intake_source", [
   "donation",
+  "consignment",
 ]);
 
 export const prelovedIntakeActionEnum = pgEnum("preloved_intake_action", [
@@ -294,6 +295,10 @@ export const prelovedIntakeEvents = pgTable(
     size: text("size"),
     condition: prelovedConditionEnum("condition"),
     source: prelovedIntakeSourceEnum("source").notNull().default("donation"),
+    consignmentLotId: uuid("consignment_lot_id").references(
+      () => consignmentLots.id,
+      { onDelete: "set null" },
+    ),
     action: prelovedIntakeActionEnum("action").notNull(),
     qty: integer("qty").notNull(),
     rejectReason: text("reject_reason"),
@@ -311,6 +316,10 @@ export const prelovedIntakeEvents = pgTable(
     ),
     skuTimeIdx: index("idx_preloved_intake_events_sku_time").on(
       t.prelovedSkuId,
+      t.createdAt,
+    ),
+    lotTimeIdx: index("idx_preloved_intake_events_lot_time").on(
+      t.consignmentLotId,
       t.createdAt,
     ),
   }),
@@ -396,6 +405,50 @@ export const consignmentLots = pgTable(
       t.tenantId,
       t.createdAt,
     ),
+  }),
+);
+
+// One accepted consigned garment. Pooled SKU qty still lives on preloved_skus;
+// this row attributes the unit to a lot so later sold-line remittance can join.
+export const consignmentItems = pgTable(
+  "consignment_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    lotId: uuid("lot_id")
+      .notNull()
+      .references(() => consignmentLots.id, { onDelete: "cascade" }),
+    prelovedSkuId: uuid("preloved_sku_id")
+      .notNull()
+      .references(() => prelovedSkus.id, { onDelete: "restrict" }),
+    intakeEventId: uuid("intake_event_id")
+      .notNull()
+      .references(() => prelovedIntakeEvents.id, { onDelete: "restrict" }),
+    sourceItemId: text("source_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    size: text("size").notNull(),
+    condition: prelovedConditionEnum("condition").notNull(),
+    qty: integer("qty").notNull().default(1),
+    // Later payout CSV / sold-line ledger fills this. No FK yet — order_lines
+    // is declared later and remittance is a separate slice.
+    soldOrderLineId: uuid("sold_order_line_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    intakeEventUnique: uniqueIndex("consignment_items_intake_event_unique").on(
+      t.intakeEventId,
+    ),
+    lotTimeIdx: index("idx_consignment_items_lot_time").on(t.lotId, t.createdAt),
+    skuTimeIdx: index("idx_consignment_items_sku_time").on(
+      t.prelovedSkuId,
+      t.createdAt,
+    ),
+    qtyPositive: check("consignment_items_qty_positive", sql`${t.qty} >= 1`),
   }),
 );
 
@@ -725,3 +778,4 @@ export type PrelovedSkuRow = typeof prelovedSkus.$inferSelect;
 export type PrelovedIntakeEventRow = typeof prelovedIntakeEvents.$inferSelect;
 export type PrelovedDonationNoteRow = typeof prelovedDonationNotes.$inferSelect;
 export type ConsignmentLotRow = typeof consignmentLots.$inferSelect;
+export type ConsignmentItemRow = typeof consignmentItems.$inferSelect;

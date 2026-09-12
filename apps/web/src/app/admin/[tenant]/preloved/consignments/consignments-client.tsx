@@ -30,6 +30,16 @@ export type ConsignmentLotRow = {
   payoutStatus: ConsignmentLotPayoutStatus;
   payoutMarkedAt: string | null;
   createdAt: string;
+  acceptedUnits: {
+    id: string;
+    skuId: string;
+    itemName: string;
+    size: string;
+    condition: "good" | "fair";
+    qty: number;
+    createdAt: string;
+  }[];
+  acceptedQty: number;
 };
 
 function formatReceived(iso: string, timeZone: string) {
@@ -134,9 +144,10 @@ export function ConsignmentsClient({
         className="text-[13px] mb-4 max-w-2xl"
         style={{ color: "var(--color-ink-dim)" }}
       >
-        Parent consignment lots. Bank details are operator-only. Mark school-fee
-        credit, EFT, or donated proceeds by hand — there is no school-finance
-        integration.
+        Parent consignment lots. Accept garments on Intake against a ticket so
+        sold units can be attributed later. Bank details are operator-only. Mark
+        school-fee credit, EFT, or donated proceeds by hand — there is no
+        school-finance integration.
         {commissionBps != null
           ? ` Shop commission: ${formatCommissionPercent(commissionBps)}.`
           : null}
@@ -235,7 +246,7 @@ function LotsEmpty() {
         style={{ color: "var(--color-ink-dim)" }}
       >
         When a parent submits the consign form, the lot and ticket code appear
-        here. Accept garments on Intake after inspection.
+        here. Accept garments on Intake against that ticket after inspection.
       </p>
     </div>
   );
@@ -270,6 +281,7 @@ function LotsList({
             data-lot-id={lot.id}
             data-ticket={lot.ticketCode}
             data-payout-status={lot.payoutStatus}
+            data-accepted-qty={String(lot.acceptedQty ?? 0)}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -318,11 +330,35 @@ function LotsList({
                   </dd>
                 </>
               ) : null}
-              <dt style={{ color: "var(--color-ink-dim)" }}>Items</dt>
+              <dt style={{ color: "var(--color-ink-dim)" }}>Declared</dt>
               <dd style={{ color: "var(--color-ink)" }}>
                 {lot.items
                   .map((item) => `${item.garment} (${item.size})`)
                   .join(", ")}
+              </dd>
+              <dt style={{ color: "var(--color-ink-dim)" }}>On rack</dt>
+              <dd
+                style={{ color: "var(--color-ink)" }}
+                data-testid="consignments-accepted"
+              >
+                {(lot.acceptedUnits ?? []).length === 0 ? (
+                  <span data-testid="consignments-accepted-empty">
+                    None accepted yet. Link this ticket on Intake.
+                  </span>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {(lot.acceptedUnits ?? []).map((unit) => (
+                      <li
+                        key={unit.id}
+                        data-testid="consignments-accepted-row"
+                        data-sku-id={unit.skuId}
+                      >
+                        {unit.itemName} · {unit.size} · {unit.condition} · qty{" "}
+                        {unit.qty}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </dd>
             </dl>
 

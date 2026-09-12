@@ -10,7 +10,10 @@ import { ensureTenantAccess, requireSessionUser } from "@/lib/auth/authorization
 import {
   PRELOVED_CONDITIONS,
   PrelovedCatalogMatchError,
+  PrelovedConsignmentLotNotFoundError,
+  PrelovedConsignmentNotEnabledError,
   PrelovedExpiredStockError,
+  PrelovedGstPoolConflictError,
 } from "@/lib/preloved";
 
 const AcceptedSchema = z
@@ -21,6 +24,7 @@ const AcceptedSchema = z
     condition: z.enum(PRELOVED_CONDITIONS),
     price: z.number().finite().positive().max(10000).optional(),
     defectNote: z.string().trim().max(500).nullable().optional(),
+    consignmentLotId: z.string().uuid().optional(),
   })
   .strict();
 
@@ -62,7 +66,8 @@ function mapSku(row: {
   };
 }
 
-// POST /api/tenant/:tenantId/preloved/intake — operator accept/reject. Donation only.
+// POST /api/tenant/:tenantId/preloved/intake — operator accept/reject.
+// Donation by default; optional consignmentLotId attributes the unit to a lot.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> },
@@ -128,6 +133,7 @@ export async function POST(
       price: parsed.data.price,
       defectNote: parsed.data.defectNote,
       actorId: authResult.user.id,
+      consignmentLotId: parsed.data.consignmentLotId ?? null,
     });
 
     return NextResponse.json({
@@ -135,18 +141,39 @@ export async function POST(
       sku: mapSku(result.sku),
       defaultPrice: result.defaultPrice,
       priceAboveCap: result.priceAboveCap,
+      lot: result.lot,
       event: {
         id: result.event.id,
         action: result.event.action,
         qty: result.event.qty,
         prelovedSkuId: result.event.prelovedSkuId,
+        source: result.event.source,
+        consignmentLotId: result.event.consignmentLotId,
       },
     });
   } catch (err) {
     if (err instanceof PrelovedCatalogMatchError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
+    if (err instanceof PrelovedConsignmentNotEnabledError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: 400 },
+      );
+    }
+    if (err instanceof PrelovedConsignmentLotNotFoundError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: 404 },
+      );
+    }
     if (err instanceof PrelovedExpiredStockError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: 409 },
+      );
+    }
+    if (err instanceof PrelovedGstPoolConflictError) {
       return NextResponse.json(
         { error: err.message, code: err.code },
         { status: 409 },
