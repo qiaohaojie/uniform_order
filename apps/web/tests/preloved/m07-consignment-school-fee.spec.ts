@@ -9,7 +9,16 @@ import {
   TENANT,
   devLogin,
   ensurePrelovedEnabled,
+  restoreDonationOnlyIntake,
 } from "./helpers";
+import { maskAccountNumber, maskBsb } from "../../src/lib/preloved-consignment";
+
+test("mask BSB last 3 and account last 4 for operator JSON", () => {
+  expect(maskBsb("062000")).toBe("•••000");
+  expect(maskAccountNumber("12345678")).toBe("••••5678");
+  expect(maskBsb(null)).toBeNull();
+  expect(maskAccountNumber("")).toBeNull();
+});
 
 test.describe("Phase 2 consignment / school-fee credit", () => {
   test("parent submits lot; operator marks school-fee credited", async ({
@@ -26,6 +35,8 @@ test.describe("Phase 2 consignment / school-fee credit", () => {
       },
     });
     expect(enableRes.ok()).toBeTruthy();
+
+    try {
 
     await page.goto(`/${TENANT}/preloved/consign`);
     await expect(page.getByTestId("consign-page")).toBeVisible();
@@ -124,5 +135,55 @@ test.describe("Phase 2 consignment / school-fee credit", () => {
       lot?: { payoutStatus?: string };
     };
     expect(deriveBody.lot?.payoutStatus).toBe("school_fee_credited");
+
+    const badId = await page.request.patch(
+      `/api/tenant/${TENANT}/preloved/consignment-lots/not-a-uuid`,
+    );
+    expect(badId.status()).toBe(404);
+
+    const mergeCreate = await page.request.post(
+      `/api/tenant/${TENANT}/preloved/consign`,
+      {
+        data: {
+          familyName: "Merge",
+          studentName: "Already",
+          email: "merge-marked@example.com",
+          mobile: "0400000002",
+          payoutPreference: "school_fee_credit",
+          unsoldPreference: "donate",
+          items: [{ garment: "Sports jacket", size: "14" }],
+          termsAccepted: true,
+        },
+      },
+    );
+    expect(mergeCreate.ok()).toBeTruthy();
+    const mergeLot = (await mergeCreate.json()) as {
+      ticketCode?: string;
+      id?: string;
+    };
+    expect(mergeLot.ticketCode).toMatch(/^CL-[A-Z0-9]{6}$/);
+    expect(mergeLot.id).toBeTruthy();
+
+    await page.reload();
+    const mergeRow = page.locator(
+      `[data-testid="consignments-row"][data-ticket="${mergeLot.ticketCode}"]`,
+    );
+    await expect(mergeRow).toBeVisible({ timeout: 15_000 });
+    await expect(mergeRow).toHaveAttribute("data-payout-status", "pending");
+
+    const markFirst = await page.request.patch(
+      `/api/tenant/${TENANT}/preloved/consignment-lots/${mergeLot.id}`,
+    );
+    expect(markFirst.ok()).toBeTruthy();
+    await mergeRow.getByTestId("consignments-mark-payout").click();
+    await expect(mergeRow).toHaveAttribute(
+      "data-payout-status",
+      "school_fee_credited",
+      { timeout: 10_000 },
+    );
+    await expect(page.getByTestId("consignments-mark-error")).toHaveCount(0);
+    } finally {
+      await restoreDonationOnlyIntake(page);
+    }
   });
 });

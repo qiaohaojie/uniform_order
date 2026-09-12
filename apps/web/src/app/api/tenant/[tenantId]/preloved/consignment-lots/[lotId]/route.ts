@@ -11,6 +11,9 @@ import {
 import { isConsignmentIntakeMode } from "@/lib/preloved-consignment";
 import { serializeConsignmentLot } from "../serialize";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // PATCH /api/tenant/:tenantId/preloved/consignment-lots/:lotId — manual payout mark.
 // Status is derived from the lot payout preference. Client body is ignored.
 export async function PATCH(
@@ -18,6 +21,9 @@ export async function PATCH(
   { params }: { params: Promise<{ tenantId: string; lotId: string }> },
 ) {
   const { tenantId, lotId } = await params;
+  if (!UUID_RE.test(lotId)) {
+    return NextResponse.json({ error: "Lot not found" }, { status: 404 });
+  }
   try {
     const authResult = await requireSessionUser();
     if ("response" in authResult) return authResult.response;

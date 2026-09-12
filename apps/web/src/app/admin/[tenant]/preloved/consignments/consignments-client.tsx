@@ -7,7 +7,6 @@ import {
   formatLotPayoutStatus,
   formatPayoutPreference,
   formatUnsoldPreference,
-  payoutStatusForPreference,
   type ConsignmentLotPayoutStatus,
   type ConsignmentLotItemDraft,
   type ConsignmentPayoutPreference,
@@ -133,23 +132,16 @@ export function ConsignmentsClient({
   const markPayout = async (lot: ConsignmentLotRow) => {
     setMarkingId(lot.id);
     setMarkError("");
-    const payoutStatus = payoutStatusForPreference(lot.payoutPreference);
     try {
       const res = await fetch(
         `/api/tenant/${tenantId}/preloved/consignment-lots/${lot.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ payoutStatus }),
-        },
+        { method: "PATCH" },
       );
       const data = (await res.json().catch(() => null)) as {
         error?: string;
+        code?: string;
         lot?: ConsignmentLotRow;
       } | null;
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Failed to mark payout.");
-      }
       if (data?.lot) {
         setLots((prev) =>
           prev
@@ -157,6 +149,11 @@ export function ConsignmentsClient({
             : prev,
         );
       }
+      if (res.ok) return;
+      if (res.status === 409 && data?.code === "already_marked" && data.lot) {
+        return;
+      }
+      throw new Error(data?.error ?? "Failed to mark payout.");
     } catch (err) {
       console.error("Mark payout failed:", err);
       setMarkError(
@@ -229,7 +226,8 @@ export function ConsignmentsClient({
         Parent consignment lots. Accept garments on Intake against a ticket.
         When a consigned unit sells, the shop keeps the published commission and
         the remainder is the amount owing. Export the treasurer CSV for EFT,
-        school-fee credit, or donated proceeds — marks stay manual.
+        school-fee credit, or donated proceeds — marks stay manual. Full BSB
+        and account numbers appear only on that CSV.
         {commissionBps != null
           ? ` Shop commission: ${formatCommissionPercent(commissionBps)}.`
           : null}
@@ -457,7 +455,11 @@ function LotsList({
               {lot.payoutPreference === "eft" ? (
                 <>
                   <dt style={{ color: "var(--color-ink-dim)" }}>Bank</dt>
-                  <dd className="tnum" style={{ color: "var(--color-ink)" }}>
+                  <dd
+                    className="tnum"
+                    style={{ color: "var(--color-ink)" }}
+                    data-testid="consignments-bank"
+                  >
                     {lot.bankAccountName} · BSB {lot.bankBsb} · {lot.bankAccountNumber}
                   </dd>
                 </>

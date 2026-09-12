@@ -12,6 +12,7 @@ import { isConsignmentIntakeMode } from "@/lib/preloved-consignment";
 import { buildPayoutCsv, payoutCsvFilename } from "@/lib/preloved-payout";
 
 // GET /api/tenant/:tenantId/preloved/payout.csv — treasurer remittance ledger.
+// Full BSB/account for EFT. Operator list/PATCH JSON stays masked.
 // ?pending=1 limits to lots not yet marked paid / credited / donated.
 export async function GET(
   req: NextRequest,

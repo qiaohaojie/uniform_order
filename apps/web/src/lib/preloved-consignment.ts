@@ -171,6 +171,40 @@ export function isValidBsb(value: string): boolean {
   return /^\d{6}$/.test(normalizeBsb(value));
 }
 
+const BANK_MASK = "•";
+
+/** Keep the last N digits; used for operator list/PATCH JSON, not treasurer CSV. */
+export function maskBankDigits(
+  value: string | null | undefined,
+  visibleLast: number,
+): string | null {
+  if (value == null) return null;
+  const digits = value.replace(/\s|-/g, "");
+  if (!digits) return null;
+  const keep = Math.min(Math.max(visibleLast, 0), digits.length);
+  return `${BANK_MASK.repeat(digits.length - keep)}${digits.slice(-keep)}`;
+}
+
+export function maskBsb(value: string | null | undefined): string | null {
+  return maskBankDigits(value, 3);
+}
+
+export function maskAccountNumber(
+  value: string | null | undefined,
+): string | null {
+  return maskBankDigits(value, 4);
+}
+
+export function maskConsignmentLotBank<
+  T extends { bankBsb: string | null; bankAccountNumber: string | null },
+>(lot: T): T {
+  return {
+    ...lot,
+    bankBsb: maskBsb(lot.bankBsb),
+    bankAccountNumber: maskAccountNumber(lot.bankAccountNumber),
+  };
+}
+
 export function payoutStatusForPreference(
   preference: ConsignmentPayoutPreference,
 ): ConsignmentLotPayoutStatus {

@@ -293,6 +293,18 @@ export async function ensurePrelovedDisabled(page: Page) {
   });
 }
 
+/** Put shared demo-academy back to donation-only after consignment gates. */
+export async function restoreDonationOnlyIntake(page: Page) {
+  const res = await page.request.patch(`/api/tenant/${TENANT}/preloved`, {
+    data: { intakeMode: "donation_only" },
+  });
+  if (!res.ok()) {
+    throw new Error(
+      `restore donation_only failed: ${res.status()} ${await res.text()}`,
+    );
+  }
+}
+
 export async function ensurePrelovedEnabled(
   page: Page,
 ): Promise<{ donatedGstFree: boolean }> {

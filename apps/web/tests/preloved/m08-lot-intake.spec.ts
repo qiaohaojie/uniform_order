@@ -16,6 +16,7 @@ import {
   ensurePrelovedEnabled,
   pinPooledSkuForTest,
   pooledRow,
+  restoreDonationOnlyIntake,
 } from "./helpers";
 
 const MIXED_GST_CONDITION = "fair" as const;
@@ -78,6 +79,8 @@ test.describe("Phase 2 consignment lot → intake / stock", () => {
       },
     });
     expect(enableRes.ok()).toBeTruthy();
+
+    try {
 
     const createRes = await page.request.post(
       `/api/tenant/${TENANT}/preloved/consign`,
@@ -186,6 +189,9 @@ test.describe("Phase 2 consignment lot → intake / stock", () => {
     await expect(page.getByTestId("intake-desk")).toBeVisible();
     await acceptSize10PoloGood(page);
     await expect(page.getByTestId("intake-success")).toContainText(/Donation pooled/i);
+    } finally {
+      await restoreDonationOnlyIntake(page);
+    }
   });
 
   test("refuse mixed GST on a pooled SKU; matching donation still accepts", async ({
@@ -243,7 +249,7 @@ test.describe("Phase 2 consignment lot → intake / stock", () => {
     } finally {
       const restore = await page.request.patch(`/api/tenant/${TENANT}/preloved`, {
         data: {
-          intakeMode: "donation_and_consignment",
+          intakeMode: "donation_only",
           donatedGstFree: false,
         },
       });
@@ -265,6 +271,8 @@ test.describe("Phase 2 consignment lot → intake / stock", () => {
       },
     });
     expect(enableRes.ok()).toBeTruthy();
+
+    try {
 
     const { ticket } = await createConsignmentLot(page, `stale-${Date.now()}`);
 
@@ -291,5 +299,8 @@ test.describe("Phase 2 consignment lot → intake / stock", () => {
     await page.getByTestId("intake-lot-retry").click();
     await expect(page.getByTestId("intake-lot-error")).toBeVisible();
     await expect(page.getByTestId("intake-accept")).toBeDisabled();
+    } finally {
+      await restoreDonationOnlyIntake(page);
+    }
   });
 });
