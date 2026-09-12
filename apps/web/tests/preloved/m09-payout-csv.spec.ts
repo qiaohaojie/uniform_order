@@ -25,6 +25,7 @@ import {
   forceChargesEnabled,
   loadLocalEnv,
   pinPooledSkuQty,
+  restoreDonationOnlyIntake,
 } from "./helpers";
 
 test("commission split is integer cents, not a display-only cut", () => {
@@ -217,6 +218,7 @@ test.describe("Phase 2 payout CSV / sold-line ledger", () => {
     });
     expect(enableRes.ok()).toBeTruthy();
 
+    try {
     const stamp = String(Date.now()).slice(-8);
     const { lotId, ticket } = await createEftLot(page, stamp);
 
@@ -247,10 +249,23 @@ test.describe("Phase 2 payout CSV / sold-line ledger", () => {
     const lotsBody = (await lotsRes.json()) as {
       lots?: Array<{
         id: string;
+        bankBsb?: string | null;
+        bankAccountName?: string | null;
+        bankAccountNumber?: string | null;
         acceptedUnits?: Array<{ skuId: string }>;
       }>;
     };
     const lot = lotsBody.lots?.find((row) => row.id === lotId);
+    expect(lot?.bankBsb).toBe("•••000");
+    expect(lot?.bankAccountName).toBe("Payout Family");
+    expect(lot?.bankAccountNumber).toBe("••••5678");
+    expect(JSON.stringify(lot)).not.toContain("062000");
+    expect(JSON.stringify(lot)).not.toContain("12345678");
+    await expect(lotRow.getByTestId("consignments-bank")).toContainText("•••000");
+    await expect(lotRow.getByTestId("consignments-bank")).toContainText("••••5678");
+    await expect(lotRow.getByTestId("consignments-bank")).not.toContainText(
+      "12345678",
+    );
     const skuId = lot?.acceptedUnits?.[0]?.skuId;
     expect(skuId).toBeTruthy();
 
@@ -303,6 +318,7 @@ test.describe("Phase 2 payout CSV / sold-line ledger", () => {
     expect(ticketLine).toBeTruthy();
     expect(ticketLine).toContain("EFT");
     expect(ticketLine).toContain("062000");
+    expect(ticketLine).toContain("12345678");
     expect(ticketLine).toContain(split.saleAud.toFixed(2));
     expect(ticketLine).toContain("5000");
     expect(ticketLine).toContain(split.commissionAud.toFixed(2));
@@ -315,6 +331,9 @@ test.describe("Phase 2 payout CSV / sold-line ledger", () => {
     expect(download.suggestedFilename()).toMatch(
       new RegExp(`^payout-${TENANT}-\\d{4}-\\d{2}-\\d{2}\\.csv$`),
     );
+    } finally {
+      await restoreDonationOnlyIntake(page);
+    }
   });
 
   test("export CSV surfaces an error state", async ({ page }) => {
@@ -328,6 +347,8 @@ test.describe("Phase 2 payout CSV / sold-line ledger", () => {
       },
     });
     expect(enableRes.ok()).toBeTruthy();
+
+    try {
 
     await page.route(`**/api/tenant/${TENANT}/preloved/payout.csv**`, (route) => {
       return route.fulfill({
@@ -345,5 +366,8 @@ test.describe("Phase 2 payout CSV / sold-line ledger", () => {
     await expect(page.getByTestId("consignments-export-error")).toContainText(
       "Ledger unavailable",
     );
+    } finally {
+      await restoreDonationOnlyIntake(page);
+    }
   });
 });
