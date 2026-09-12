@@ -18,6 +18,10 @@ function serializeLot(lot: ConsignmentLotListItem) {
     ...lot,
     createdAt: lot.createdAt.toISOString(),
     payoutMarkedAt: lot.payoutMarkedAt?.toISOString() ?? null,
+    acceptedUnits: lot.acceptedUnits.map((unit) => ({
+      ...unit,
+      createdAt: unit.createdAt.toISOString(),
+    })),
   };
 }
 

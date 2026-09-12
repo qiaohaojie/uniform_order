@@ -3,7 +3,7 @@ import { getTenant, toTenantBrand } from "@/db/queries";
 import { listInStockPrelovedSkus } from "@/db/preloved-queries";
 import { formatPrelovedCondition, type PrelovedStockListItem } from "@/lib/preloved";
 
-const COLUMNS = ["Item", "Size", "Condition", "Qty", "Price", "Expiry"] as const;
+const COLUMNS = ["Item", "Lot", "Size", "Condition", "Qty", "Price", "Expiry"] as const;
 
 export default async function AdminPrelovedStockPage({
   params,
@@ -89,6 +89,14 @@ function StockRow({
       <td className="py-3 px-4 font-medium" style={{ color: "var(--color-ink)" }}>
         {row.itemName}
       </td>
+      <td
+        className="py-3 px-4 tnum"
+        style={{ color: "var(--color-ink)" }}
+        data-testid="stock-lot-tickets"
+        data-lot-tickets={row.lotTickets.join(",")}
+      >
+        {row.lotTickets.length > 0 ? row.lotTickets.join(", ") : "—"}
+      </td>
       <td className="py-3 px-4" style={{ color: "var(--color-ink)" }}>
         {row.size}
       </td>
@@ -137,9 +145,9 @@ function EmptyStockState() {
         No preloved stock on the rack
       </h2>
       <p className="text-[13.5px] leading-[1.5] max-w-md" style={{ color: "var(--color-ink-dim)" }}>
-        Accepted donations pool here by item, size, and condition. Written-off
-        garments with quantity 0 are omitted. Use Intake to accept a washed
-        garment onto the rack.
+        Accepted donations and consigned garments pool here by item, size, and
+        condition. Linked tickets show in the Lot column. Written-off garments
+        with quantity 0 are omitted. Use Intake to accept a washed garment.
       </p>
     </div>
   );

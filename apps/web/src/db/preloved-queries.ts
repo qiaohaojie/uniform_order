@@ -3,11 +3,14 @@
  * Kept out of queries.ts so GST/report work in queries.ts does not clash.
  */
 import { cache } from "react";
-import { and, asc, desc, eq, gt, isNotNull, lt, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
   PRELOVED_INTAKE_SOURCE,
   PrelovedCatalogMatchError,
+  PrelovedConsignmentLotNotFoundError,
+  PrelovedConsignmentNotEnabledError,
   PrelovedExpiredStockError,
   PrelovedInsufficientQtyError,
   PrelovedWriteOffNotEligibleError,
@@ -39,8 +42,10 @@ import {
 } from "@/lib/preloved-donate";
 import {
   generateConsignmentTicketCode,
+  isConsignmentIntakeMode,
   isValidCommissionBps,
   payoutStatusForPreference,
+  type ConsignmentAcceptedUnit,
   type ConsignmentLotItemDraft,
   type ConsignmentLotListItem,
   type InsertConsignmentLotInput,
@@ -53,6 +58,7 @@ import { db } from "./index";
 import {
   catalogItems,
   catalogVariants,
+  consignmentItems,
   consignmentLots,
   prelovedDonationNotes,
   prelovedIntakeEvents,
@@ -304,7 +310,110 @@ function mapConsignmentLotRow(row: ConsignmentLotRow): ConsignmentLotListItem {
     payoutStatus: row.payoutStatus,
     payoutMarkedAt: row.payoutMarkedAt,
     createdAt: row.createdAt,
+    acceptedUnits: [],
+    acceptedQty: 0,
   };
+}
+
+export async function getConsignmentLot(
+  tenantId: string,
+  lotId: string,
+): Promise<ConsignmentLotRow | null> {
+  const [row] = await db
+    .select()
+    .from(consignmentLots)
+    .where(
+      and(eq(consignmentLots.id, lotId), eq(consignmentLots.tenantId, tenantId)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function attachAcceptedUnits(
+  tenantId: string,
+  lots: ConsignmentLotListItem[],
+): Promise<ConsignmentLotListItem[]> {
+  if (lots.length === 0) return lots;
+  const lotIds = lots.map((lot) => lot.id);
+  const rows = await db
+    .select({
+      id: consignmentItems.id,
+      lotId: consignmentItems.lotId,
+      skuId: consignmentItems.prelovedSkuId,
+      itemName: catalogItems.name,
+      size: consignmentItems.size,
+      condition: consignmentItems.condition,
+      qty: consignmentItems.qty,
+      createdAt: consignmentItems.createdAt,
+    })
+    .from(consignmentItems)
+    .innerJoin(catalogItems, eq(catalogItems.id, consignmentItems.sourceItemId))
+    .where(
+      and(
+        eq(consignmentItems.tenantId, tenantId),
+        inArray(consignmentItems.lotId, lotIds),
+      ),
+    )
+    .orderBy(desc(consignmentItems.createdAt));
+
+  const byLot = new Map<string, ConsignmentAcceptedUnit[]>();
+  for (const row of rows) {
+    const unit: ConsignmentAcceptedUnit = {
+      id: row.id,
+      skuId: row.skuId,
+      itemName: row.itemName,
+      size: row.size,
+      condition: row.condition,
+      qty: row.qty,
+      createdAt: row.createdAt,
+    };
+    const list = byLot.get(row.lotId) ?? [];
+    list.push(unit);
+    byLot.set(row.lotId, list);
+  }
+
+  return lots.map((lot) => {
+    const acceptedUnits = byLot.get(lot.id) ?? [];
+    return {
+      ...lot,
+      acceptedUnits,
+      acceptedQty: acceptedUnits.reduce((sum, unit) => sum + unit.qty, 0),
+    };
+  });
+}
+
+async function attachLotTickets(
+  tenantId: string,
+  items: PrelovedStockListItem[],
+): Promise<PrelovedStockListItem[]> {
+  if (items.length === 0) return items;
+  const skuIds = items.map((item) => item.id);
+  const rows = await db
+    .select({
+      skuId: consignmentItems.prelovedSkuId,
+      ticketCode: consignmentLots.ticketCode,
+    })
+    .from(consignmentItems)
+    .innerJoin(consignmentLots, eq(consignmentLots.id, consignmentItems.lotId))
+    .where(
+      and(
+        eq(consignmentItems.tenantId, tenantId),
+        inArray(consignmentItems.prelovedSkuId, skuIds),
+      ),
+    )
+    .orderBy(asc(consignmentLots.ticketCode));
+
+  const bySku = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = bySku.get(row.skuId) ?? [];
+    if (!list.includes(row.ticketCode)) list.push(row.ticketCode);
+    bySku.set(row.skuId, list);
+  }
+
+  return items.map((item) => ({
+    ...item,
+    lotTickets: bySku.get(item.id) ?? [],
+  }));
 }
 
 /** Create a consignment lot with a unique ticket code (retry on collision). */
@@ -356,7 +465,7 @@ export async function listConsignmentLots(
     .where(eq(consignmentLots.tenantId, tenantId))
     .orderBy(desc(consignmentLots.createdAt))
     .limit(CONSIGNMENT_LOT_LIST_LIMIT);
-  return rows.map(mapConsignmentLotRow);
+  return attachAcceptedUnits(tenantId, rows.map(mapConsignmentLotRow));
 }
 
 export type MarkConsignmentLotPayoutResult =
@@ -389,10 +498,13 @@ export async function markConsignmentLotPayout(opts: {
     return { ok: false, reason: "not_found" };
   }
   if (existing.payoutStatus !== "pending") {
+    const [lot] = await attachAcceptedUnits(opts.tenantId, [
+      mapConsignmentLotRow(existing),
+    ]);
     return {
       ok: false,
       reason: "already_marked",
-      lot: mapConsignmentLotRow(existing),
+      lot,
     };
   }
 
@@ -415,14 +527,20 @@ export async function markConsignmentLotPayout(opts: {
     if (!current) {
       return { ok: false, reason: "not_found" };
     }
+    const [lot] = await attachAcceptedUnits(opts.tenantId, [
+      mapConsignmentLotRow(current),
+    ]);
     return {
       ok: false,
       reason: "already_marked",
-      lot: mapConsignmentLotRow(current),
+      lot,
     };
   }
 
-  return { ok: true, lot: mapConsignmentLotRow(row) };
+  const [lot] = await attachAcceptedUnits(opts.tenantId, [
+    mapConsignmentLotRow(row),
+  ]);
+  return { ok: true, lot };
 }
 
 function variantHasSize(sizes: unknown, size: string): boolean {
@@ -471,6 +589,7 @@ function mapStockListItem(row: {
     listedAt: row.listedAt,
     expiresAt: row.expiresAt,
     defectNote: row.defectNote,
+    lotTickets: [],
   };
 }
 
@@ -480,6 +599,7 @@ export type AcceptAndPoolResult = {
   defaultPrice: number;
   appliedPrice: number;
   priceAboveCap: boolean;
+  lot: { id: string; ticketCode: string } | null;
 };
 
 /** True when ON CONFLICT may increment (restock qty 0, or not yet expired). */
@@ -488,14 +608,15 @@ function canAcceptOntoSku(listedAt: Date) {
 }
 
 /**
- * Pool one donated garment onto the (tenant, item, size, condition) SKU.
+ * Pool one garment onto the (tenant, item, size, condition) SKU.
  * ON CONFLICT increments qty_on_hand on the existing row (same id).
- * Restock after qty 0 restarts listedAt/expiresAt, recopies donatedGstFree,
- * and applies the new price (and defectNote when sent). Pooling onto in-stock
- * qty only increments qty_on_hand.
+ * Restock after qty 0 restarts listedAt/expiresAt, recopies donatedGstFree
+ * (or taxable when the unit is consigned), and applies the new price (and
+ * defectNote when sent). Pooling onto in-stock qty only increments qty_on_hand.
  * Accept onto expired in-stock qty is refused until write-off (qty 0).
- * SKU upsert and accepted event insert run in one db.batch so a failed event
- * cannot leave a qty increment that a client retry would apply again.
+ * A consignment lot writes source=consignment plus a consignment_items row so
+ * later sold-line remittance can attribute the unit. SKU upsert, accepted
+ * event, and optional item insert run in one db.batch.
  * The event is INSERT … SELECT of the eligible unique-key row because batch
  * queries are composed before INSERT … RETURNING is available, and a VALUES
  * insert would still write an event when the conflict WHERE no-ops.
@@ -504,6 +625,17 @@ export async function acceptAndPool(
   input: AcceptAndPoolInput,
 ): Promise<AcceptAndPoolResult> {
   const settings = await getPrelovedSettings(input.tenantId);
+  const lotId = input.consignmentLotId?.trim() || null;
+  let lot: ConsignmentLotRow | null = null;
+  if (lotId) {
+    if (!isConsignmentIntakeMode(settings.intakeMode)) {
+      throw new PrelovedConsignmentNotEnabledError();
+    }
+    lot = await getConsignmentLot(input.tenantId, lotId);
+    if (!lot) {
+      throw new PrelovedConsignmentLotNotFoundError();
+    }
+  }
 
   const catalogRows = await db
     .select({
@@ -553,7 +685,7 @@ export async function acceptAndPool(
   } = {
     qtyOnHand: sql`${prelovedSkus.qtyOnHand} + 1`,
     price: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${priceSql}::numeric ELSE ${prelovedSkus.price} END`,
-    gstFree: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${settings.donatedGstFree} ELSE ${prelovedSkus.gstFree} END`,
+    gstFree: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${lot ? false : settings.donatedGstFree} ELSE ${prelovedSkus.gstFree} END`,
     listedAt: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${listedAt} ELSE ${prelovedSkus.listedAt} END`,
     expiresAt: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${expiresAt} ELSE ${prelovedSkus.expiresAt} END`,
   };
@@ -570,7 +702,7 @@ export async function acceptAndPool(
       condition: input.condition,
       price: priceSql,
       qtyOnHand: 1,
-      gstFree: settings.donatedGstFree,
+      gstFree: lot ? false : settings.donatedGstFree,
       active: true,
       defectNote: input.defectNote ?? null,
       listedAt,
@@ -590,20 +722,32 @@ export async function acceptAndPool(
     })
     .returning();
 
+  const eventId = randomUUID();
+  const sourceSql = lot
+    ? sql`'consignment'::preloved_intake_source`
+    : sql`${PRELOVED_INTAKE_SOURCE}::preloved_intake_source`;
+  const lotIdSql = lot ? sql`${lot.id}::uuid` : sql`null::uuid`;
+  const eligibleSku = and(
+    eq(prelovedSkus.tenantId, input.tenantId),
+    eq(prelovedSkus.sourceItemId, input.sourceItemId),
+    eq(prelovedSkus.size, input.size),
+    eq(prelovedSkus.condition, input.condition),
+    canAcceptOntoSku(listedAt),
+  );
+
   const eventInsert = db
     .insert(prelovedIntakeEvents)
     .select(
       db
         .select({
-          id: sql`gen_random_uuid()`.as("id"),
+          id: sql`${eventId}::uuid`.as("id"),
           tenantId: prelovedSkus.tenantId,
           prelovedSkuId: prelovedSkus.id,
           sourceItemId: prelovedSkus.sourceItemId,
           size: prelovedSkus.size,
           condition: prelovedSkus.condition,
-          source: sql<typeof PRELOVED_INTAKE_SOURCE>`${PRELOVED_INTAKE_SOURCE}::preloved_intake_source`.as(
-            "source",
-          ),
+          source: sourceSql.as("source"),
+          consignmentLotId: lotIdSql.as("consignmentLotId"),
           action: sql<"accepted">`'accepted'::preloved_intake_action`.as(
             "action",
           ),
@@ -615,19 +759,37 @@ export async function acceptAndPool(
           createdAt: sql`now()`.as("createdAt"),
         })
         .from(prelovedSkus)
-        .where(
-          and(
-            eq(prelovedSkus.tenantId, input.tenantId),
-            eq(prelovedSkus.sourceItemId, input.sourceItemId),
-            eq(prelovedSkus.size, input.size),
-            eq(prelovedSkus.condition, input.condition),
-            canAcceptOntoSku(listedAt),
-          ),
-        ),
+        .where(eligibleSku),
     )
     .returning();
 
-  const [skuRows, eventRows] = await db.batch([skuUpsert, eventInsert]);
+  const itemInsert = lot
+    ? db
+        .insert(consignmentItems)
+        .select(
+          db
+            .select({
+              id: sql`${randomUUID()}::uuid`.as("id"),
+              tenantId: prelovedSkus.tenantId,
+              lotId: sql`${lot.id}::uuid`.as("lotId"),
+              prelovedSkuId: prelovedSkus.id,
+              intakeEventId: sql`${eventId}::uuid`.as("intakeEventId"),
+              sourceItemId: prelovedSkus.sourceItemId,
+              size: prelovedSkus.size,
+              condition: prelovedSkus.condition,
+              qty: sql<number>`1::int`.as("qty"),
+              soldOrderLineId: sql`null::uuid`.as("soldOrderLineId"),
+              createdAt: sql`now()`.as("createdAt"),
+            })
+            .from(prelovedSkus)
+            .where(eligibleSku),
+        )
+        .returning()
+    : null;
+
+  const [skuRows, eventRows, itemRows] = itemInsert
+    ? await db.batch([skuUpsert, eventInsert, itemInsert])
+    : [...(await db.batch([skuUpsert, eventInsert])), undefined];
   const sku = skuRows[0];
   const event = eventRows[0];
 
@@ -637,8 +799,18 @@ export async function acceptAndPool(
   if (!event) {
     throw new Error("Failed to record preloved intake event");
   }
+  if (lot && (!itemRows || !itemRows[0])) {
+    throw new Error("Failed to attribute consignment intake to the lot");
+  }
 
-  return { sku, event, defaultPrice, appliedPrice, priceAboveCap };
+  return {
+    sku,
+    event,
+    defaultPrice,
+    appliedPrice,
+    priceAboveCap,
+    lot: lot ? { id: lot.id, ticketCode: lot.ticketCode } : null,
+  };
 }
 
 export async function rejectPrelovedIntake(
@@ -750,7 +922,7 @@ export async function listInStockPrelovedSkus(
       and(eq(prelovedSkus.tenantId, tenantId), gt(prelovedSkus.qtyOnHand, 0)),
     )
     .orderBy(desc(prelovedSkus.listedAt));
-  return rows.map(mapStockListItem);
+  return attachLotTickets(tenantId, rows.map(mapStockListItem));
 }
 
 const shopSkuSelect = {
@@ -853,7 +1025,7 @@ export async function listExpiredPrelovedSkus(
       ),
     )
     .orderBy(asc(prelovedSkus.expiresAt));
-  return rows.map(mapStockListItem);
+  return attachLotTickets(tenantId, rows.map(mapStockListItem));
 }
 
 export type DecrementPrelovedLine = {

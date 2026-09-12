@@ -53,6 +53,16 @@ export type InsertConsignmentLotInput = {
   items: ConsignmentLotItemDraft[];
 };
 
+export type ConsignmentAcceptedUnit = {
+  id: string;
+  skuId: string;
+  itemName: string;
+  size: string;
+  condition: "good" | "fair";
+  qty: number;
+  createdAt: Date;
+};
+
 export type ConsignmentLotListItem = {
   id: string;
   ticketCode: string;
@@ -69,6 +79,8 @@ export type ConsignmentLotListItem = {
   payoutStatus: ConsignmentLotPayoutStatus;
   payoutMarkedAt: Date | null;
   createdAt: Date;
+  acceptedUnits: ConsignmentAcceptedUnit[];
+  acceptedQty: number;
 };
 
 export function isConsignmentIntakeMode(mode: string): boolean {

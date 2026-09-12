@@ -29,8 +29,10 @@ export function formatPrelovedCondition(condition: PrelovedCondition): string {
 export const PRELOVED_INTAKE_KINDS = ["accepted", "rejected", "written_off"] as const;
 export type PrelovedIntakeKind = (typeof PRELOVED_INTAKE_KINDS)[number];
 
+export const PRELOVED_INTAKE_SOURCES = ["donation", "consignment"] as const;
+export type PrelovedIntakeSource = (typeof PRELOVED_INTAKE_SOURCES)[number];
+/** @deprecated Prefer PRELOVED_INTAKE_SOURCES[0]; donation remains the default source. */
 export const PRELOVED_INTAKE_SOURCE = "donation" as const;
-export type PrelovedIntakeSource = typeof PRELOVED_INTAKE_SOURCE;
 
 export const DEFAULT_REFUSE_LIST = ["socks", "swimwear", "hats"] as const;
 
@@ -69,6 +71,8 @@ export type AcceptAndPoolInput = {
   price?: number;
   defectNote?: string | null;
   actorId?: string | null;
+  /** When set, accept is attributed to this tenant consignment lot. */
+  consignmentLotId?: string | null;
 };
 
 export type RejectPrelovedIntakeInput = {
@@ -97,6 +101,8 @@ export type PrelovedStockListItem = {
   listedAt: Date;
   expiresAt: Date | null;
   defectNote: string | null;
+  /** Distinct consignment tickets that contributed units to this pooled SKU. */
+  lotTickets: string[];
 };
 
 /** Parent-shop DTO for an in-stock preloved SKU. imageUrl is the SKU photo or null. */
@@ -191,6 +197,26 @@ export class PrelovedCatalogMatchError extends Error {
   constructor(message = "No active catalog item with that size for this tenant.") {
     super(message);
     this.name = "PrelovedCatalogMatchError";
+  }
+}
+
+export class PrelovedConsignmentNotEnabledError extends Error {
+  readonly code = "consignment_not_enabled";
+
+  constructor(
+    message = "Turn on donation + consignment in Settings before linking a lot.",
+  ) {
+    super(message);
+    this.name = "PrelovedConsignmentNotEnabledError";
+  }
+}
+
+export class PrelovedConsignmentLotNotFoundError extends Error {
+  readonly code = "consignment_lot_not_found";
+
+  constructor(message = "That consignment lot was not found for this school.") {
+    super(message);
+    this.name = "PrelovedConsignmentLotNotFoundError";
   }
 }
 

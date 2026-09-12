@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Description,
@@ -10,6 +10,7 @@ import {
   Radio,
   RadioGroup,
   Select,
+  Spinner,
   TextArea,
   TextField,
 } from "@heroui/react";
@@ -42,6 +43,15 @@ type IntakeSuccess = {
   kind: "accepted" | "rejected";
   message: string;
 };
+
+type IntakeLotOption = {
+  id: string;
+  ticketCode: string;
+  familyName: string;
+  studentName: string;
+};
+
+const DONATION_SOURCE = "donation";
 
 function asKey(value: Key | Key[] | null): string {
   if (typeof value === "string" || typeof value === "number") return String(value);
@@ -110,6 +120,55 @@ export function IntakeClient({
   const [pending, setPending] = useState<"accepted" | "rejected" | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<IntakeSuccess | null>(null);
+  const [sourceKey, setSourceKey] = useState(DONATION_SOURCE);
+  const [lots, setLots] = useState<IntakeLotOption[] | null>(null);
+  const [lotsLoading, setLotsLoading] = useState(false);
+  const [lotsError, setLotsError] = useState("");
+
+  const consignmentDesk = isConsignmentIntakeMode(intakeMode);
+
+  const loadLots = useCallback(async () => {
+    if (!isConsignmentIntakeMode(intakeMode)) {
+      setLots([]);
+      setLotsError("");
+      setLotsLoading(false);
+      return;
+    }
+    setLotsLoading(true);
+    setLotsError("");
+    try {
+      const res = await fetch(`/api/tenant/${tenantId}/preloved/consignment-lots`);
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+        lots?: IntakeLotOption[];
+      } | null;
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Failed to load consignment lots.");
+      }
+      setLots(
+        Array.isArray(data?.lots)
+          ? data.lots.map((lot) => ({
+              id: lot.id,
+              ticketCode: lot.ticketCode,
+              familyName: lot.familyName,
+              studentName: lot.studentName,
+            }))
+          : [],
+      );
+    } catch (err) {
+      console.error("Intake lots load failed:", err);
+      setLots(null);
+      setLotsError(
+        err instanceof Error ? err.message : "Failed to load consignment lots.",
+      );
+    } finally {
+      setLotsLoading(false);
+    }
+  }, [intakeMode, tenantId]);
+
+  useEffect(() => {
+    void loadLots();
+  }, [loadLots]);
 
   const selectedItem = catalog.find((item) => item.id === itemId);
   const sizeOptions = sizesForItem(selectedItem);
@@ -189,6 +248,10 @@ export function IntakeClient({
     setSuccess(null);
     try {
       const note = defectNote.trim();
+      const selectedLot =
+        sourceKey !== DONATION_SOURCE
+          ? lots?.find((lot) => lot.id === sourceKey)
+          : undefined;
       const data = await postIntake({
         action: "accepted",
         sourceItemId: itemId,
@@ -196,12 +259,16 @@ export function IntakeClient({
         condition,
         price: appliedPrice,
         ...(note.length > 0 ? { defectNote: note } : {}),
+        ...(selectedLot ? { consignmentLotId: selectedLot.id } : {}),
       });
       const qty = data?.sku?.qtyOnHand;
       const qtyBit = typeof qty === "number" ? ` Qty on hand is now ${qty}.` : "";
+      const sourceBit = selectedLot
+        ? ` Linked to ${selectedLot.ticketCode}.`
+        : " Donation pooled on the rack.";
       setSuccess({
         kind: "accepted",
-        message: `Accepted ${selectedItem?.name ?? "item"} size ${size} (${formatPrelovedCondition(condition)}). Donation pooled on the rack.${qtyBit}`,
+        message: `Accepted ${selectedItem?.name ?? "item"} size ${size} (${formatPrelovedCondition(condition)}).${sourceBit}${qtyBit}`,
       });
       setDefectNote("");
     } catch (err) {
@@ -246,9 +313,11 @@ export function IntakeClient({
   return (
     <div className="flex-1 overflow-y-auto p-7" data-testid="intake-desk">
       <p className="text-[13px] mb-4 max-w-2xl" style={{ color: "var(--color-ink-dim)" }}>
-        Inspect a washed current-uniform donation. Match the new catalogue item
-        and size, set Good or Fair, then accept onto the pooled rack. Source is
-        donation only.
+        Inspect a washed current-uniform garment. Match the new catalogue item
+        and size, set Good or Fair, then accept onto the pooled rack.
+        {consignmentDesk
+          ? " Link a consignment ticket so sold units can be attributed to that lot."
+          : " Source is donation only."}
       </p>
 
       {error ? (
@@ -352,15 +421,25 @@ export function IntakeClient({
               ))}
             </RadioGroup>
 
-            <TextField isReadOnly name="source" value="Donation">
-              <Label>Source</Label>
-              <Input />
-              <Description>
-                {isConsignmentIntakeMode(intakeMode)
-                  ? "This desk still accepts donations into the pooled rack. Link garments to a consignment lot ticket in a later slice."
-                  : "Donation only. Turn on donation + consignment in Settings to open the consign form."}
-              </Description>
-            </TextField>
+            {consignmentDesk ? (
+              <IntakeLotField
+                sourceKey={sourceKey}
+                lots={lots}
+                loading={lotsLoading}
+                error={lotsError}
+                onChange={setSourceKey}
+                onRetry={() => void loadLots()}
+              />
+            ) : (
+              <TextField isReadOnly name="source" value="Donation">
+                <Label>Source</Label>
+                <Input />
+                <Description>
+                  Donation only. Turn on donation + consignment in Settings to
+                  open the consign form and link tickets here.
+                </Description>
+              </TextField>
+            )}
 
             <TextField
               name="price"
@@ -458,6 +537,112 @@ export function IntakeClient({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function IntakeLotField({
+  sourceKey,
+  lots,
+  loading,
+  error,
+  onChange,
+  onRetry,
+}: {
+  sourceKey: string;
+  lots: IntakeLotOption[] | null;
+  loading: boolean;
+  error: string;
+  onChange: (value: string) => void;
+  onRetry: () => void;
+}) {
+  const options = lots ?? [];
+
+  return (
+    <div className="md:col-span-2" data-testid="intake-lot-field">
+      {loading ? (
+        <div
+          className="flex items-center gap-2 mb-2 text-[12.5px]"
+          style={{ color: "var(--color-ink-dim)" }}
+          data-testid="intake-lot-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Spinner size="sm" color="current" className="text-[var(--color-gold)]" />
+          Loading consignment lots…
+        </div>
+      ) : null}
+
+      {error ? (
+        <div
+          className="mb-2 text-[12.5px] px-3 py-2 rounded"
+          style={{ background: "#FEF2F2", color: "#B91C1C" }}
+          role="alert"
+          data-testid="intake-lot-error"
+        >
+          <p>{error}</p>
+          <button
+            type="button"
+            className="mt-1 underline font-semibold"
+            onClick={onRetry}
+            data-testid="intake-lot-retry"
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+
+      {!loading && !error && options.length === 0 ? (
+        <p
+          className="mb-2 text-[12.5px]"
+          style={{ color: "var(--color-ink-dim)" }}
+          data-testid="intake-lot-empty"
+        >
+          No consignment lots yet. Parents submit the consign form first. You
+          can still accept this garment as a donation.
+        </p>
+      ) : null}
+
+      <Select
+        fullWidth
+        name="consignmentLotId"
+        placeholder="Donation (pooled rack)"
+        value={sourceKey}
+        onChange={(value) => onChange(asKey(value) || DONATION_SOURCE)}
+        data-testid="intake-lot"
+      >
+        <Label>Source lot</Label>
+        <Select.Trigger>
+          <Select.Value />
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            <ListBox.Item
+              id={DONATION_SOURCE}
+              textValue="Donation (pooled rack)"
+            >
+              Donation (pooled rack)
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+            {options.map((lot) => (
+              <ListBox.Item
+                key={lot.id}
+                id={lot.id}
+                textValue={`${lot.ticketCode} ${lot.familyName} ${lot.studentName}`}
+              >
+                {lot.ticketCode} — {lot.familyName} / {lot.studentName}
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            ))}
+          </ListBox>
+        </Select.Popover>
+        <Description>
+          Consigned garments still pool on the rack by item, size, and
+          condition. The ticket is stored so a later payout CSV can attribute
+          sold units.
+        </Description>
+      </Select>
     </div>
   );
 }
