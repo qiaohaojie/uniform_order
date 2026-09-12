@@ -62,5 +62,67 @@ test.describe("Phase 2 consignment / school-fee credit", () => {
     await expect(row.getByTestId("consignments-status")).toContainText(
       /School-fee credited/i,
     );
+
+    const lotId = await row.getAttribute("data-lot-id");
+    expect(lotId).toBeTruthy();
+
+    const remakeRes = await page.request.patch(
+      `/api/tenant/${TENANT}/preloved/consignment-lots/${lotId}`,
+      { data: { payoutStatus: "eft_paid" } },
+    );
+    expect(remakeRes.status()).toBe(409);
+    const remakeBody = (await remakeRes.json()) as {
+      code?: string;
+      lot?: { payoutStatus?: string; payoutMarkedAt?: string | null };
+    };
+    expect(remakeBody.code).toBe("already_marked");
+    expect(remakeBody.lot?.payoutStatus).toBe("school_fee_credited");
+    const markedAt = remakeBody.lot?.payoutMarkedAt;
+    expect(markedAt).toBeTruthy();
+
+    const remakeAgain = await page.request.patch(
+      `/api/tenant/${TENANT}/preloved/consignment-lots/${lotId}`,
+      { data: { payoutStatus: "donated_proceeds" } },
+    );
+    expect(remakeAgain.status()).toBe(409);
+    const remakeAgainBody = (await remakeAgain.json()) as {
+      lot?: { payoutStatus?: string; payoutMarkedAt?: string | null };
+    };
+    expect(remakeAgainBody.lot?.payoutStatus).toBe("school_fee_credited");
+    expect(remakeAgainBody.lot?.payoutMarkedAt).toBe(markedAt);
+    await expect(row).toHaveAttribute("data-payout-status", "school_fee_credited");
+
+    const createRes = await page.request.post(
+      `/api/tenant/${TENANT}/preloved/consign`,
+      {
+        data: {
+          familyName: "Derived",
+          studentName: "Status",
+          email: "derived@example.com",
+          mobile: "0400000001",
+          payoutPreference: "school_fee_credit",
+          unsoldPreference: "donate",
+          items: [{ garment: "Sports shorts", size: "12" }],
+          termsAccepted: true,
+        },
+      },
+    );
+    expect(createRes.ok()).toBeTruthy();
+    const created = (await createRes.json()) as {
+      ticketCode?: string;
+      id?: string;
+    };
+    expect(created.ticketCode).toMatch(/^CL-[A-Z0-9]{6}$/);
+    expect(created.id).toBeTruthy();
+
+    const deriveRes = await page.request.patch(
+      `/api/tenant/${TENANT}/preloved/consignment-lots/${created.id}`,
+      { data: { payoutStatus: "eft_paid" } },
+    );
+    expect(deriveRes.ok()).toBeTruthy();
+    const deriveBody = (await deriveRes.json()) as {
+      lot?: { payoutStatus?: string };
+    };
+    expect(deriveBody.lot?.payoutStatus).toBe("school_fee_credited");
   });
 });

@@ -40,9 +40,9 @@ import {
 import {
   generateConsignmentTicketCode,
   isValidCommissionBps,
+  payoutStatusForPreference,
   type ConsignmentLotItemDraft,
   type ConsignmentLotListItem,
-  type ConsignmentLotPayoutStatus,
   type InsertConsignmentLotInput,
 } from "@/lib/preloved-consignment";
 import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
@@ -359,28 +359,70 @@ export async function listConsignmentLots(
   return rows.map(mapConsignmentLotRow);
 }
 
+export type MarkConsignmentLotPayoutResult =
+  | { ok: true; lot: ConsignmentLotListItem }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "already_marked"; lot: ConsignmentLotListItem };
+
+/**
+ * Mark a pending lot. Status is derived from payoutPreference.
+ * Completed marks are not overwritten (409 already_marked).
+ */
 export async function markConsignmentLotPayout(opts: {
   tenantId: string;
   lotId: string;
-  payoutStatus: ConsignmentLotPayoutStatus;
   actorId?: string | null;
-}): Promise<ConsignmentLotListItem | null> {
+}): Promise<MarkConsignmentLotPayoutResult> {
   const actorId = parseActorId(opts.actorId);
+  const lotWhere = and(
+    eq(consignmentLots.id, opts.lotId),
+    eq(consignmentLots.tenantId, opts.tenantId),
+  );
+
+  const [existing] = await db
+    .select()
+    .from(consignmentLots)
+    .where(lotWhere)
+    .limit(1);
+
+  if (!existing) {
+    return { ok: false, reason: "not_found" };
+  }
+  if (existing.payoutStatus !== "pending") {
+    return {
+      ok: false,
+      reason: "already_marked",
+      lot: mapConsignmentLotRow(existing),
+    };
+  }
+
   const [row] = await db
     .update(consignmentLots)
     .set({
-      payoutStatus: opts.payoutStatus,
+      payoutStatus: payoutStatusForPreference(existing.payoutPreference),
       payoutMarkedAt: new Date(),
       payoutMarkedBy: actorId,
     })
-    .where(
-      and(
-        eq(consignmentLots.id, opts.lotId),
-        eq(consignmentLots.tenantId, opts.tenantId),
-      ),
-    )
+    .where(and(lotWhere, eq(consignmentLots.payoutStatus, "pending")))
     .returning();
-  return row ? mapConsignmentLotRow(row) : null;
+
+  if (!row) {
+    const [current] = await db
+      .select()
+      .from(consignmentLots)
+      .where(lotWhere)
+      .limit(1);
+    if (!current) {
+      return { ok: false, reason: "not_found" };
+    }
+    return {
+      ok: false,
+      reason: "already_marked",
+      lot: mapConsignmentLotRow(current),
+    };
+  }
+
+  return { ok: true, lot: mapConsignmentLotRow(row) };
 }
 
 function variantHasSize(sizes: unknown, size: string): boolean {

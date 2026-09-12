@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { getTenant } from "@/db/queries";
 import {
   getPrelovedSettings,
@@ -10,25 +9,22 @@ import {
   requireSessionUser,
 } from "@/lib/auth/authorization";
 import {
-  CONSIGNMENT_LOT_PAYOUT_STATUSES,
   isConsignmentIntakeMode,
+  type ConsignmentLotListItem,
 } from "@/lib/preloved-consignment";
 
-const MarkSchema = z
-  .object({
-    payoutStatus: z.enum(
-      CONSIGNMENT_LOT_PAYOUT_STATUSES.filter((s) => s !== "pending") as [
-        "school_fee_credited",
-        "eft_paid",
-        "donated_proceeds",
-      ],
-    ),
-  })
-  .strict();
+function serializeLot(lot: ConsignmentLotListItem) {
+  return {
+    ...lot,
+    createdAt: lot.createdAt.toISOString(),
+    payoutMarkedAt: lot.payoutMarkedAt?.toISOString() ?? null,
+  };
+}
 
 // PATCH /api/tenant/:tenantId/preloved/consignment-lots/:lotId — manual payout mark.
+// Status is derived from the lot payout preference. Client body is ignored.
 export async function PATCH(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ tenantId: string; lotId: string }> },
 ) {
   const { tenantId, lotId } = await params;
@@ -51,38 +47,28 @@ export async function PATCH(
       );
     }
 
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-
-    const parsed = MarkSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid payout mark", issues: parsed.error.flatten() },
-        { status: 400 },
-      );
-    }
-
-    const lot = await markConsignmentLotPayout({
+    const result = await markConsignmentLotPayout({
       tenantId,
       lotId,
-      payoutStatus: parsed.data.payoutStatus,
       actorId: authResult.user.id,
     });
-    if (!lot) {
+    if (!result.ok && result.reason === "not_found") {
       return NextResponse.json({ error: "Lot not found" }, { status: 404 });
+    }
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: "Lot payout already marked",
+          code: "already_marked",
+          lot: serializeLot(result.lot),
+        },
+        { status: 409 },
+      );
     }
 
     return NextResponse.json({
       ok: true,
-      lot: {
-        ...lot,
-        createdAt: lot.createdAt.toISOString(),
-        payoutMarkedAt: lot.payoutMarkedAt?.toISOString() ?? null,
-      },
+      lot: serializeLot(result.lot),
     });
   } catch (err) {
     console.error(
