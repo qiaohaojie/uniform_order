@@ -4,6 +4,10 @@
  * Auth uses GET /api/dev/login (NODE_ENV=development). Operator email must
  * match the tenant shop email (seed default below).
  */
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { neon } from "@neondatabase/serverless";
+import Stripe from "stripe";
 import { expect, type Locator, type Page } from "playwright/test";
 
 export const TENANT = process.env.PRELOVED_TENANT ?? "imhs";
@@ -13,6 +17,95 @@ export const ITEM_ID = process.env.PRELOVED_ITEM_ID ?? "polo";
 export const ITEM_NAME = process.env.PRELOVED_ITEM_NAME ?? "Sports Polo Shirt";
 export const SIZE = process.env.PRELOVED_SIZE ?? "10";
 export const CONDITION = "good";
+
+/** Load apps/web/.env.local (or repo-root .env.local) into process.env once. */
+export function loadLocalEnv() {
+  for (const candidate of [
+    resolve(process.cwd(), ".env.local"),
+    resolve(process.cwd(), "../.env.local"),
+    resolve(process.cwd(), "../../.env.local"),
+  ]) {
+    if (!existsSync(candidate)) continue;
+    for (const raw of readFileSync(candidate, "utf8").split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const i = line.indexOf("=");
+      if (i < 1) continue;
+      const k = line.slice(0, i).replace(/^export\s+/, "");
+      let v = line.slice(i + 1);
+      if (
+        (v.startsWith('"') && v.endsWith('"')) ||
+        (v.startsWith("'") && v.endsWith("'"))
+      ) {
+        v = v.slice(1, -1);
+      }
+      if (!(k in process.env)) process.env[k] = v;
+    }
+    return;
+  }
+}
+
+/** Seed/Connect webhooks can flip stripe_charges_enabled false. Pin it true before PI mint. */
+export async function forceChargesEnabled(tenantId: string = TENANT) {
+  loadLocalEnv();
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL missing for forceChargesEnabled");
+  const sql = neon(url);
+  await sql`update tenants set stripe_charges_enabled = true where id = ${tenantId}`;
+}
+
+export async function confirmVisaPayment(paymentIntentId: string) {
+  loadLocalEnv();
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY missing");
+  const stripe = new Stripe(key);
+  const pi = await stripe.paymentIntents.confirm(paymentIntentId, {
+    payment_method: "pm_card_visa",
+    return_url: `http://127.0.0.1:3000/${TENANT}/order/placed`,
+  });
+  if (pi.status !== "succeeded") {
+    throw new Error(`expected succeeded PaymentIntent, got ${pi.status}`);
+  }
+}
+
+/** Pin qty_on_hand for the pooled size/condition SKU (race fixtures). */
+export async function pinPooledSkuQty(qty: number): Promise<{
+  skuId: string;
+  unitPrice: number;
+  sourceItemId: string;
+}> {
+  if (!Number.isInteger(qty) || qty < 0) {
+    throw new Error(`pinPooledSkuQty expects non-negative integer, got ${qty}`);
+  }
+  loadLocalEnv();
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL missing for pinPooledSkuQty");
+  const sql = neon(url);
+  const rows = await sql`
+    update preloved_skus
+    set qty_on_hand = ${qty}
+    where tenant_id = ${TENANT}
+      and source_item_id = ${ITEM_ID}
+      and size = ${SIZE}
+      and condition = ${CONDITION}
+    returning id, price, source_item_id
+  `;
+  if (rows.length === 0) {
+    throw new Error(
+      `No preloved SKU for ${TENANT}/${ITEM_ID} size ${SIZE} ${CONDITION}; intake one first.`,
+    );
+  }
+  const row = rows[0] as {
+    id: string;
+    price: string | number;
+    source_item_id: string;
+  };
+  return {
+    skuId: row.id,
+    unitPrice: Number(row.price),
+    sourceItemId: row.source_item_id,
+  };
+}
 
 export function pooledRow(page: Page) {
   return page.locator(
