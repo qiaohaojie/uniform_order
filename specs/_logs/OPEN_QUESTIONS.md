@@ -20,8 +20,8 @@
 - [ ] **(plan)** Hats on the default refuse list not separately confirmed — raised: 2026-09-06, by: plan
       context: Spec default refuse list includes hats (Tara/CCGS). Some primary shops sell hats. Non-blocking; tenant can edit the list. Confirm only if hats should be allowed by default.
 
-- [ ] **(plan)** School-fee credit as a payout option — raised: 2026-09-06, by: plan
-      context: Phase 2 only. Not in M01–M06.
+- [x] **(plan)** School-fee credit as a payout option — raised: 2026-09-06, by: plan
+      context: Phase 2 first vertical (2026-09-12): parent consign form offers school-fee credit; operators mark lots manually. No school-finance integration. Payout CSV / sold-item linking still open.
 
 - [x] **(M04)** Operators have no inbox to read `preloved_donation_notes` — raised: 2026-09-07, by: build:M04
       context: Resolved 2026-09-12. Operator inbox at `/admin/[tenant]/preloved/inbox` lists `preloved_donation_notes` (empty / loading / error). Notes still do not create a SKU.

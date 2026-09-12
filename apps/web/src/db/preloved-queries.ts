@@ -6,7 +6,6 @@ import { cache } from "react";
 import { and, asc, desc, eq, gt, isNotNull, lt, sql } from "drizzle-orm";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
-  PRELOVED_INTAKE_MODE,
   PRELOVED_INTAKE_SOURCE,
   PrelovedCatalogMatchError,
   PrelovedExpiredStockError,
@@ -18,6 +17,8 @@ import {
   isPersistablePriceFractionOfNew,
   isPrelovedPriceAboveCap,
   parseActorId,
+  parseCommissionBps,
+  parseIntakeMode,
   parsePriceFraction,
   parseRefuseList,
   prelovedExpiresAt,
@@ -36,6 +37,14 @@ import {
   type DonationNoteListItem,
   type InsertDonationNoteInput,
 } from "@/lib/preloved-donate";
+import {
+  generateConsignmentTicketCode,
+  isValidCommissionBps,
+  type ConsignmentLotItemDraft,
+  type ConsignmentLotListItem,
+  type ConsignmentLotPayoutStatus,
+  type InsertConsignmentLotInput,
+} from "@/lib/preloved-consignment";
 import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { AuditActorRole } from "@/lib/audit/types";
@@ -44,10 +53,12 @@ import { db } from "./index";
 import {
   catalogItems,
   catalogVariants,
+  consignmentLots,
   prelovedDonationNotes,
   prelovedIntakeEvents,
   prelovedSkus,
   tenantPrelovedSettings,
+  type ConsignmentLotRow,
   type PrelovedDonationNoteRow,
   type PrelovedIntakeEventRow,
   type PrelovedSkuRow,
@@ -66,11 +77,12 @@ function mapSettingsRow(
   return {
     tenantId: row.tenantId,
     prelovedEnabled: row.prelovedEnabled,
-    intakeMode: PRELOVED_INTAKE_MODE,
+    intakeMode: parseIntakeMode(row.intakeMode),
     priceFractionOfNew: parsePriceFraction(row.priceFractionOfNew),
     holdDays: row.holdDays,
     donatedGstFree: row.donatedGstFree,
     refuseList: parseRefuseList(row.refuseList),
+    commissionBps: parseCommissionBps(row.commissionBps),
   };
 }
 
@@ -90,7 +102,7 @@ export const getPrelovedSettings = cache(async (tenantId: string): Promise<Prelo
 /**
  * Insert or update tenant preloved settings.
  * Only provided patch columns are written; omitted columns use DB defaults
- * on insert and stay unchanged on conflict. Commission is never written.
+ * on insert and stay unchanged on conflict.
  */
 export async function upsertPrelovedSettings(
   tenantId: string,
@@ -98,12 +110,15 @@ export async function upsertPrelovedSettings(
 ): Promise<PrelovedSettings> {
   const columns: {
     prelovedEnabled?: boolean;
+    intakeMode?: PrelovedSettings["intakeMode"];
     priceFractionOfNew?: string;
     holdDays?: number;
     donatedGstFree?: boolean;
     refuseList?: string[];
+    commissionBps?: number;
   } = {};
   if (patch.prelovedEnabled !== undefined) columns.prelovedEnabled = patch.prelovedEnabled;
+  if (patch.intakeMode !== undefined) columns.intakeMode = patch.intakeMode;
   if (patch.priceFractionOfNew !== undefined) {
     if (!isPersistablePriceFractionOfNew(patch.priceFractionOfNew)) {
       throw new RangeError(
@@ -117,6 +132,12 @@ export async function upsertPrelovedSettings(
   if (patch.holdDays !== undefined) columns.holdDays = patch.holdDays;
   if (patch.donatedGstFree !== undefined) columns.donatedGstFree = patch.donatedGstFree;
   if (patch.refuseList !== undefined) columns.refuseList = [...patch.refuseList];
+  if (patch.commissionBps !== undefined) {
+    if (!isValidCommissionBps(patch.commissionBps)) {
+      throw new RangeError("commissionBps must be an integer between 0 and 10000");
+    }
+    columns.commissionBps = patch.commissionBps;
+  }
 
   const [row] = await db
     .insert(tenantPrelovedSettings)
@@ -246,6 +267,120 @@ export async function listDonationNotes(
     .orderBy(desc(prelovedDonationNotes.createdAt))
     .limit(DONATION_NOTE_INBOX_LIMIT);
   return rows;
+}
+
+const CONSIGNMENT_LOT_LIST_LIMIT = 200;
+
+function parseLotItems(value: unknown): ConsignmentLotItemDraft[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (entry): entry is ConsignmentLotItemDraft =>
+        !!entry &&
+        typeof entry === "object" &&
+        typeof (entry as ConsignmentLotItemDraft).garment === "string" &&
+        typeof (entry as ConsignmentLotItemDraft).size === "string",
+    )
+    .map((entry) => ({
+      garment: entry.garment.trim(),
+      size: entry.size.trim(),
+    }));
+}
+
+function mapConsignmentLotRow(row: ConsignmentLotRow): ConsignmentLotListItem {
+  return {
+    id: row.id,
+    ticketCode: row.ticketCode,
+    familyName: row.familyName,
+    studentName: row.studentName,
+    email: row.email,
+    mobile: row.mobile,
+    payoutPreference: row.payoutPreference,
+    bankBsb: row.bankBsb,
+    bankAccountName: row.bankAccountName,
+    bankAccountNumber: row.bankAccountNumber,
+    unsoldPreference: row.unsoldPreference,
+    items: parseLotItems(row.items),
+    payoutStatus: row.payoutStatus,
+    payoutMarkedAt: row.payoutMarkedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+/** Create a consignment lot with a unique ticket code (retry on collision). */
+export async function insertConsignmentLot(
+  input: InsertConsignmentLotInput,
+): Promise<ConsignmentLotRow> {
+  const items = input.items.map((item) => ({
+    garment: item.garment.trim(),
+    size: item.size.trim(),
+  }));
+  const termsAcceptedAt = new Date();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const ticketCode = generateConsignmentTicketCode();
+    try {
+      const [row] = await db
+        .insert(consignmentLots)
+        .values({
+          tenantId: input.tenantId,
+          ticketCode,
+          familyName: input.familyName,
+          studentName: input.studentName,
+          email: input.email,
+          mobile: input.mobile,
+          payoutPreference: input.payoutPreference,
+          bankBsb: input.bankBsb ?? null,
+          bankAccountName: input.bankAccountName ?? null,
+          bankAccountNumber: input.bankAccountNumber ?? null,
+          unsoldPreference: input.unsoldPreference,
+          items,
+          termsAcceptedAt,
+        })
+        .returning();
+      return row;
+    } catch (err) {
+      if (isUniqueConstraintError(err) && attempt < 4) continue;
+      throw err;
+    }
+  }
+  throw new Error("Failed to allocate a consignment ticket code");
+}
+
+/** Newest consignment lots for the operator consignments tab. */
+export async function listConsignmentLots(
+  tenantId: string,
+): Promise<ConsignmentLotListItem[]> {
+  const rows = await db
+    .select()
+    .from(consignmentLots)
+    .where(eq(consignmentLots.tenantId, tenantId))
+    .orderBy(desc(consignmentLots.createdAt))
+    .limit(CONSIGNMENT_LOT_LIST_LIMIT);
+  return rows.map(mapConsignmentLotRow);
+}
+
+export async function markConsignmentLotPayout(opts: {
+  tenantId: string;
+  lotId: string;
+  payoutStatus: ConsignmentLotPayoutStatus;
+  actorId?: string | null;
+}): Promise<ConsignmentLotListItem | null> {
+  const actorId = parseActorId(opts.actorId);
+  const [row] = await db
+    .update(consignmentLots)
+    .set({
+      payoutStatus: opts.payoutStatus,
+      payoutMarkedAt: new Date(),
+      payoutMarkedBy: actorId,
+    })
+    .where(
+      and(
+        eq(consignmentLots.id, opts.lotId),
+        eq(consignmentLots.tenantId, opts.tenantId),
+      ),
+    )
+    .returning();
+  return row ? mapConsignmentLotRow(row) : null;
 }
 
 function variantHasSize(sizes: unknown, size: string): boolean {

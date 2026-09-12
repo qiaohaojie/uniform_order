@@ -19,7 +19,8 @@
     "test:preloved-followups": "pnpm --filter web test:preloved-followups",
     "test:m05-parent-hydration": "pnpm --filter web test:m05-parent-hydration",
     "test:m06-last-unit-race": "pnpm --filter web test:m06-last-unit-race",
-    "test:preloved-test-gaps": "pnpm --filter web test:preloved-test-gaps"
+    "test:preloved-test-gaps": "pnpm --filter web test:preloved-test-gaps",
+    "test:m07-consignment-school-fee": "pnpm --filter web test:m07-consignment-school-fee"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

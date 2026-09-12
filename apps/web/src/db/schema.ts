@@ -93,6 +93,21 @@ export const prelovedIntakeActionEnum = pgEnum("preloved_intake_action", [
   "written_off",
 ]);
 
+export const consignmentPayoutPreferenceEnum = pgEnum(
+  "consignment_payout_preference",
+  ["eft", "school_fee_credit", "donate_proceeds"],
+);
+
+export const consignmentUnsoldPreferenceEnum = pgEnum(
+  "consignment_unsold_preference",
+  ["donate", "collect"],
+);
+
+export const consignmentLotPayoutStatusEnum = pgEnum(
+  "consignment_lot_payout_status",
+  ["pending", "school_fee_credited", "eft_paid", "donated_proceeds"],
+);
+
 // ─── Tenant legal versions ───────────────────────────────────────────────────
 // IMPORTANT: defined before `tenants` because `tenants.current_legal_version_id`
 // needs the FK target in scope. The opposite-direction FK (tenantId → tenants.id)
@@ -336,6 +351,53 @@ export const prelovedPaidDecrements = pgTable("preloved_paid_decrements", {
     .notNull()
     .defaultNow(),
 });
+
+// Phase 2 consignment lot (paper-form digital twin). Operator still inspects
+// each garment; items JSON is the parent's declared list, not stock.
+export const consignmentLots = pgTable(
+  "consignment_lots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    ticketCode: text("ticket_code").notNull(),
+    familyName: text("family_name").notNull(),
+    studentName: text("student_name").notNull(),
+    email: text("email").notNull(),
+    mobile: text("mobile").notNull(),
+    payoutPreference: consignmentPayoutPreferenceEnum("payout_preference").notNull(),
+    bankBsb: text("bank_bsb"),
+    bankAccountName: text("bank_account_name"),
+    bankAccountNumber: text("bank_account_number"),
+    unsoldPreference: consignmentUnsoldPreferenceEnum("unsold_preference").notNull(),
+    items: jsonb("items")
+      .$type<{ garment: string; size: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }).notNull(),
+    payoutStatus: consignmentLotPayoutStatusEnum("payout_status")
+      .notNull()
+      .default("pending"),
+    payoutMarkedAt: timestamp("payout_marked_at", { withTimezone: true }),
+    payoutMarkedBy: uuid("payout_marked_by").references(() => neonAuthUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    tenantTicketUnique: uniqueIndex("consignment_lots_tenant_ticket_unique").on(
+      t.tenantId,
+      t.ticketCode,
+    ),
+    tenantTimeIdx: index("idx_consignment_lots_tenant_time").on(
+      t.tenantId,
+      t.createdAt,
+    ),
+  }),
+);
 
 // ─── Pending order snapshots ─────────────────────────────────────────────────
 /**
@@ -662,3 +724,4 @@ export type TenantPrelovedSettingsRow = typeof tenantPrelovedSettings.$inferSele
 export type PrelovedSkuRow = typeof prelovedSkus.$inferSelect;
 export type PrelovedIntakeEventRow = typeof prelovedIntakeEvents.$inferSelect;
 export type PrelovedDonationNoteRow = typeof prelovedDonationNotes.$inferSelect;
+export type ConsignmentLotRow = typeof consignmentLots.$inferSelect;

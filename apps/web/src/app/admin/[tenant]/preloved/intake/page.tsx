@@ -56,6 +56,7 @@ export default async function AdminPrelovedIntakePage({
       catalog={catalog}
       priceFractionOfNew={settings.priceFractionOfNew}
       refuseList={settings.refuseList}
+      intakeMode={settings.intakeMode}
     />
   );
 }

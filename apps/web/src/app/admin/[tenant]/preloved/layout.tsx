@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AdminTopbar } from "@/components/admin-shell";
 import { getTenant } from "@/db/queries";
 import { getPrelovedSettings } from "@/db/preloved-queries";
+import { isConsignmentIntakeMode } from "@/lib/preloved-consignment";
 import { PrelovedSectionTabs } from "./preloved-section-tabs";
 
 export default async function AdminPrelovedLayout({
@@ -28,7 +29,10 @@ export default async function AdminPrelovedLayout({
         className="px-7 bg-white"
         style={{ borderBottom: "1px solid var(--color-rule)" }}
       >
-        <PrelovedSectionTabs tenantId={tenant} />
+        <PrelovedSectionTabs
+          tenantId={tenant}
+          showConsignments={isConsignmentIntakeMode(settings.intakeMode)}
+        />
       </div>
       <div className="flex-1 min-h-0 overflow-auto">{children}</div>
     </div>
