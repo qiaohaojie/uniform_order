@@ -233,6 +233,12 @@ export function IntakeClient({
     return data;
   };
 
+  const selectedLot =
+    sourceKey !== DONATION_SOURCE
+      ? lots?.find((lot) => lot.id === sourceKey)
+      : undefined;
+  const unresolvedTicket = sourceKey !== DONATION_SOURCE && !selectedLot;
+
   const handleAccept = async () => {
     if (!itemId || !size || !matchedVariant) {
       setError("Match an existing catalogue item and size before accepting.");
@@ -242,16 +248,22 @@ export function IntakeClient({
       setError("Enter a price greater than 0.");
       return;
     }
+    if (unresolvedTicket) {
+      setError(
+        lotsLoading
+          ? "Wait for consignment lots to load before accepting against a ticket."
+          : lotsError
+            ? "Reload consignment lots before accepting against a ticket."
+            : "That ticket is no longer in the list. Pick donation or a current ticket.",
+      );
+      return;
+    }
 
     setPending("accepted");
     setError("");
     setSuccess(null);
     try {
       const note = defectNote.trim();
-      const selectedLot =
-        sourceKey !== DONATION_SOURCE
-          ? lots?.find((lot) => lot.id === sourceKey)
-          : undefined;
       const data = await postIntake({
         action: "accepted",
         sourceItemId: itemId,
@@ -517,7 +529,7 @@ export function IntakeClient({
           <div className="flex flex-wrap items-center gap-3 pt-5">
             <Button
               isPending={pending === "accepted"}
-              isDisabled={pending !== null}
+              isDisabled={pending !== null || unresolvedTicket}
               onPress={handleAccept}
               className="font-semibold text-white shadow-none"
               style={{ background: tenant.accent }}
@@ -590,7 +602,17 @@ function IntakeLotField({
             Try again
           </button>
         </div>
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          className="mb-2 text-[12.5px] underline font-semibold"
+          style={{ color: "var(--color-ink-dim)" }}
+          onClick={onRetry}
+          data-testid="intake-lot-retry"
+        >
+          Refresh tickets
+        </button>
+      )}
 
       {!loading && !error && options.length === 0 ? (
         <p

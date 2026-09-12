@@ -12,6 +12,7 @@ import {
   PrelovedConsignmentLotNotFoundError,
   PrelovedConsignmentNotEnabledError,
   PrelovedExpiredStockError,
+  PrelovedGstPoolConflictError,
   PrelovedInsufficientQtyError,
   PrelovedWriteOffNotEligibleError,
   defaultPrelovedPrice,
@@ -607,6 +608,21 @@ function canAcceptOntoSku(listedAt: Date) {
   return sql`(${prelovedSkus.qtyOnHand} = 0 OR ${prelovedSkus.expiresAt} IS NULL OR ${prelovedSkus.expiresAt} >= ${listedAt})`;
 }
 
+/** Restock (qty 0) may change GST; in-stock pools must match incoming treatment. */
+function canAcceptMatchingGstOntoSku(listedAt: Date, incomingGstFree: boolean) {
+  return sql`(${canAcceptOntoSku(listedAt)} AND (${prelovedSkus.qtyOnHand} = 0 OR ${prelovedSkus.gstFree} = ${incomingGstFree}))`;
+}
+
+function gstPoolConflictOnHand(sku: {
+  qtyOnHand: number;
+  expiresAt: Date | null;
+  gstFree: boolean;
+}, listedAt: Date, incomingGstFree: boolean): boolean {
+  if (sku.qtyOnHand <= 0) return false;
+  if (sku.expiresAt != null && sku.expiresAt < listedAt) return false;
+  return sku.gstFree !== incomingGstFree;
+}
+
 /**
  * Pool one garment onto the (tenant, item, size, condition) SKU.
  * ON CONFLICT increments qty_on_hand on the existing row (same id).
@@ -614,9 +630,12 @@ function canAcceptOntoSku(listedAt: Date) {
  * (or taxable when the unit is consigned), and applies the new price (and
  * defectNote when sent). Pooling onto in-stock qty only increments qty_on_hand.
  * Accept onto expired in-stock qty is refused until write-off (qty 0).
- * A consignment lot writes source=consignment plus a consignment_items row so
- * later sold-line remittance can attribute the unit. SKU upsert, accepted
- * event, and optional item insert run in one db.batch.
+ * In-stock pools refuse a unit whose GST treatment differs from the row
+ * (consigned units are taxable; donations copy donatedGstFree). Qty 0 may
+ * restock with the incoming treatment. A consignment lot writes
+ * source=consignment plus a consignment_items row so later sold-line
+ * remittance can attribute the unit. SKU upsert, accepted event, and
+ * optional item insert run in one db.batch.
  * The event is INSERT … SELECT of the eligible unique-key row because batch
  * queries are composed before INSERT … RETURNING is available, and a VALUES
  * insert would still write an event when the conflict WHERE no-ops.
@@ -674,6 +693,27 @@ export async function acceptAndPool(
 
   const listedAt = new Date();
   const expiresAt = prelovedExpiresAt(listedAt, settings.holdDays);
+  const incomingGstFree = lot ? false : settings.donatedGstFree;
+  const [existingSku] = await db
+    .select({
+      qtyOnHand: prelovedSkus.qtyOnHand,
+      expiresAt: prelovedSkus.expiresAt,
+      gstFree: prelovedSkus.gstFree,
+    })
+    .from(prelovedSkus)
+    .where(
+      and(
+        eq(prelovedSkus.tenantId, input.tenantId),
+        eq(prelovedSkus.sourceItemId, input.sourceItemId),
+        eq(prelovedSkus.size, input.size),
+        eq(prelovedSkus.condition, input.condition),
+      ),
+    )
+    .limit(1);
+  if (existingSku && gstPoolConflictOnHand(existingSku, listedAt, incomingGstFree)) {
+    throw new PrelovedGstPoolConflictError();
+  }
+
   const priceSql = toNumeric2(appliedPrice, 0);
   const conflictSet: {
     qtyOnHand: ReturnType<typeof sql>;
@@ -685,7 +725,7 @@ export async function acceptAndPool(
   } = {
     qtyOnHand: sql`${prelovedSkus.qtyOnHand} + 1`,
     price: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${priceSql}::numeric ELSE ${prelovedSkus.price} END`,
-    gstFree: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${lot ? false : settings.donatedGstFree} ELSE ${prelovedSkus.gstFree} END`,
+    gstFree: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${incomingGstFree} ELSE ${prelovedSkus.gstFree} END`,
     listedAt: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${listedAt} ELSE ${prelovedSkus.listedAt} END`,
     expiresAt: sql`CASE WHEN ${prelovedSkus.qtyOnHand} = 0 THEN ${expiresAt} ELSE ${prelovedSkus.expiresAt} END`,
   };
@@ -702,7 +742,7 @@ export async function acceptAndPool(
       condition: input.condition,
       price: priceSql,
       qtyOnHand: 1,
-      gstFree: lot ? false : settings.donatedGstFree,
+      gstFree: incomingGstFree,
       active: true,
       defectNote: input.defectNote ?? null,
       listedAt,
@@ -717,8 +757,9 @@ export async function acceptAndPool(
       ],
       set: conflictSet,
       // Keep expired in-stock rows unchanged so a new unit is not mixed
-      // onto a hold that is already past and write-off eligible.
-      setWhere: canAcceptOntoSku(listedAt),
+      // onto a hold that is already past and write-off eligible. Also
+      // refuse an in-stock GST mismatch so a race cannot mix treatments.
+      setWhere: canAcceptMatchingGstOntoSku(listedAt, incomingGstFree),
     })
     .returning();
 
@@ -732,7 +773,7 @@ export async function acceptAndPool(
     eq(prelovedSkus.sourceItemId, input.sourceItemId),
     eq(prelovedSkus.size, input.size),
     eq(prelovedSkus.condition, input.condition),
-    canAcceptOntoSku(listedAt),
+    canAcceptMatchingGstOntoSku(listedAt, incomingGstFree),
   );
 
   const eventInsert = db
@@ -794,6 +835,25 @@ export async function acceptAndPool(
   const event = eventRows[0];
 
   if (!sku) {
+    const [current] = await db
+      .select({
+        qtyOnHand: prelovedSkus.qtyOnHand,
+        expiresAt: prelovedSkus.expiresAt,
+        gstFree: prelovedSkus.gstFree,
+      })
+      .from(prelovedSkus)
+      .where(
+        and(
+          eq(prelovedSkus.tenantId, input.tenantId),
+          eq(prelovedSkus.sourceItemId, input.sourceItemId),
+          eq(prelovedSkus.size, input.size),
+          eq(prelovedSkus.condition, input.condition),
+        ),
+      )
+      .limit(1);
+    if (current && gstPoolConflictOnHand(current, listedAt, incomingGstFree)) {
+      throw new PrelovedGstPoolConflictError();
+    }
     throw new PrelovedExpiredStockError();
   }
   if (!event) {

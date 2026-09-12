@@ -13,6 +13,7 @@ import {
   PrelovedConsignmentLotNotFoundError,
   PrelovedConsignmentNotEnabledError,
   PrelovedExpiredStockError,
+  PrelovedGstPoolConflictError,
 } from "@/lib/preloved";
 
 const AcceptedSchema = z
@@ -167,6 +168,12 @@ export async function POST(
       );
     }
     if (err instanceof PrelovedExpiredStockError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: 409 },
+      );
+    }
+    if (err instanceof PrelovedGstPoolConflictError) {
       return NextResponse.json(
         { error: err.message, code: err.code },
         { status: 409 },

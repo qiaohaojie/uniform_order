@@ -68,6 +68,48 @@ export async function confirmVisaPayment(paymentIntentId: string) {
   }
 }
 
+/** Pin qty / GST on a pooled SKU. Returns null when the row does not exist. */
+export async function pinPooledSkuForTest(opts: {
+  qty: number;
+  gstFree?: boolean;
+  size?: string;
+  condition?: string;
+}): Promise<{ skuId: string } | null> {
+  if (!Number.isInteger(opts.qty) || opts.qty < 0) {
+    throw new Error(`pinPooledSkuForTest expects non-negative integer qty, got ${opts.qty}`);
+  }
+  loadLocalEnv();
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL missing for pinPooledSkuForTest");
+  const sql = neon(url);
+  const size = opts.size ?? SIZE;
+  const condition = opts.condition ?? CONDITION;
+  const rows =
+    opts.gstFree === undefined
+      ? await sql`
+          update preloved_skus
+          set qty_on_hand = ${opts.qty}
+          where tenant_id = ${TENANT}
+            and source_item_id = ${ITEM_ID}
+            and size = ${size}
+            and condition = ${condition}
+          returning id
+        `
+      : await sql`
+          update preloved_skus
+          set qty_on_hand = ${opts.qty},
+              gst_free = ${opts.gstFree}
+          where tenant_id = ${TENANT}
+            and source_item_id = ${ITEM_ID}
+            and size = ${size}
+            and condition = ${condition}
+          returning id
+        `;
+  if (rows.length === 0) return null;
+  const row = rows[0] as { id: string };
+  return { skuId: row.id };
+}
+
 /** Pin qty_on_hand for the pooled size/condition SKU (race fixtures). */
 export async function pinPooledSkuQty(qty: number): Promise<{
   skuId: string;

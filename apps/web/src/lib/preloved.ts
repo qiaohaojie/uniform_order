@@ -240,6 +240,17 @@ export class PrelovedExpiredStockError extends Error {
   }
 }
 
+export class PrelovedGstPoolConflictError extends Error {
+  readonly code = "gst_pool_conflict";
+
+  constructor(
+    message = "This size and condition already has stock with a different GST treatment. GST-free donated units and taxable consigned units cannot share one pooled SKU.",
+  ) {
+    super(message);
+    this.name = "PrelovedGstPoolConflictError";
+  }
+}
+
 export class PrelovedInsufficientQtyError extends Error {
   readonly code = "insufficient_qty";
 
