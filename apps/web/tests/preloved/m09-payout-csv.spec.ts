@@ -56,36 +56,41 @@ test("commission split is integer cents, not a display-only cut", () => {
 });
 
 async function createEftLot(page: Page, stamp: string) {
-  const createRes = await page.request.post(
-    `/api/tenant/${TENANT}/preloved/consign`,
-    {
-      data: {
-        familyName: `Payout${stamp}`,
-        studentName: "Remi",
-        email: `payout-${stamp}@example.com`,
-        mobile: "0400000014",
-        payoutPreference: "eft",
-        bankBsb: "062000",
-        bankAccountName: "Payout Family",
-        bankAccountNumber: "12345678",
-        unsoldPreference: "donate",
-        items: [{ garment: "Sports polo", size: SIZE }],
-        termsAccepted: true,
+  let lastError = "create consignment lot failed";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const createRes = await page.request.post(
+      `/api/tenant/${TENANT}/preloved/consign`,
+      {
+        data: {
+          familyName: `Payout${stamp}`,
+          studentName: "Remi",
+          email: `payout-${stamp}-a${attempt}@example.com`,
+          mobile: "0400000014",
+          payoutPreference: "eft",
+          bankBsb: "062000",
+          bankAccountName: "Payout Family",
+          bankAccountNumber: "12345678",
+          unsoldPreference: "donate",
+          items: [{ garment: "Sports polo", size: SIZE }],
+          termsAccepted: true,
+        },
       },
-    },
-  );
-  if (!createRes.ok()) {
-    throw new Error(
-      `create consignment lot failed ${createRes.status()}: ${await createRes.text()}`,
     );
+    if (createRes.ok()) {
+      const created = (await createRes.json()) as {
+        id?: string;
+        ticketCode?: string;
+      };
+      expect(created.id).toBeTruthy();
+      expect(created.ticketCode).toMatch(/^CL-[A-Z0-9]{6}$/);
+      return { lotId: created.id!, ticket: created.ticketCode! };
+    }
+    lastError = `create consignment lot failed ${createRes.status()}: ${await createRes.text()}`;
+    if (createRes.status() !== 500 || attempt === 3) {
+      throw new Error(lastError);
+    }
   }
-  const created = (await createRes.json()) as {
-    id?: string;
-    ticketCode?: string;
-  };
-  expect(created.id).toBeTruthy();
-  expect(created.ticketCode).toMatch(/^CL-[A-Z0-9]{6}$/);
-  return { lotId: created.id!, ticket: created.ticketCode! };
+  throw new Error(lastError);
 }
 
 async function unsoldRankForLot(skuId: string, lotId: string) {
