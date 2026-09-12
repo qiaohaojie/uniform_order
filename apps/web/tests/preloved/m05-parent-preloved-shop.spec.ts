@@ -21,10 +21,12 @@ import {
   TENANT,
   addNewPolo,
   devLogin,
+  emptyShopPrelovedQty,
   ensureInStockSku,
   ensurePrelovedDisabled,
   ensurePrelovedEnabled,
   openCatalog,
+  restoreShopPrelovedQty,
   skuCard,
 } from "./helpers";
 
@@ -193,29 +195,26 @@ test.describe("M05 parent preloved shop", () => {
   test("empty Preloved filter shows donate copy and links to donate", async ({
     page,
   }) => {
+    // Prefer the dedicated demo-academy gate: pnpm test:m05-empty-preloved-filter.
+    // This serial suite still covers the copy when helpers can reach DATABASE_URL.
     await devLogin(page, `/admin/${TENANT}/settings`);
     await ensurePrelovedEnabled(page);
     await page.setViewportSize(MOBILE_VIEWPORT);
 
-    await page.goto(`/admin/${TENANT}/preloved/stock`);
-    await expect(page.getByTestId("preloved-stock-page")).toBeVisible();
-    const rackEmpty = (await page.getByTestId("stock-empty").count()) > 0;
-    // Non-expired in-stock SKUs cannot be written off; M05 must not decrement
-    // qty. Empty-filter copy is asserted when the rack is empty (fresh tenant).
-    test.skip(
-      !rackEmpty,
-      "In-stock preloved SKUs are present; empty filter cannot render.",
-    );
-
-    await openCatalog(page, "Preloved");
-    const empty = page.getByTestId("preloved-empty");
-    await expect(empty).toBeVisible();
-    await expect(empty).toContainText(EMPTY_COPY);
-    await expect(empty.getByRole("link", { name: "Donate outgrown items" })).toHaveAttribute(
-      "href",
-      DONATE_HREF,
-    );
-    await expect(page.getByTestId("preloved-card")).toHaveCount(0);
+    // Non-destructive: zero qty_on_hand briefly, then restore. No write-off / sale.
+    const snapshot = await emptyShopPrelovedQty();
+    try {
+      await openCatalog(page, "Preloved");
+      const empty = page.getByTestId("preloved-empty");
+      await expect(empty).toBeVisible();
+      await expect(empty).toContainText(EMPTY_COPY);
+      await expect(
+        empty.getByRole("link", { name: "Donate outgrown items" }),
+      ).toHaveAttribute("href", DONATE_HREF);
+      await expect(page.getByTestId("preloved-card")).toHaveCount(0);
+    } finally {
+      await restoreShopPrelovedQty(snapshot);
+    }
   });
 
   test("mobile ~430px: Preloved filter, badge, and PDP copy", async ({ page }) => {

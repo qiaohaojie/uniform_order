@@ -57,7 +57,7 @@ Parents browse preloved next to new, see condition and stock, add a mixed cart c
 - [x] Item page shows condition, defects, ACL sentence; qty cannot exceed `qtyOnHand`
 - [x] Mixed cart of new polo + preloved jumper checks out; Stripe total is the sum; GST follows M02
 - [x] Adding qty above stock is impossible in UI
-- [ ] Empty preloved filter shows donate + buy-new copy linking to `/{tenant}/preloved/donate`
+- [x] Empty preloved filter shows donate + buy-new copy linking to `/{tenant}/preloved/donate`
 - [x] With preloved disabled, no preloved filter or SKUs
 - [x] `pnpm check-types:web` passes
 - [x] Playwright mobile (~430px) and desktop: browse → add preloved → mixed cart → checkout page totals
