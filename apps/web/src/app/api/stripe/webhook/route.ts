@@ -217,6 +217,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (resolved) {
+      // Must throw on failure so Stripe redelivers. Do not swallow — a 200
+      // here used to drop sold-line inserts after a neon-http split write.
       await recordConsignmentSoldLinesBestEffort({
         orderId: resolved.id,
         tenantId: resolved.tenantId,

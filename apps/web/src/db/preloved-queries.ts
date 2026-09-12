@@ -4,7 +4,7 @@
  */
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import {
   DEFAULT_PRICE_FRACTION_OF_NEW,
   PRELOVED_INTAKE_SOURCE,
@@ -54,7 +54,6 @@ import {
 } from "@/lib/preloved-consignment";
 import {
   parseMoney2,
-  splitSaleCommission,
   type PayoutCsvRow,
 } from "@/lib/preloved-payout";
 import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy";
@@ -648,11 +647,20 @@ export type RecordConsignmentSoldLinesResult = {
   recorded: number;
 };
 
+const LEDGER_WRITE_ATTEMPTS = 3;
+
 /**
  * FIFO-attribute unsold consignment units to a paid order's preloved lines and
  * write remittance rows with the tenant's commissionBps at sale time.
+ *
+ * One SQL statement (neon-http: never db.transaction): SKIP LOCKED claim +
+ * ledger INSERT. Concurrent qty-1 sales on the same SKU take distinct units
+ * (loser gets the next unlocked item, or allocates 0 — treated as donated).
+ * Same-order replay uses an advisory lock and the unique item index.
+ *
  * Idempotent: already-sold items and existing ledger rows are left alone.
  * Donation units in the same pool are not attributed (no consignment_items).
+ * Pre-existing sold-without-ledger orphans (old split writes) are inserted here.
  */
 export async function recordConsignmentSoldLinesForOrder(input: {
   orderId: string;
@@ -666,127 +674,181 @@ export async function recordConsignmentSoldLinesForOrder(input: {
 
   const settings = await getPrelovedSettings(tenantId);
   const commissionBps = settings.commissionBps;
+  const lockKey = `csl:${orderId}`;
 
-  const allocated = (await db.execute(sql`
-    WITH lines AS (
-      SELECT ol.id, ol.preloved_sku_id, ol.qty
-      FROM order_lines ol
-      INNER JOIN orders o ON o.id = ol.order_id
-      WHERE o.id = ${orderId}
-        AND o.tenant_id = ${tenantId}
-        AND ol.preloved_sku_id IS NOT NULL
-    ),
-    needed AS (
-      SELECT
-        ol.id AS order_line_id,
-        ol.preloved_sku_id,
-        row_number() OVER (
-          PARTITION BY ol.preloved_sku_id
-          ORDER BY ol.id, gs.n
-        ) AS rn
-      FROM lines ol
-      CROSS JOIN LATERAL generate_series(1, ol.qty) AS gs(n)
-    ),
-    available AS (
-      SELECT
-        ci.id AS item_id,
-        ci.preloved_sku_id,
-        row_number() OVER (
-          PARTITION BY ci.preloved_sku_id
-          ORDER BY ci.created_at, ci.id
-        ) AS rn
-      FROM consignment_items ci
-      WHERE ci.tenant_id = ${tenantId}
-        AND ci.sold_order_line_id IS NULL
-        AND ci.preloved_sku_id IN (SELECT preloved_sku_id FROM lines)
-    ),
-    alloc AS (
-      SELECT n.order_line_id, a.item_id
-      FROM needed n
-      INNER JOIN available a
-        ON a.preloved_sku_id = n.preloved_sku_id
-       AND a.rn = n.rn
-    )
-    UPDATE consignment_items ci
-    SET sold_order_line_id = alloc.order_line_id
-    FROM alloc
-    WHERE ci.id = alloc.item_id
-      AND ci.sold_order_line_id IS NULL
-    RETURNING ci.id
-  `)) as { rows: { id: string }[] };
-
-  const pending = await db
-    .select({
-      consignmentItemId: consignmentItems.id,
-      lotId: consignmentItems.lotId,
-      prelovedSkuId: consignmentItems.prelovedSkuId,
-      orderLineId: orderLines.id,
-      unitPrice: orderLines.unitPrice,
-    })
-    .from(consignmentItems)
-    .innerJoin(orderLines, eq(orderLines.id, consignmentItems.soldOrderLineId))
-    .innerJoin(orders, eq(orders.id, orderLines.orderId))
-    .leftJoin(
-      consignmentSoldLines,
-      eq(consignmentSoldLines.consignmentItemId, consignmentItems.id),
-    )
-    .where(
-      and(
-        eq(consignmentItems.tenantId, tenantId),
-        eq(orders.id, orderId),
-        eq(orders.tenantId, tenantId),
-        isNull(consignmentSoldLines.id),
+  type LedgerWriteRow = { allocated: number; recorded: number };
+  const result = (await db.execute(sql`
+      WITH lock AS (
+        SELECT pg_advisory_xact_lock(hashtext(${lockKey})::bigint) AS held
       ),
-    );
-
-  if (pending.length === 0) {
-    return { allocated: allocated.rows.length, recorded: 0 };
-  }
-
-  try {
-    const inserted = await db
-      .insert(consignmentSoldLines)
-      .values(
-        pending.map((row) => {
-          const saleAud = parseMoney2(row.unitPrice);
-          const split = splitSaleCommission(saleAud, commissionBps);
-          return {
-            tenantId,
-            lotId: row.lotId,
-            consignmentItemId: row.consignmentItemId,
-            orderId,
-            orderLineId: row.orderLineId,
-            prelovedSkuId: row.prelovedSkuId,
-            qty: 1,
-            saleUnitPrice: split.saleAud.toFixed(2),
-            saleLineTotal: split.saleAud.toFixed(2),
-            commissionBps,
-            commissionAmount: split.commissionAud.toFixed(2),
-            remittanceAmount: split.remittanceAud.toFixed(2),
-          };
-        }),
+      lines AS (
+        SELECT ol.id, ol.preloved_sku_id, ol.qty
+        FROM order_lines ol
+        INNER JOIN orders o ON o.id = ol.order_id
+        WHERE o.id = ${orderId}
+          AND o.tenant_id = ${tenantId}
+          AND ol.preloved_sku_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM lock)
+      ),
+      needed AS (
+        SELECT
+          ol.id AS order_line_id,
+          ol.preloved_sku_id,
+          row_number() OVER (
+            PARTITION BY ol.preloved_sku_id
+            ORDER BY ol.id, gs.n
+          ) AS rn
+        FROM lines ol
+        CROSS JOIN LATERAL generate_series(1, ol.qty) AS gs(n)
+      ),
+      sku_need AS (
+        SELECT preloved_sku_id, COUNT(*)::int AS need
+        FROM needed
+        GROUP BY preloved_sku_id
+      ),
+      locked AS (
+        SELECT
+          claimed.id AS item_id,
+          claimed.lot_id,
+          claimed.preloved_sku_id,
+          row_number() OVER (
+            PARTITION BY claimed.preloved_sku_id
+            ORDER BY claimed.created_at, claimed.id
+          ) AS rn
+        FROM sku_need s
+        JOIN LATERAL (
+          SELECT ci.id, ci.lot_id, ci.preloved_sku_id, ci.created_at
+          FROM consignment_items ci
+          WHERE ci.tenant_id = ${tenantId}
+            AND ci.preloved_sku_id = s.preloved_sku_id
+            AND ci.sold_order_line_id IS NULL
+          ORDER BY ci.created_at, ci.id
+          FOR UPDATE OF ci SKIP LOCKED
+          LIMIT s.need
+        ) claimed ON true
+      ),
+      alloc AS (
+        SELECT n.order_line_id, l.item_id
+        FROM needed n
+        INNER JOIN locked l
+          ON l.preloved_sku_id = n.preloved_sku_id
+         AND l.rn = n.rn
+      ),
+      updated AS (
+        UPDATE consignment_items ci
+        SET sold_order_line_id = alloc.order_line_id
+        FROM alloc
+        WHERE ci.id = alloc.item_id
+          AND ci.sold_order_line_id IS NULL
+        RETURNING ci.id, ci.lot_id, ci.preloved_sku_id, ci.sold_order_line_id
+      ),
+      pending AS (
+        SELECT
+          u.id AS consignment_item_id,
+          u.lot_id,
+          u.preloved_sku_id,
+          u.sold_order_line_id AS order_line_id,
+          ol.unit_price
+        FROM updated u
+        INNER JOIN order_lines ol ON ol.id = u.sold_order_line_id
+        UNION
+        SELECT
+          ci.id,
+          ci.lot_id,
+          ci.preloved_sku_id,
+          ol.id,
+          ol.unit_price
+        FROM consignment_items ci
+        INNER JOIN order_lines ol ON ol.id = ci.sold_order_line_id
+        INNER JOIN orders o ON o.id = ol.order_id
+        LEFT JOIN consignment_sold_lines csl
+          ON csl.consignment_item_id = ci.id
+        WHERE ci.tenant_id = ${tenantId}
+          AND o.id = ${orderId}
+          AND o.tenant_id = ${tenantId}
+          AND csl.id IS NULL
+          AND EXISTS (SELECT 1 FROM lock)
+      ),
+      inserted AS (
+        INSERT INTO consignment_sold_lines (
+          tenant_id,
+          lot_id,
+          consignment_item_id,
+          order_id,
+          order_line_id,
+          preloved_sku_id,
+          qty,
+          sale_unit_price,
+          sale_line_total,
+          commission_bps,
+          commission_amount,
+          remittance_amount
+        )
+        SELECT
+          ${tenantId},
+          p.lot_id,
+          p.consignment_item_id,
+          ${orderId},
+          p.order_line_id,
+          p.preloved_sku_id,
+          1,
+          ROUND(ROUND(p.unit_price::numeric * 100) / 100, 2),
+          ROUND(ROUND(p.unit_price::numeric * 100) / 100, 2),
+          ${commissionBps},
+          ROUND(
+            ROUND(ROUND(p.unit_price::numeric * 100) * ${commissionBps} / 10000.0) / 100,
+            2
+          ),
+          ROUND(
+            (
+              ROUND(p.unit_price::numeric * 100)
+              - ROUND(ROUND(p.unit_price::numeric * 100) * ${commissionBps} / 10000.0)
+            ) / 100,
+            2
+          )
+        FROM pending p
+        ON CONFLICT (consignment_item_id) DO NOTHING
+        RETURNING id
       )
-      .onConflictDoNothing({ target: consignmentSoldLines.consignmentItemId })
-      .returning({ id: consignmentSoldLines.id });
-    return { allocated: allocated.rows.length, recorded: inserted.length };
-  } catch (error) {
-    if (isUniqueConstraintError(error, "consignment_sold_lines_item_unique")) {
-      return { allocated: allocated.rows.length, recorded: 0 };
-    }
-    throw error;
+      SELECT
+        (SELECT COUNT(*)::int FROM updated) AS allocated,
+        (SELECT COUNT(*)::int FROM inserted) AS recorded
+    `)) as { rows: LedgerWriteRow[] };
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("consignment sold-line write returned no result");
   }
+  return {
+    allocated: Number(row.allocated) || 0,
+    recorded: Number(row.recorded) || 0,
+  };
 }
 
-/** Best-effort remittance write. Order row already exists; webhook retries. */
+/**
+ * Remittance write after the order row exists. Retries transient neon-http
+ * failures, then rethrows so POST / webhook cannot return 200 with a lost
+ * sold line. Callers must not swallow this.
+ */
 export async function recordConsignmentSoldLinesBestEffort(input: {
   orderId: string;
   tenantId: string;
 }): Promise<void> {
-  try {
-    await recordConsignmentSoldLinesForOrder(input);
-  } catch (err) {
-    console.error("recordConsignmentSoldLinesForOrder failed", input, err);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= LEDGER_WRITE_ATTEMPTS; attempt++) {
+    try {
+      await recordConsignmentSoldLinesForOrder(input);
+      return;
+    } catch (err) {
+      lastError = err;
+      console.error("recordConsignmentSoldLinesForOrder failed", {
+        ...input,
+        attempt,
+      }, err);
+      if (attempt >= LEDGER_WRITE_ATTEMPTS) break;
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /** Treasurer ledger: one row per sold consigned unit, oldest first. */

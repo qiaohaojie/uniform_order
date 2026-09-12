@@ -40,3 +40,15 @@
 - **Risks / known issues:** Inbox lists the newest 200 notes only.
 - **Links:** apps/web/src/app/admin/[tenant]/preloved/inbox; apps/web/src/app/api/tenant/[tenantId]/preloved/donation-notes/route.ts
 
+## Atomic SKIP LOCKED sold-line write; BestEffort rethrows
+- **ID:** d27665d9-7a2a-49be-88f4-c859129a94c8
+- **Date:** 2026-09-12T16:27:21Z
+- **Stage:** build:phase2
+- **Decision:** Claim consignment units with FOR UPDATE SKIP LOCKED and write consignment_sold_lines in one neon-http statement. recordConsignmentSoldLinesBestEffort retries three times then rethrows so webhook/POST cannot 200 after a lost insert.
+- **Why:** neon-http forbids db.transaction. The old row_number join let two qty-1 sales target the same oldest unit; the UPDATE/INSERT split plus swallowed BestEffort could mark items sold with no remittance row while Stripe saw 200.
+- **Alternatives:** Keep two statements and only rethrow; per-item UPDATE loop; advisory lock only without SKIP LOCKED
+- **Pros:** Concurrent sales take the next unlocked unit; claim+ledger commit together; unique item index and orphan UNION remain as replay backstops
+- **Cons:** Commission math is now SQL ROUND to match splitSaleCommission; LATERAL LIMIT depends on Postgres
+- **Risks / known issues:** If SKIP LOCKED+LIMIT s.need is rejected by this Postgres, the write fails loudly (5xx) instead of silently dropping
+- **Links:** apps/web/src/db/preloved-queries.ts;apps/web/src/app/api/stripe/webhook/route.ts;apps/web/tests/preloved/m09-payout-csv.spec.ts
+

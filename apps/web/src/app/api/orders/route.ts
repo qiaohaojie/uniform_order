@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json(
         { orderId: existingOrder.id, idempotent: true },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
