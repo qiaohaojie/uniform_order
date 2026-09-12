@@ -36,7 +36,10 @@ async function createConsignmentLot(page: Page, stamp: string) {
       },
     },
   );
-  expect(createRes.ok()).toBeTruthy();
+  if (!createRes.ok()) {
+    const body = await createRes.text();
+    throw new Error(`create consignment lot failed ${createRes.status()}: ${body}`);
+  }
   const created = (await createRes.json()) as {
     id?: string;
     ticketCode?: string;
@@ -224,11 +227,7 @@ test.describe("Phase 2 consignment lot → intake / stock", () => {
       });
       expect(offRes.ok()).toBeTruthy();
 
-      const { lotId: taxableLotId } = await createConsignmentLot(
-        page,
-        `tax-${Date.now()}`,
-      );
-      const consign = await postIntake(page, { consignmentLotId: taxableLotId });
+      const consign = await postIntake(page, { consignmentLotId: lotId });
       expect(consign.ok()).toBeTruthy();
       const consigned = (await consign.json()) as { sku?: { gstFree?: boolean } };
       expect(consigned.sku?.gstFree).toBe(false);
