@@ -1024,3 +1024,16 @@
 - **Evidence:** apps/web/src/db/schema.ts catalogVariants (id/itemId/label/price/sizes/active); apps/web/src/app/api/catalog/route.ts; m06 spec catalog fingerprint + qty-99 PI
 - **Links:** specs/milestones/M06-preloved-fulfilment.md
 
+## neon-http sold-line claim and remittance insert must be one statement with SKIP LOCKED
+- **ID:** f2aeda36-0ff6-4e39-8c21-fbd628bfe4d1
+- **Date:** 2026-09-12T16:29:28Z
+- **DocId:** 0300
+- **Kind:** works
+- **Status:** verified
+- **Milestone:** phase2
+- **Project:** uniform_order
+- **Version scope:** Next.js 16.2.4, drizzle neon-http, Playwright 1.59, Neon Postgres
+- **Detail:** Two HTTP statements plus a swallowed best-effort let UPDATE commit and INSERT fail while the webhook returned 200. Concurrent FIFO row_number joins both targeted the oldest unsold unit. One CTE with FOR UPDATE SKIP LOCKED plus INSERT, and BestEffort that retries then rethrows, keeps unique-index replay and does not drop the next unit.
+- **Evidence:** pnpm check-types:web pass; PLAYWRIGHT_BASE_URL=http://127.0.0.1:43173 pnpm test:m09-payout-csv 5/5 including concurrent qty-1 FIFO and orphan-ledger replay
+- **Links:** apps/web/src/db/preloved-queries.ts
+
