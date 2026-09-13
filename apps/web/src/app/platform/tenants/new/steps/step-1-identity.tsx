@@ -41,7 +41,9 @@ export function Step1Identity({
     e.preventDefault();
     setError(null);
     if (!isValidSlug(id)) {
-      setError("Slug must be 3–16 chars: lowercase letters, digits, hyphens; start with a letter.");
+      setError(
+        "Slug must be 3–16 chars: lowercase letters, digits, hyphens; start with a letter. Reserved paths such as admin or platform cannot be used.",
+      );
       return;
     }
     setPending(true);
@@ -55,9 +57,9 @@ export function Step1Identity({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
+    <form onSubmit={submit} className="space-y-5" data-testid="platform-step-identity">
       <h2 className="font-serif text-xl font-semibold">Step 1 of 6 · School identity</h2>
-      <Field label="Display name" value={name} onChange={onName} required />
+      <Field label="Display name" value={name} onChange={onName} required testId="platform-identity-name" />
       <Field label="Short code" value={short} onChange={onShort} hint="2–8 chars, used as initials in the crest." />
       <Field
         label="Slug"
@@ -65,13 +67,19 @@ export function Step1Identity({
         onChange={onId}
         hint={`URL: ${id || "<slug>"}.uniformorder.online`}
         disabled={!!tenant}
+        testId="platform-identity-slug"
       />
       <Field label="Motto (optional)" value={motto} onChange={setMotto} />
       <Field label="Address (optional)" value={address} onChange={setAddress} />
-      {error && <div className="text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="text-sm text-red-700" data-testid="platform-identity-error">
+          {error}
+        </div>
+      )}
       <button
         type="submit"
         disabled={pending}
+        data-testid="platform-identity-submit"
         className="h-10 px-5 rounded-md bg-navy-deep text-white font-semibold disabled:opacity-60"
       >
         {pending ? "Saving…" : tenant ? "Continue" : "Create draft & continue"}
@@ -87,6 +95,7 @@ function Field({
   hint,
   disabled,
   required,
+  testId,
 }: {
   label: string;
   value: string;
@@ -94,6 +103,7 @@ function Field({
   hint?: string;
   disabled?: boolean;
   required?: boolean;
+  testId?: string;
 }) {
   return (
     <label className="block">
@@ -103,6 +113,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         required={required}
+        data-testid={testId}
         className="block w-full h-10 px-3 border border-rule rounded-md text-[13px] disabled:bg-parchment"
       />
       {hint && <div className="text-[11px] text-ink-dim mt-1.5">{hint}</div>}

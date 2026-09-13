@@ -1,13 +1,16 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { Button } from "@heroui/react";
 import type { TenantStatsRow, TenantStatus } from "@/lib/platform/queries";
+import { approveTenant } from "./[id]/actions";
 
 const FILTERS: Array<{ id: TenantStatus | "all"; label: string }> = [
   { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "setup", label: "Setup" },
-  { id: "hidden", label: "Hidden" },
+  { id: "pending", label: "Pending" },
+  { id: "active", label: "Live" },
+  { id: "hidden", label: "Shop off" },
+  { id: "disabled", label: "Disabled" },
 ];
 
 export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
@@ -25,7 +28,7 @@ export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
   }, [rows, filter, q]);
 
   return (
-    <div className="bg-paper rounded-[10px] border border-rule overflow-hidden">
+    <div className="bg-paper rounded-[10px] border border-rule overflow-hidden" data-testid="platform-tenants-table">
       <div className="px-4 py-3 border-b border-rule flex items-center gap-2.5">
         <div className="flex gap-1.5">
           {FILTERS.map((f) => (
@@ -33,6 +36,7 @@ export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
               key={f.id}
               type="button"
               onClick={() => setFilter(f.id)}
+              data-testid={`platform-filter-${f.id}`}
               className={`h-7 px-3 rounded-md text-xs font-semibold ${
                 filter === f.id ? "bg-navy-deep text-white" : "text-ink-dim"
               }`}
@@ -45,7 +49,7 @@ export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or code"
+          placeholder="Search by name or slug"
           className="h-8 w-60 border border-rule rounded-md px-2.5 text-xs"
         />
       </div>
@@ -66,7 +70,7 @@ export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
         </thead>
         <tbody>
           {filtered.map((r) => (
-            <tr key={r.id} className="border-b border-rule last:border-0">
+            <tr key={r.id} className="border-b border-rule last:border-0" data-testid="platform-tenant-row" data-slug={r.id}>
               <td className="px-4 py-3">
                 <div className="font-semibold text-[13.5px] font-serif">{r.name}</div>
                 <div className="font-mono text-[10.5px] text-ink-dim mt-0.5">
@@ -83,16 +87,19 @@ export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
                 <StatusChip status={r.status} />
               </td>
               <td className="px-4 py-3 text-right">
-                <Link href={`/platform/tenants/${r.id}`} className="text-xs font-semibold text-navy-deep underline">
-                  Open →
-                </Link>
+                <div className="flex items-center justify-end gap-2">
+                  {r.status === "pending" ? <ApproveButton id={r.id} /> : null}
+                  <Link href={`/platform/tenants/${r.id}`} className="text-xs font-semibold text-navy-deep underline">
+                    Open →
+                  </Link>
+                </div>
               </td>
             </tr>
           ))}
           {filtered.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-sm text-ink-dim">
-                No tenants match.
+              <td colSpan={7} className="px-4 py-8 text-center text-sm text-ink-dim" data-testid="platform-tenants-empty-filter">
+                {rows.length === 0 ? "No schools yet." : "No tenants match."}
               </td>
             </tr>
           )}
@@ -102,11 +109,40 @@ export function TenantsTable({ rows }: { rows: TenantStatsRow[] }) {
   );
 }
 
+function ApproveButton({ id }: { id: string }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <span className="inline-flex flex-col items-end">
+      <Button
+        size="sm"
+        isPending={pending}
+        onPress={() => {
+          setError(null);
+          startTransition(async () => {
+            try {
+              const r = await approveTenant(id);
+              if (!r.ok) setError(r.error);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Approve failed");
+            }
+          });
+        }}
+        data-testid={`platform-approve-${id}`}
+      >
+        Approve
+      </Button>
+      {error ? <span className="text-[10px] text-alert mt-1">{error}</span> : null}
+    </span>
+  );
+}
+
 function StatusChip({ status }: { status: TenantStatus }) {
   const map = {
-    active: { label: "Active", cls: "bg-green-100 text-green-800" },
-    setup: { label: "Setup", cls: "bg-amber-100 text-amber-800" },
-    hidden: { label: "Hidden", cls: "bg-blue-100 text-blue-800" },
+    active: { label: "Live", cls: "bg-green-100 text-green-800" },
+    pending: { label: "Pending", cls: "bg-amber-100 text-amber-800" },
+    hidden: { label: "Shop off", cls: "bg-blue-100 text-blue-800" },
     disabled: { label: "Disabled", cls: "bg-red-100 text-red-800" },
   } as const;
   const m = map[status];

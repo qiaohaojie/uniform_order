@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isReservedSlug } from "./slug";
 
 export const slugSchema = z
   .string()
@@ -7,7 +8,8 @@ export const slugSchema = z
   .regex(
     /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/,
     "Use lowercase letters, digits, single hyphens (no leading/trailing/consecutive); start with a letter",
-  );
+  )
+  .refine((id) => !isReservedSlug(id), "That slug is reserved for a platform route");
 
 export const step1Schema = z.object({
   name: z.string().min(2).max(120),

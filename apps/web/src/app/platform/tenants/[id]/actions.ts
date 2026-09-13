@@ -1,7 +1,7 @@
 "use server";
 import { db } from "@/db";
-import { tenants } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { tenants, orders, parentChildren } from "@/db/schema";
+import { count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin, parseInput } from "@/lib/platform/action-helpers";
 import { brandingEditSchema, tenantLegalSchema } from "@/lib/platform/schema";
@@ -12,9 +12,99 @@ import { policyTextWithPrelovedRefundClause } from "@/lib/preloved-refund-policy
 
 export async function togglePublicListing(id: string, on: boolean) {
   await requirePlatformAdmin();
+  const [tenant] = await db
+    .select({ status: tenants.platformApprovalStatus })
+    .from(tenants)
+    .where(eq(tenants.id, id))
+    .limit(1);
+  if (!tenant) return { ok: false as const, error: "Tenant not found" };
+  if (on && tenant.status !== "approved") {
+    return { ok: false as const, error: "Approve the school before turning the shop on." };
+  }
   await db.update(tenants).set({ isPubliclyListed: on, updatedAt: new Date() }).where(eq(tenants.id, id));
   revalidatePath(`/platform/tenants/${id}`);
+  revalidatePath("/platform/tenants");
   revalidatePath(`/${id}`, "layout");
+  revalidatePath("/");
+  return { ok: true as const };
+}
+
+export async function approveTenant(id: string) {
+  const user = await requirePlatformAdmin();
+  const [tenant] = await db
+    .select({
+      status: tenants.platformApprovalStatus,
+      listed: tenants.isPubliclyListed,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, id))
+    .limit(1);
+  if (!tenant) return { ok: false as const, error: "Tenant not found" };
+  if (tenant.status === "approved") return { ok: true as const, already: true as const };
+
+  await db
+    .update(tenants)
+    .set({
+      platformApprovalStatus: "approved",
+      platformApprovedAt: new Date(),
+      platformApprovedBy: user.email,
+      platformRejectionReason: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(tenants.id, id));
+
+  await logAuditEvent({
+    tenantId: id,
+    actorEmail: user.email,
+    actorRole: "platform_admin",
+    action: "tenant.approved",
+    targetType: "tenant",
+    targetId: id,
+    payload: { previousStatus: tenant.status, publiclyListed: tenant.listed },
+  });
+
+  revalidatePath(`/platform/tenants/${id}`);
+  revalidatePath("/platform/tenants");
+  revalidatePath(`/${id}`, "layout");
+  return { ok: true as const };
+}
+
+export async function deleteUnusedTenant(id: string) {
+  const user = await requirePlatformAdmin();
+  const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, id)).limit(1);
+  if (!tenant) return { ok: false as const, error: "Tenant not found" };
+
+  const [orderRow] = await db.select({ n: count() }).from(orders).where(eq(orders.tenantId, id));
+  if (Number(orderRow?.n ?? 0) > 0) {
+    return { ok: false as const, error: "This school has orders. Disable it instead of deleting." };
+  }
+  const [childRow] = await db
+    .select({ n: count() })
+    .from(parentChildren)
+    .where(eq(parentChildren.tenantId, id));
+  if (Number(childRow?.n ?? 0) > 0) {
+    return { ok: false as const, error: "Parents still have children linked to this school. Disable it instead of deleting." };
+  }
+
+  await logAuditEvent({
+    tenantId: id,
+    actorEmail: user.email,
+    actorRole: "platform_admin",
+    action: "tenant.deleted",
+    targetType: "tenant",
+    targetId: id,
+    payload: {},
+  });
+
+  try {
+    await db.delete(tenants).where(eq(tenants.id, id));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false as const, error: `Could not delete: ${msg}` };
+  }
+
+  revalidatePath("/platform/tenants");
+  revalidatePath("/");
   return { ok: true as const };
 }
 

@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
-export type TenantStatus = "setup" | "active" | "hidden" | "disabled";
+export type TenantStatus = "pending" | "active" | "hidden" | "disabled";
 
 export type TenantStatsRow = {
   id: string;
@@ -15,13 +15,12 @@ export type TenantStatsRow = {
   revenue30d: string;
 };
 
-function deriveStatus(t: {
+export function deriveTenantStatus(t: {
   platformApprovalStatus: string;
-  stripeChargesEnabled: boolean | null;
   isPubliclyListed: boolean;
 }): TenantStatus {
   if (t.platformApprovalStatus === "rejected") return "disabled";
-  if (t.platformApprovalStatus !== "approved" || !t.stripeChargesEnabled) return "setup";
+  if (t.platformApprovalStatus !== "approved") return "pending";
   return t.isPubliclyListed ? "active" : "hidden";
 }
 
@@ -59,9 +58,8 @@ export async function listTenantsWithStats(): Promise<TenantStatsRow[]> {
     // neon-http returns timestamps as ISO strings, not Date objects — wrap so the
     // declared TenantStatsRow.createdAt type is honest at runtime.
     createdAt: r.created_at ? new Date(r.created_at as string | Date) : null,
-    status: deriveStatus({
+    status: deriveTenantStatus({
       platformApprovalStatus: r.platform_approval_status as string,
-      stripeChargesEnabled: r.stripe_charges_enabled as boolean | null,
       isPubliclyListed: r.is_publicly_listed as boolean,
     }),
     parents: Number(r.parents),
@@ -71,7 +69,7 @@ export async function listTenantsWithStats(): Promise<TenantStatsRow[]> {
 }
 
 export type PlatformKpis = {
-  tenants: { total: number; active: number; setup: number };
+  tenants: { total: number; active: number; pending: number };
   parents: number;
   orders30d: { count: number; deltaMom: number | null };
   revenue30d: string;
@@ -95,7 +93,7 @@ export async function getPlatformKpis(): Promise<PlatformKpis> {
     tenants: {
       total: list.length,
       active: list.filter((t) => t.status === "active").length,
-      setup: list.filter((t) => t.status === "setup").length,
+      pending: list.filter((t) => t.status === "pending").length,
     },
     parents: list.reduce((s, t) => s + t.parents, 0),
     orders30d: { count: orders30d, deltaMom },

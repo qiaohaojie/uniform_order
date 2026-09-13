@@ -1,6 +1,7 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 import type { TenantRow } from "@/db/schema";
 import { Step1Identity } from "./steps/step-1-identity";
 import { Step2Branding } from "./steps/step-2-branding";
@@ -33,7 +34,15 @@ export function WizardClient({
   }
 
   return (
-    <div className="flex-1 px-7 py-6 overflow-auto">
+    <div className="flex-1 px-7 py-6 overflow-auto" data-testid="platform-provision-wizard">
+      {tenant ? (
+        <p className="text-sm text-ink-dim mb-4">
+          Draft slug <span className="font-mono">{tenant.id}</span> is saved.{" "}
+          <Link href={`/platform/tenants/${tenant.id}`} className="font-semibold text-navy-deep underline">
+            Skip wizard — approve & turn shop on →
+          </Link>
+        </p>
+      ) : null}
       <StepRail step={step} />
       <div className="mt-6 grid grid-cols-[1fr_360px] gap-6">
         <div className="bg-paper rounded-[10px] border border-rule p-7">
