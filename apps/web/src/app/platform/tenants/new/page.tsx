@@ -20,7 +20,17 @@ export default async function NewTenantPage({
     catalogCount = Number(row?.n ?? 0);
   }
 
-  return <WizardClient tenant={tenant ?? null} initialStep={parseStep(step)} catalogCount={catalogCount} />;
+  return (
+    <>
+      <header className="px-7 py-5 border-b border-rule">
+        <div className="text-[10.5px] uppercase tracking-[0.6px] font-bold text-ink-dim">
+          UniformOrder Platform
+        </div>
+        <h1 className="font-serif text-2xl font-semibold mt-1">Provision a school</h1>
+      </header>
+      <WizardClient tenant={tenant ?? null} initialStep={parseStep(step)} catalogCount={catalogCount} />
+    </>
+  );
 }
 
 function parseStep(s: string | undefined): 1 | 2 | 3 | 4 | 5 | 6 {

@@ -20,7 +20,7 @@ export function PlatformShell({
   const pathname = usePathname() ?? "";
   const active: "tenants" | "billing" = pathname.startsWith("/platform/billing") ? "billing" : "tenants";
   return (
-    <div className="flex min-h-screen bg-parchment text-ink font-sans">
+    <div className="flex min-h-screen bg-parchment text-ink font-sans" data-testid="platform-shell">
       <aside className="w-[220px] shrink-0 bg-[#0A1726] text-[#E8E0CF] flex flex-col">
         <div className="px-[18px] py-[20px] border-b border-white/[0.08]">
           <div className="font-serif text-[22px] font-semibold text-white">UniformOrder</div>

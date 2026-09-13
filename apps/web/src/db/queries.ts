@@ -944,7 +944,7 @@ export async function getPubliclyListedTenants() {
   return db
     .select()
     .from(tenants)
-    .where(eq(tenants.isPubliclyListed, true))
+    .where(and(eq(tenants.isPubliclyListed, true), eq(tenants.platformApprovalStatus, "approved")))
     .orderBy(tenants.name);
 }
 
