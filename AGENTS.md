@@ -134,13 +134,12 @@ Name *pair* or *handoff* from `0010` §1, then finish at that depth. Visual
 *handoff* is self-ver (`0800` live chrome + `1300` hosted proof). *Pair*
 completes on typecheck/lint plus one runtime oracle; persist `1300`/`1400`
 when the user asks or on the next handoff. *Handoff* completes through `1300`
-and then `1400`: keep project-only choices in project decisions/logs; add
-reusable works/fails/notes to the owning process; update canonical guidance
-only from reusable evidence with its version, changelog, and Implementation
-log. If no existing process owns an activity, use `1400` to extend the
-correct document or create a new process in an unused numbering gap, then
-update `0010`. Ask only when the change would alter library-wide safety,
-authority, or numbering policy.
+and then `1400`: keep project-only choices in project decisions/logs; send reusable
+works/fails/notes to the knowledge-base landing zone with
+`.gq-spec/log-lesson.sh` (read the library's `INDEX.md` first; skip what a
+rule there covers). Never edit the two libraries: scheduled jobs refine
+landing into them (vault `220_Dev_Project/AGENTS.md`). If no process owns an
+activity, say so in the lesson.
 <!-- app-master-process:end -->
 
 ## Project override of the managed block
