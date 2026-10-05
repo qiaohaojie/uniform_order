@@ -9,6 +9,14 @@ dist/
 build/
 .astro/
 
+# Source wins under src/. The output rules above are unanchored, so they also
+# match a source directory such as src/build/ and keep it out of git
+# (capability 0100, lesson 49b1987f). Keep these after every output rule.
+!**/src/**/build/
+!**/src/**/dist/
+!**/src/**/out/
+!**/src/**/coverage/
+
 # next.js
 *.tsbuildinfo
 next-env.d.ts
