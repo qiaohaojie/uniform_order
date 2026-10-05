@@ -25,37 +25,23 @@ on:
       - ".grok/**"
       - ".remember/**"
 
-# A newer run for the same PR/branch cancels the older run.
+# A newer confirmation run for the same PR/branch cancels the older one.
+# `labeled` fires for every label, so a label other than `ci` gets a group
+# of its own: it must not cancel the run that `ci` started.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name != 'ci' && github.run_id || 'ci' }}
   cancel-in-progress: true
 
+# One gate for the whole pipeline; the jobs live in check-types-jobs.yml. A label
+# other than `ci` skips this one job: no billed minutes, and one skipped
+# check named `ci`. Do not add jobs here. `gh pr checks` keeps the newest
+# check per name, so a skipped job in this file would hide the real check
+# of the same name and the landing chain would merge early.
 jobs:
-  check-types:
-    # On-demand gate: a label other than `ci` starts a run in which this job
-    # skips (no billed minutes).
+  ci:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.action == 'ready_for_review' ||
       (github.event.action == 'labeled' && github.event.label.name == 'ci')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      # Generate Next.js route types (`.next/dev/types/routes.d.ts`) which
-      # `next-env.d.ts` references for `PageProps`/`LayoutProps`. Without this,
-      # tsc fails with "Cannot find name 'PageProps'" on every route file.
-      - run: pnpm --filter web exec next typegen
-
-      - run: pnpm check-types
+    uses: ./.github/workflows/check-types-jobs.yml
+    secrets: inherit
