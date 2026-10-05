@@ -123,7 +123,7 @@ pnpm check-types:web      # apps/web only
 pnpm build:web            # production build
 ```
 
-CI runs `next typegen` then `pnpm check-types` on every push/PR to `main` (see `.github/workflows/check-types.yml`). There is no unit/e2e suite in-repo yet; type-checking is the primary gate.
+CI runs `next typegen` then `pnpm check-types` on demand: once per PR when the `ci` label is added, when a draft PR is marked ready for review, or by manual dispatch (see `.github/workflows/check-types.yml`). Opening a PR, pushing, and merging to `main` start nothing. There is no unit/e2e suite in-repo yet; type-checking is the primary gate.
 
 Also see [`CONTRIBUTING.md`](../CONTRIBUTING.md) and [`docs/Deployment/LOCAL_DEVELOPMENT.md`](Deployment/LOCAL_DEVELOPMENT.md).
 

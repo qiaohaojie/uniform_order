@@ -1,17 +1,43 @@
 name: check-types
 
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+# Shape owned by process 1250 (PR Landing and CI Flow): on demand only,
+# cancel stale runs, skip docs-only changes.
+# Before adding a path to `paths-ignore`, confirm no code or test reads it.
 
+# On demand only (process 1250 Step 6): the local gate (`next typegen` then
+# `pnpm check-types`) is the oracle; CI is a paid confirmation run once per
+# PR at landing, never on every push. Triggers: Actions "Run workflow" /
+# `gh workflow run check-types --ref <branch>`, a draft PR marked ready for
+# review, or adding the `ci` label to a PR (remove + re-add the label to
+# re-run after a fix).
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [ready_for_review, labeled]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "specs/**"
+      - "decisions/**"
+      - ".agents/**"
+      - ".claude/**"
+      - ".cursor/**"
+      - ".grok/**"
+      - ".remember/**"
+
+# A newer run for the same PR/branch cancels the older run.
 concurrency:
-  group: check-types-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   check-types:
+    # On-demand gate: a label other than `ci` starts a run in which this job
+    # skips (no billed minutes).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.action == 'ready_for_review' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'ci')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
