@@ -111,7 +111,7 @@ pins `.gq-spec/master-app-dev-process-path` and
 `.gq-spec/capability-docs-path` point at the app libraries
 (`0010 - Master App Development Process Index.md` and
 `0600 - UI Adapter.md`). If unbound, run `bash .gq-spec/bootstrap.sh` and
-stop on failure. Do not treat a Unity/game vault as bound.
+stop on failure. Nothing else counts as bound.
 
 For every web, mobile, or app implementation, fix, refactor, debug, test,
 UI, API, deploy, or process-documentation task, resolve the process library

@@ -5,8 +5,10 @@
 > here via .gq-spec/log-capability-lesson.sh, then promotes to the Obsidian
 > capability doc library (vault 0010 index) when the machine-local path resolves.
 >
-> Path resolution (portable): GQ_CAPABILITY_DOCS_DIR env, then gitignored
-> .gq-spec/capability-docs-path. Never hard-code Mac/Windows absolute paths in git.
+> Path resolution (portable): the gitignored pin .gq-spec/capability-docs-path
+> (written by bootstrap.sh) is the only source. It must be the app capability
+> vault (`0600 - UI Adapter.md`).
+> Never hard-code Mac/Windows absolute paths in git.
 >
 > Entry fields: docId · kind (works|fails|note) · status (provisional|verified) · milestone
 

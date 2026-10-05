@@ -4,7 +4,7 @@
 # app capability vault. Idempotent. No machine path is committed.
 #
 # GitHub template clones do not include gitignored pins. This script writes
-# them on this machine, chmod's the loggers, and refuses a Unity/game vault.
+# them on this machine, chmod's the loggers, and accepts only the app libraries.
 # Unbound work is forbidden: exit non-zero rather than look "ready".
 #
 # Usage (from the git root):
@@ -12,8 +12,8 @@
 #   bash .gq-spec/bootstrap.sh --quiet
 #
 # Exit:
-#   0  bound (pins valid, app family)
-#   1  unbound — libraries not found or wrong family
+#   0  bound (pins valid)
+#   1  unbound — app libraries not found
 #
 # Discovery (first match wins):
 #   1) existing valid pins
@@ -21,8 +21,8 @@
 #   3) GQ_PIMSPACE_DIR / PIMSPACE_ROOT + 220_Dev_Project/...
 #   4) a short list of well-known PimSpace locations
 # Capability is the sibling Master_App_Capability/ (must contain
-# 0600 - UI Adapter.md). GQ_CAPABILITY_DOCS_DIR is used only if it is
-# already that app vault — never the Unity vault.
+# 0600 - UI Adapter.md). GQ_CAPABILITY_DOCS_DIR is never read: the pin
+# this script writes is the only source for the capability vault.
 
 set -euo pipefail
 
@@ -167,21 +167,6 @@ if [ -z "$process_dir" ] || [ -z "$cap_dir" ]; then
   done
 fi
 
-# --- 4) env capability only if it is already the app vault ---
-if [ -z "$cap_dir" ] && [ -n "${GQ_CAPABILITY_DOCS_DIR:-}" ]; then
-  c="$(normalize_path "$GQ_CAPABILITY_DOCS_DIR")"
-  if is_app_capability_vault "$c"; then
-    cap_dir="$c"
-    sibling="$(normalize_path "$c/../Master_App_Dev_Process")"
-    if [ -z "$process_dir" ] && is_app_process_lib "$sibling"; then
-      process_dir="$sibling"
-      source_label="${source_label:-GQ_CAPABILITY_DOCS_DIR (app vault)}"
-    fi
-  else
-    log "bootstrap: ignoring GQ_CAPABILITY_DOCS_DIR (not an app vault): $c"
-  fi
-fi
-
 if ! is_app_process_lib "${process_dir:-}" || ! is_app_capability_vault "${cap_dir:-}"; then
   err "bootstrap: UNBOUND — app process library and/or app capability vault not found."
   err ""
@@ -191,7 +176,7 @@ if ! is_app_process_lib "${process_dir:-}" || ! is_app_capability_vault "${cap_d
   err "  PimSpace/220_Dev_Project/Master_App_Capability"
   err "    (file: 0600 - UI Adapter.md)"
   err ""
-  err "A Unity/game vault in GQ_CAPABILITY_DOCS_DIR is not valid for this repo."
+  err "If PimSpace is somewhere unusual, set GQ_PIMSPACE_DIR to its root and re-run."
   err "Fallback: give an agent process 0000 and say “Read this and set up.”"
   err "  See PimSpace/220_Dev_Project/Starter_Kit/Starter_Kit.md"
   exit 1
@@ -211,7 +196,7 @@ for f in bootstrap.sh log-capability-lesson.sh resolve-capability-docs-dir.sh lo
   fi
 done
 
-# Prove the capability resolver agrees (app family, not Unity).
+# Prove the capability resolver agrees with the pin just written.
 if ! bash .gq-spec/resolve-capability-docs-dir.sh --quiet >/dev/null; then
   err "bootstrap: pins written but capability resolver still failed."
   bash .gq-spec/resolve-capability-docs-dir.sh || true
