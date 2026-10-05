@@ -76,7 +76,7 @@ pnpm check-types:web      # apps/web only
 pnpm build:web            # production build (catches more than tsc alone)
 ```
 
-CI on `main` runs `next typegen` then `pnpm check-types` (see `.github/workflows/check-types.yml`).
+CI runs `next typegen` then `pnpm check-types` on demand: once per PR, when the `ci` label is added (see `.github/workflows/check-types.yml`). Opening a PR, pushing, and merging to `main` start nothing, so run the commands above before you push.
 
 If `.next` was deleted and generated `PageProps` / `LayoutProps` types are missing:
 
