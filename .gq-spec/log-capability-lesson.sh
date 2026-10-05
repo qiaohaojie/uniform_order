@@ -2,12 +2,15 @@
 #
 # log-capability-lesson.sh — log a reusable capability lesson (gq-spec builds).
 #
-# Always appends to specs/_logs/CAPABILITY_LESSONS.md (in-repo, reviewable).
-# Also appends one implementation-log line to the owning vault doc (docId -> "NNNN - *.md").
+# Appends to specs/_logs/CAPABILITY_LESSONS.md (in-repo, reviewable) and one
+# implementation-log line to the owning vault doc (docId -> "NNNN - *.md").
+# The vault and its doc are resolved BEFORE any write: when the repo is unbound
+# or the docId has no doc, this exits non-zero and writes nothing.
 #
 # Vault path is MANDATORY for normal builds (resolved via resolve-capability-docs-dir.sh):
-#   1) GQ_CAPABILITY_DOCS_DIR env (per PC — Mac/Windows)
-#   2) .gq-spec/capability-docs-path (gitignored local pin)
+#   .gq-spec/capability-docs-path (gitignored local pin; bootstrap.sh writes it)
+# The pin is the only source. No environment variable is read.
+# Pins are per checkout: in a new git worktree run `bash .gq-spec/bootstrap.sh` first.
 # Does NOT parse absolute paths from AGENTS.md (not portable).
 #
 # Env (required):
@@ -22,6 +25,7 @@
 #   GQ_SKIP_VAULT=1   emergency in-repo only (gq-spec-build-grok must NOT use this)
 #   GQ_ID             force id (tests)
 #
+# Exit: 0 logged · 1 vault not resolved (unbound) · 2 bad arguments · 3 no vault doc for docId
 # Prints the new lesson id on stdout.
 
 set -euo pipefail
@@ -87,21 +91,18 @@ resolve_vault_dir() {
     resolver=".gq-spec/resolve-capability-docs-dir.sh"
   fi
   if [ -n "$resolver" ]; then
-    # quiet: path only on stdout
-    bash "$resolver" --quiet 2>/dev/null && return 0
+    # quiet: path only on stdout; the resolver's reason stays on stderr
+    bash "$resolver" --quiet && return 0
     return 1
   fi
-  # minimal fallback if resolver not installed yet
-  if [ -n "${GQ_CAPABILITY_DOCS_DIR:-}" ] && [ -d "$GQ_CAPABILITY_DOCS_DIR" ]; then
-    printf '%s\n' "$GQ_CAPABILITY_DOCS_DIR"
-    return 0
-  fi
+  # minimal fallback if resolver not installed yet: the pin only, and it
+  # must be the app capability vault (0600 - UI Adapter.md).
+  local p
   if [ -f .gq-spec/capability-docs-path ]; then
-    local p
     p="$(tr -d '\r' < .gq-spec/capability-docs-path | head -1)"
     p="${p#"${p%%[![:space:]]*}"}"
     p="${p%"${p##*[![:space:]]}"}"
-    if [ -n "$p" ] && [ -d "$p" ]; then
+    if [ -n "$p" ] && [ -f "$p/0600 - UI Adapter.md" ]; then
       printf '%s\n' "$p"
       return 0
     fi
@@ -125,6 +126,21 @@ find_vault_doc() {
   return 1
 }
 
+# --- resolve the vault before any write --------------------------------------
+vault_dir=""
+vault_doc=""
+if [ "$skip_vault" != "1" ]; then
+  if ! vault_dir="$(resolve_vault_dir)"; then
+    echo "log-capability-lesson.sh: capability library not resolved; nothing written." >&2
+    echo "  Run in this worktree: bash .gq-spec/bootstrap.sh" >&2
+    exit 1
+  fi
+  if ! vault_doc="$(find_vault_doc "$vault_dir" "$doc_id")"; then
+    echo "log-capability-lesson.sh: vault dir OK but no doc for docId=${doc_id} under ${vault_dir}; nothing written." >&2
+    exit 3
+  fi
+fi
+
 # --- ensure in-repo log ----------------------------------------------------
 lessons_dir="$(dirname "$lessons_file")"
 [ -d "$lessons_dir" ] || mkdir -p "$lessons_dir"
@@ -137,8 +153,9 @@ if [ ! -f "$lessons_file" ]; then
 > here via .gq-spec/log-capability-lesson.sh, then promotes to the Obsidian
 > capability doc library (vault 0010 index) when the machine-local path resolves.
 >
-> Path resolution (portable): GQ_CAPABILITY_DOCS_DIR env, then gitignored
-> .gq-spec/capability-docs-path. Never hard-code Mac/Windows absolute paths in git.
+> Path resolution (portable): the gitignored pin .gq-spec/capability-docs-path
+> (written by bootstrap.sh) is the only source. It must be the app capability
+> vault (`0600 - UI Adapter.md`). Never hard-code absolute paths in git.
 >
 > Entry fields: docId · kind (works|fails|note) · status (provisional|verified) · milestone
 
@@ -165,29 +182,18 @@ vault_note="(in-repo only)"
 if [ "$skip_vault" = "1" ]; then
   vault_note="GQ_SKIP_VAULT=1 (in-repo only; not allowed for normal gq-spec-build-grok)"
 else
-  if vault_dir="$(resolve_vault_dir)"; then
-    export GQ_CAPABILITY_DOCS_DIR="$vault_dir"
-    if vault_doc="$(find_vault_doc "$vault_dir" "$doc_id")"; then
-      if ! grep -qE '^### Implementation log|^## Implementation log' "$vault_doc"; then
-        printf '\n### Implementation log\n\n' >> "$vault_doc"
-      fi
-      line="- **${day} — [${status}] [${kind}]"
-      [ -n "$milestone" ] && line+=" (build:${milestone})"
-      line+=" · ${project}:** ${summary}"
-      [ -n "$detail" ] && line+=" ${detail}"
-      [ -n "$evidence" ] && line+=" Evidence: ${evidence}."
-      [ -n "$version_scope" ] && line+=" Scope: ${version_scope}."
-      line+=" (lesson ${id:0:8})"
-      printf '%s\n' "$line" >> "$vault_doc"
-      vault_note="vault: $vault_doc"
-    else
-      echo "log-capability-lesson.sh: vault dir OK but no doc for docId=${doc_id} under ${vault_dir}" >&2
-      exit 3
-    fi
-  else
-    echo "log-capability-lesson.sh: capability library not resolved (set GQ_CAPABILITY_DOCS_DIR or .gq-spec/capability-docs-path)." >&2
-    exit 1
+  if ! grep -qE '^### Implementation log|^## Implementation log' "$vault_doc"; then
+    printf '\n### Implementation log\n\n' >> "$vault_doc"
   fi
+  line="- **${day} — [${status}] [${kind}]"
+  [ -n "$milestone" ] && line+=" (build:${milestone})"
+  line+=" · ${project}:** ${summary}"
+  [ -n "$detail" ] && line+=" ${detail}"
+  [ -n "$evidence" ] && line+=" Evidence: ${evidence}."
+  [ -n "$version_scope" ] && line+=" Scope: ${version_scope}."
+  line+=" (lesson ${id:0:8})"
+  printf '%s\n' "$line" >> "$vault_doc"
+  vault_note="vault: $vault_doc"
 fi
 
 printf '%s\n' "$id"

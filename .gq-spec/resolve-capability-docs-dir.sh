@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
 #
-# resolve-capability-docs-dir.sh — resolve + validate the Obsidian capability library root.
+# resolve-capability-docs-dir.sh — resolve + validate the app capability vault.
 #
-# Portable across macOS and Windows (Git Bash / WSL / native bash). No machine path is
-# committed; resolution order (per-repo pin wins; Unity env is never a fallback):
-#   1) .gq-spec/capability-docs-path (gitignored local pin — one line, absolute path)
-#   2) GQ_CAPABILITY_DOCS_DIR only if that directory is the APP vault
+# Portable across macOS and Windows (Git Bash / WSL / native bash). No machine
+# path is committed. The only source is the gitignored pin bootstrap.sh writes:
+#   .gq-spec/capability-docs-path   (one line, absolute path)
 #
+# No environment variable is read. A machine-wide GQ_CAPABILITY_DOCS_DIR can
+# point at a different document library, so it is never an input here.
 # Does NOT read absolute paths from AGENTS.md (those are not portable).
 #
 # Usage:
 #   bash .gq-spec/resolve-capability-docs-dir.sh           # print path, exit 0/1/2
 #   bash .gq-spec/resolve-capability-docs-dir.sh --quiet   # path only on success
-#   source or: eval "$(bash … --export)"  → export GQ_CAPABILITY_DOCS_DIR=…
+#   eval "$(bash … --export)"  → export GQ_CAPABILITY_DOCS_DIR=<pinned vault>
 #
 # Exit codes:
 #   0  ok — app vault path printed
-#   1  unbound (missing pin / env is Unity or unset)
-#   2  pin/env present but not an app vault
+#   1  unbound (no pin)
+#   2  pin present but not the app capability vault
 #
-# App-family markers (this script is the APP template resolver):
+# The app capability vault is PimSpace/220_Dev_Project/Master_App_Capability.
+# Markers (both required):
 #   0010 - Guideline of Capability Documents Maintenance.md
 #   0600 - UI Adapter.md
-# A Unity/game vault also has 0010*.md — that is NOT valid here. Never succeed
-# against 210_Game_Dev. Exit 1 rather than look bound.
+#
+# Pins are gitignored, so every clone and every `git worktree` starts unbound.
+# Bind each one with: bash .gq-spec/bootstrap.sh
+# Self-test (fake vaults only): bash .gq-spec/tests/capability-resolver.test.sh
 
 set -euo pipefail
 
@@ -82,7 +86,6 @@ try_dir() {
     err "resolve-capability-docs-dir: ${source_label} is not the app capability vault: ${p}"
     err "  Need 0010 - Guideline of Capability Documents Maintenance.md"
     err "  and  0600 - UI Adapter.md"
-    err "  (A Unity/game vault with 0010*.md is not valid in this repo.)"
     return 2
   fi
   if [ "$do_export" -eq 1 ]; then
@@ -96,35 +99,27 @@ try_dir() {
   return 0
 }
 
-# --- 1) local pin (gitignored) — per-repo authority ---
-# A present pin is exclusive: never fall through to a Unity env on failure.
+# --- the gitignored pin is the only source ---
 if [ -f .gq-spec/capability-docs-path ]; then
   pin="$(head -1 .gq-spec/capability-docs-path 2>/dev/null || true)"
   if [ -n "$(normalize_path "$pin")" ]; then
     if try_dir "$pin" ".gq-spec/capability-docs-path"; then
       exit 0
     fi
-    err "resolve-capability-docs-dir: pin is present but invalid. Run: bash .gq-spec/bootstrap.sh"
+    err "resolve-capability-docs-dir: pin is present but invalid. Run in this worktree:"
+    err "  bash .gq-spec/bootstrap.sh"
     exit 2
   fi
 fi
 
-# --- 2) environment — APP vault only (Unity env is ignored) ---
-if [ -n "${GQ_CAPABILITY_DOCS_DIR:-}" ]; then
-  if try_dir "$GQ_CAPABILITY_DOCS_DIR" "GQ_CAPABILITY_DOCS_DIR"; then
-    exit 0
-  fi
-  # Wrong family (Unity) or missing files: do not treat as bound.
-fi
-
 err "resolve-capability-docs-dir: capability library NOT resolved (unbound)."
 err ""
-err "This is an APP repo. Bind it with:"
+err "Bind this worktree with:"
 err "  bash .gq-spec/bootstrap.sh"
+err "(Pins are gitignored: a new clone or git worktree does not inherit them.)"
 err ""
-err "Need the app vault: PimSpace/220_Dev_Project/Master_App_Capability"
+err "Need the app capability vault: PimSpace/220_Dev_Project/Master_App_Capability"
 err "  (marker: 0600 - UI Adapter.md)"
-err "GQ_CAPABILITY_DOCS_DIR on this machine may still point at the Unity vault."
-err "That env is not a valid fallback here. The gitignored pin is the authority."
+err "No environment variable is read. The gitignored pin is the only source."
 err "Fallback: PimSpace/220_Dev_Project/Starter_Kit/Starter_Kit.md  or process 0000."
 exit 1
