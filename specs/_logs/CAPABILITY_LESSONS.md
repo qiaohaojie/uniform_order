@@ -1,6 +1,6 @@
 # Capability Lessons
 
-> Append-only log of **reusable** capability insights from gq-spec builds.
+> Append-only log of **reusable** capability insights from gq-app builds.
 > Project-only decisions stay in DECISION.md. The build skill Persist step writes
 > here via .gq-spec/log-capability-lesson.sh, then promotes to the Obsidian
 > capability doc library (vault 0010 index) when the machine-local path resolves.
