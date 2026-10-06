@@ -37,11 +37,15 @@ concurrency:
 # check named `ci`. Do not add jobs here. `gh pr checks` keeps the newest
 # check per name, so a skipped job in this file would hide the real check
 # of the same name and the landing chain would merge early.
+# A pull request that is merged or closed skips the job too: `labeled`
+# also fires there, and a `ci` event after the merge must not pay for a
+# second run of a commit that already landed.
 jobs:
   ci:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.action == 'ready_for_review' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'ci')
+      (github.event.pull_request.state == 'open' && (
+        github.event.action == 'ready_for_review' ||
+        (github.event.action == 'labeled' && github.event.label.name == 'ci')))
     uses: ./.github/workflows/check-types-jobs.yml
     secrets: inherit
