@@ -145,3 +145,10 @@ activity, say so in the lesson.
 ## Project override of the managed block
 
 Ignore the managed-block line “UI edits require a live `heroui-pro` MCP”. This repo is HeroUI OSS only (see **Project exception — HeroUI OSS only** at the top of this file). Web drive / self-ver still require `playwright-cli` (`0200` Step 3b).
+
+## PR landing
+
+Land a PR in the background with `bash scripts/land-pr.sh <n> -w check-types.yml` (process `1250`).
+It adds the `ci` label and merges only when the CI run on the head commit
+ends `success`. Docs-only PR: add `--docs-only`. Never chain
+`gh pr checks && gh pr merge`: it can exit 0 with no finished CI.
