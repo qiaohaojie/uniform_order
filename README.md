@@ -118,7 +118,7 @@ For step-by-step instructions by role, see the [user manuals](docs/User_Manuals/
 
 ## Status
 
-Actively used for Australian school uniform shops. Demo data in this repo is synthetic. Production schools, Stripe live keys, and hosting config are managed outside the repository.
+Demo data in this repo is synthetic. Production schools, Stripe live keys, and hosting config are managed outside the repository.
 
 ## License
 
