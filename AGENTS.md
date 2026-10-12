@@ -115,8 +115,8 @@ stop on failure. Nothing else counts as bound.
 
 For every web, mobile, or app implementation, fix, refactor, debug, test,
 UI, API, deploy, or process-documentation task, resolve the process library
-from the valid process pin, then from the valid
-`GQ_MASTER_APP_DEV_PROCESS_DIR` fallback. A valid library contains readable
+from the valid process pin only; no environment variable is read at run
+time. A valid library contains readable
 processes `0000` and `0010` plus every document indexed by `0010`. If still
 unbound, stop and ask the user to read
 `PimSpace/220_Dev_Project/Starter_Kit/Starter_Kit.md` or run process `0000`.
